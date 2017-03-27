@@ -20,7 +20,39 @@ use std::convert::From;
 use serde_json;
 
 #[derive(Debug)]
+pub enum KubeErrNo {
+    InvalidContext,
+    InvalidCluster,
+    InvalidUser,
+}
+
+impl fmt::Display for KubeErrNo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &KubeErrNo::InvalidContext => write!(f, "Invalid Context Name"),
+            &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
+            &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
+        }
+    }
+}
+
+impl error::Error for KubeErrNo {
+    fn description(&self) -> &str {
+        match self {
+            &KubeErrNo::InvalidContext => "Invalid Context Name",
+            &KubeErrNo::InvalidCluster => "Invalid Cluster Name",
+            &KubeErrNo::InvalidUser => "Invalid User Name",
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
+}
+
+#[derive(Debug)]
 pub enum KubeError {
+    Kube(KubeErrNo),
     Io(io::Error),
     HyperParse(hyper::error::ParseError),
     HyperErr(hyper::error::Error),
@@ -31,6 +63,7 @@ pub enum KubeError {
 impl fmt::Display for KubeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
             KubeError::HyperErr(ref err) => write!(f, "Hyper error: {}", err),
@@ -42,6 +75,7 @@ impl fmt::Display for KubeError {
 impl error::Error for KubeError {
     fn description(&self) -> &str {
         match *self {
+            KubeError::Kube(ref err) => err.description(),
             KubeError::Io(ref err) => err.description(),
             KubeError::HyperParse(ref err) => err.description(),
             KubeError::HyperErr(ref err) => err.description(),
@@ -51,6 +85,7 @@ impl error::Error for KubeError {
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
+            KubeError::Kube(ref err) => Some(err),
             KubeError::Io(ref err) => Some(err),
             KubeError::HyperParse(ref err) => Some(err),
             KubeError::HyperErr(ref err) => Some(err),

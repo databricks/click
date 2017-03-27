@@ -19,8 +19,6 @@ use hyper::{Client,Url};
 use hyper::header::{Authorization, Bearer};
 use hyper::net::HttpsConnector;
 
-use error::KubeError;
-
 use serde_json;
 use hyper_rustls;
 
@@ -28,6 +26,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 
+
+use error::KubeError;
 
 // Various things we can return
 
@@ -50,25 +50,29 @@ pub struct PodList {
 
 pub struct Kluster {
     endpoint: Url,
+    token: String,
     client: Client,
 }
 
 impl Kluster {
 
-    pub fn new(endpoint: &str) -> Result<Kluster, KubeError> {
+    pub fn new(cert_path: &str, server: &str, token: &str) -> Result<Kluster, KubeError> {
         let mut tlsclient = hyper_rustls::TlsClient::new();
         {
             // add the cert to the root store
             let mut cfg = Arc::get_mut(&mut tlsclient.cfg).unwrap();
-            let f = File::open("/home/nick/.kube/certs/dev/ca.crt").unwrap();
+            let f = File::open(cert_path).unwrap();
             let mut br = BufReader::new(f);
             let added = cfg.root_store.add_pem_file(&mut br).unwrap();
-            println!("Added: {}, (not okay: {})", added.0, added.1);
+            if added.1 > 0 {
+                println!("[WARNING] Couldn't add some certs from {}", cert_path);
+            }
         }
 
 
         Ok(Kluster {
-            endpoint: try!(Url::parse(endpoint)),
+            endpoint: try!(Url::parse(server)),
+            token: token.to_owned(),
             client: Client::with_connector(HttpsConnector::new(tlsclient)),
         })
     }
@@ -77,10 +81,12 @@ impl Kluster {
         where T: Deserialize {
 
         let url = try!(self.endpoint.join(path));
+        //println!("Calling: {:?}",url);
+        //println!("My token: {}",self.token);
         let req = self.client.get(url);
         let req = req.header(Authorization(
             Bearer {
-                token: "[nope]".to_owned()
+                token: self.token.clone()
             }
         ));
         let resp = try!(req.send());

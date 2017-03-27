@@ -19,6 +19,9 @@ use serde_yaml;
 use std::collections::HashMap;
 use std::fs::File;
 
+use kube::Kluster;
+use error::{KubeError,KubeErrNo};
+
 #[derive(Debug, Deserialize)]
 struct IConfig {
     clusters: Vec<ICluster>,
@@ -34,10 +37,10 @@ struct ICluster {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct ClusterConf {
+pub struct ClusterConf {
     #[serde(rename="certificate-authority")]
-    cert: String,
-    server: String,
+    pub cert: String,
+    pub server: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,11 +51,11 @@ struct IContext {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct ContextConf {
-    cluster: String,
+pub struct ContextConf {
+    pub cluster: String,
     //#[serde(default = "default")]
-    namespace: String,
-    user: String,
+    pub namespace: String,
+    pub user: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,8 +66,8 @@ struct IUser {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct UserConf {
-    token: String,
+pub struct UserConf {
+    pub token: String,
 }
 
 
@@ -79,9 +82,9 @@ impl IConfig {
 // This is actual config we expose
 #[derive(Debug)]
 pub struct Config {
-    clusters: HashMap<String, ClusterConf>,
-    contexts: HashMap<String, ContextConf>,
-    users: HashMap<String, UserConf>,
+    pub clusters: HashMap<String, ClusterConf>,
+    pub contexts: HashMap<String, ContextConf>,
+    pub users: HashMap<String, UserConf>,
 }
 
 impl Config {
@@ -111,5 +114,17 @@ impl Config {
             contexts: context_map,
             users: user_map,
         }
+    }
+
+    pub fn cluster_for_context(&self, context: &str) -> Result<Kluster, KubeError> {
+        self.contexts.get(context).map(|ctx| {
+            self.clusters.get(&ctx.cluster).map(|cluster| {
+                self.users.get(&ctx.user).map(|user| {
+                    let cert_path = format!("/home/nick/.kube/{}",cluster.cert);
+                    Kluster::new(cert_path.as_str(), cluster.server.as_str(), user.token.as_str())
+                }).ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
+            }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
+        }).ok_or(KubeError::Kube(KubeErrNo::InvalidContext)).
+            and_then(|n| n).and_then(|n| n).and_then(|n| n)
     }
 }

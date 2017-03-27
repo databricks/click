@@ -1,0 +1,13 @@
+[package]
+name = "click"
+version = "0.1.0"
+authors = ["Nick Lanham <nick@afternight.org>"]
+
+[dependencies]
+hyper = "0.10"
+hyper-rustls = "0.3"
+rustls = "0.5"
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
+serde_yaml = "0.6"

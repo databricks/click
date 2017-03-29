@@ -16,6 +16,7 @@
 
 use serde::Deserialize;
 use hyper::{Client,Url};
+use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
 use hyper::net::HttpsConnector;
 
@@ -23,7 +24,7 @@ use serde_json;
 use hyper_rustls;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::sync::Arc;
 
 
@@ -49,6 +50,7 @@ pub struct PodList {
 }
 
 pub struct Kluster {
+    pub name: String,
     endpoint: Url,
     token: String,
     client: Client,
@@ -56,7 +58,7 @@ pub struct Kluster {
 
 impl Kluster {
 
-    pub fn new(cert_path: &str, server: &str, token: &str) -> Result<Kluster, KubeError> {
+    pub fn new(name: &str, cert_path: &str, server: &str, token: &str) -> Result<Kluster, KubeError> {
         let mut tlsclient = hyper_rustls::TlsClient::new();
         {
             // add the cert to the root store
@@ -71,25 +73,34 @@ impl Kluster {
 
 
         Ok(Kluster {
+            name: name.to_owned(),
             endpoint: try!(Url::parse(server)),
             token: token.to_owned(),
             client: Client::with_connector(HttpsConnector::new(tlsclient)),
         })
     }
 
-    pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
-        where T: Deserialize {
-
+    fn send_req(&self, path: &str) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
-        //println!("Calling: {:?}",url);
-        //println!("My token: {}",self.token);
         let req = self.client.get(url);
         let req = req.header(Authorization(
             Bearer {
                 token: self.token.clone()
             }
         ));
-        let resp = try!(req.send());
+        req.send().map_err(|he| KubeError::from(he))
+    }
+
+    pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
+        where T: Deserialize {
+
+        let resp = try!(self.send_req(path));
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
-     }
+    }
+
+    pub fn get_text(&self, path: &str) -> Result<String, KubeError> {
+        let mut resp = try!(self.send_req(path));
+        let mut buf = String::new();
+        resp.read_to_string(&mut buf).map(|_| buf).map_err(|ioe| KubeError::from(ioe))
+    }
 }

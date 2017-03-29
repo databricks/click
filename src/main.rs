@@ -26,17 +26,21 @@ extern crate serde_yaml;
 
 extern crate rustyline;
 
+mod cmd;
 mod config;
 mod error;
 mod kube;
 
+use cmd::Cmd;
 use config::Config;
 use kube::{PodList, Kluster};
 
 /// Keep track of our repl environment
-struct Env {
+pub struct Env {
     config: Config,
     kluster: Option<Kluster>,
+    namespace: Option<String>,
+    current_pod: Option<String>,
     last_pods: Option<PodList>,
     prompt: String,
 }
@@ -46,9 +50,33 @@ impl Env {
         Env {
             config: config,
             kluster: None,
+            namespace: None,
+            current_pod: None,
             last_pods: None,
-            prompt: "[none] > ".to_owned()
+            prompt: "[none] [none] [none] > ".to_owned()
         }
+    }
+
+    // sets the prompt string based on current settings
+    fn set_prompt(&mut self) {
+        self.prompt = format!("[{}] [{}] [{}] > ",
+                              if let Some(ref k) = self.kluster {
+                                  k.name.as_str()
+                              } else {
+                                  "none"
+                              },
+                              if let Some(ref n) = self.namespace {
+                                  n.as_str()
+                              } else {
+                                  "none"
+                              },
+                              if let Some(ref p) = self.current_pod {
+                                  p.as_str()
+                              } else {
+                                  "none"
+                              }
+        );
+
     }
 
     fn set_context(&mut self, ctx: Option<&str>) {
@@ -56,19 +84,24 @@ impl Env {
             Some(cname) => {
                 self.kluster = match self.config.cluster_for_context(cname) {
                     Ok(k) => {
-                        self.prompt = format!("[{}] > ", cname);
                         Some(k)
                     },
                     Err(e) => {
-                        println!("Could not parse config: {}", e);
-                        std::process::exit(-1);
+                        println!("[Warning] Couldn't find context, no active context: {}", e);
+                        None
                     }
-                }
+                };
+                self.set_prompt();
             },
             None => {
                 println!("Must provide a context name");
             }
         }
+    }
+
+    fn set_namespace(&mut self, namespace: Option<&str>) {
+        self.namespace = namespace.map(|n| n.to_owned());
+        self.set_prompt();
     }
 
     fn set_podlist(&mut self, pods: Option<PodList>, print: bool) {
@@ -87,6 +120,14 @@ impl Env {
         }
     }
 
+    fn set_current_pod(&mut self, num: usize) {
+        if let Some(ref pl) = self.last_pods {
+            self.current_pod = pl.items.get(num).map(|p| p.metadata.name.clone());
+        } else {
+            println!("No active pod list");
+        }
+        self.set_prompt();
+    }
 
     fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
         where F: FnOnce(&Kluster) -> R {
@@ -104,46 +145,66 @@ impl Env {
 }
 
 fn main() {
-    let config = Config::from_file("/home/nick/.kube/config");
+    let config =
+        match std::env::home_dir() {
+            Some(mut path) => {
+                path.push(".kube");
+                path.push("config");
+                Config::from_file(path.as_path().to_str().unwrap())
+            }
+            None => {
+                println!("Can't get your home dir, please specify config");
+                std::process::exit(-2);
+            }
+        };
 
     let mut env = Env::new(config);
-
-    //let mut kluster: Option<Kluster> = None;
-    //let mut prompt = "[none]> ".to_owned();
+    let mut commands: Vec<Box<Cmd>> = Vec::new();
+    commands.push(Box::new(cmd::Quit));
+    commands.push(Box::new(cmd::Context));
+    commands.push(Box::new(cmd::Pods));
+    commands.push(Box::new(cmd::LPods));
+    commands.push(Box::new(cmd::Namespace));
+    commands.push(Box::new(cmd::Logs));
 
     let mut rl = rustyline::Editor::<()>::new();
     loop {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
+                rl.add_history_entry(line.as_str());
                 let mut parts = line.split_whitespace();
-                match parts.next() {
-                    Some("quit") | Some("q") => {
-                        println!("Goodbye");
-                        break
-                    },
-                    Some("context") | Some("ctx") => {
-                        env.set_context(parts.next());
-                    },
-                    Some("pods") => {
-                        let pl: Option<PodList> = env.run_on_kluster(|k| {
-                            k.get("/api/v1/pods").unwrap()
-                        });
-                        env.set_podlist(pl, true);
-                    },
-                    Some("lpods") => {
-                        if let Some(filt) = parts.next() {
-                            let pl: Option<PodList> = env.run_on_kluster(|k| {
-                                k.get(format!("/api/v1/pods?labelSelector={}", filt).as_str()).unwrap()
-                            });
-                            env.set_podlist(pl, true);
-                        } else {
-                            println!("Missing arg");
+                if let Some(cmdstr) = parts.next() {
+                    // There was something typed
+                    if let Ok(num) = cmdstr.parse::<usize>() {
+                        env.set_current_pod(num);
+                    }
+                    else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
+                        // found a matching command
+                        if cmd.exec(&mut env, &mut parts) {
+                            break;
                         }
-                    },
-
-                    Some(x) => println!("l: {}",x),
-                    None => println!("No command"),
+                    }
+                    else if cmdstr == "help" {
+                        // help isn't a command as it needs access to the commands vec
+                        if let Some(hcmd) = parts.next() {
+                            if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
+                                println!("{}", cmd.help());
+                            } else {
+                                println!("I don't know anything about {}, sorry", hcmd);
+                            }
+                        } else {
+                            println!("Available commands (type 'help command' for details):");
+                            for c in commands.iter() {
+                                println!("  {}",c.get_name());
+                            }
+                        }
+                    }
+                    else {
+                        println!("Unknown command");
+                    }
+                } else {
+                    println!("No command");
                 }
             }
             Err(_)   => {
@@ -152,9 +213,4 @@ fn main() {
             }
         }
     }
-
-    // let pods: PodList = kluster.get("/api/v1/pods?labelSelector=app=node-exporter").unwrap();
-    // for pod in pods.items.iter() {
-    //     println!("{}", pod.metadata.name);
-    // }
 }

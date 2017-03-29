@@ -121,7 +121,7 @@ impl Config {
             self.clusters.get(&ctx.cluster).map(|cluster| {
                 self.users.get(&ctx.user).map(|user| {
                     let cert_path = format!("/home/nick/.kube/{}",cluster.cert);
-                    Kluster::new(cert_path.as_str(), cluster.server.as_str(), user.token.as_str())
+                    Kluster::new(context, cert_path.as_str(), cluster.server.as_str(), user.token.as_str())
                 }).ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
             }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
         }).ok_or(KubeError::Kube(KubeErrNo::InvalidContext)).

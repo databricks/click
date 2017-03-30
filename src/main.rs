@@ -36,7 +36,7 @@ mod kube;
 use ansi_term::Colour::{Red, Green, Yellow};
 
 use cmd::Cmd;
-use config::Config;
+use config::{ClickConfig, Config};
 use kube::{PodList, Kluster};
 
 /// Keep track of our repl environment
@@ -97,9 +97,7 @@ impl Env {
                 };
                 self.set_prompt();
             },
-            None => {
-                println!("Must provide a context name");
-            }
+            None => {} // no-op
         }
     }
 
@@ -149,20 +147,29 @@ impl Env {
 }
 
 fn main() {
-    let config =
-        match std::env::home_dir() {
-            Some(mut path) => {
-                path.push(".kube");
-                path.push("config");
-                Config::from_file(path.as_path().to_str().unwrap())
-            }
-            None => {
-                println!("Can't get your home dir, please specify config");
-                std::process::exit(-2);
-            }
-        };
+    let mut conf_dir = match std::env::home_dir() {
+        Some(path) => path,
+        None => {
+            println!("Can't get your home dir, please specify a config dir");
+            // TODO: Allow to specify
+            std::process::exit(-2);
+        }
+    };
+
+    let mut click_path = conf_dir.clone();
+    click_path.push(".kube");
+    click_path.push("click.config");
+    let mut click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
+
+    conf_dir.push(".kube");
+    conf_dir.push("config");
+
+    let config = Config::from_file(conf_dir.as_path().to_str().unwrap());
 
     let mut env = Env::new(config);
+    env.set_namespace(click_conf.namespace.as_ref().map(|x| &**x));
+    env.set_context(click_conf.context.as_ref().map(|x| &**x));
+
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit));
     commands.push(Box::new(cmd::Context));
@@ -213,9 +220,10 @@ fn main() {
                 }
             }
             Err(_)   => {
-                println!("Goodbye");
                 break;
             }
         }
     }
+    click_conf.from_env(&env);
+    click_conf.save_to_file(click_path.as_path().to_str().unwrap()).unwrap();
 }

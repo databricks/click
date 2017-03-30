@@ -18,6 +18,7 @@ use std::{error, fmt, io};
 use std::convert::From;
 
 use serde_json;
+use serde_yaml;
 
 #[derive(Debug)]
 pub enum KubeErrNo {
@@ -57,6 +58,7 @@ pub enum KubeError {
     HyperParse(hyper::error::ParseError),
     HyperErr(hyper::error::Error),
     SerdeJson(serde_json::Error),
+    SerdeYaml(serde_yaml::Error),
 }
 
 
@@ -68,6 +70,7 @@ impl fmt::Display for KubeError {
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
             KubeError::HyperErr(ref err) => write!(f, "Hyper error: {}", err),
             KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
+            KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
         }
     }
 }
@@ -80,6 +83,7 @@ impl error::Error for KubeError {
             KubeError::HyperParse(ref err) => err.description(),
             KubeError::HyperErr(ref err) => err.description(),
             KubeError::SerdeJson(ref err) => err.description(),
+            KubeError::SerdeYaml(ref err) => err.description(),
         }
     }
 
@@ -90,6 +94,7 @@ impl error::Error for KubeError {
             KubeError::HyperParse(ref err) => Some(err),
             KubeError::HyperErr(ref err) => Some(err),
             KubeError::SerdeJson(ref err) => Some(err),
+            KubeError::SerdeYaml(ref err) => Some(err),
         }
     }
 }
@@ -117,5 +122,12 @@ impl From<hyper::error::Error> for KubeError {
 impl From<serde_json::Error> for KubeError {
     fn from(err: serde_json::Error) -> KubeError {
         KubeError::SerdeJson(err)
+    }
+}
+
+
+impl From<serde_yaml::Error> for KubeError {
+    fn from(err: serde_yaml::Error) -> KubeError {
+        KubeError::SerdeYaml(err)
     }
 }

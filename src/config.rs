@@ -19,8 +19,11 @@ use serde_yaml;
 use std::collections::HashMap;
 use std::fs::File;
 
+use ::Env;
 use kube::Kluster;
 use error::{KubeError,KubeErrNo};
+
+/// Kubernetes cluster config
 
 #[derive(Debug, Deserialize)]
 struct IConfig {
@@ -126,5 +129,37 @@ impl Config {
             }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
         }).ok_or(KubeError::Kube(KubeErrNo::InvalidContext)).
             and_then(|n| n).and_then(|n| n).and_then(|n| n)
+    }
+}
+
+
+/// Click config
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ClickConfig {
+    pub namespace: Option<String>,
+    pub context: Option<String>,
+}
+
+impl ClickConfig {
+    pub fn from_file(path: &str) -> ClickConfig {
+        if let Ok(f) = File::open(path) {
+            serde_yaml::from_reader(f).unwrap()
+        } else {
+            ClickConfig {
+                namespace: None,
+                context: None,
+            }
+        }
+    }
+
+    pub fn from_env(&mut self, env: &Env) {
+        self.namespace = env.namespace.clone();
+        self.context = env.kluster.as_ref().map(|k| k.name.clone());
+    }
+
+    pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
+        let mut file = try!(File::create(path));
+        try!(serde_yaml::to_writer(&mut file, &self));
+        Ok(())
     }
 }

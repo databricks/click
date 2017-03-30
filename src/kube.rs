@@ -50,6 +50,19 @@ pub struct PodList {
     pub items: Vec<Pod>,
 }
 
+// Events
+#[derive(Debug, Deserialize)]
+pub struct Event {
+    pub count: u32,
+    pub message: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EventList {
+    pub items: Vec<Event>,
+}
+
 pub struct Kluster {
     pub name: String,
     endpoint: Url,

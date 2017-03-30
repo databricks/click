@@ -24,7 +24,7 @@ use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
 
-use kube::PodList;
+use kube::{Event, EventList,PodList};
 
 pub trait Cmd {
     // break if returns true
@@ -250,12 +250,12 @@ pub struct Exec;
 impl Cmd for Exec {
     fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
         if let Some(cmd) = args.next() {
-            if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+            if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod.as_ref()) {
                 let status = Command::new("kubectl")
                     .arg("--namespace")
                     .arg(ns)
                     .arg("--context")
-                    .arg("dev")
+                    .arg(&kluster.name)
                     .arg("exec")
                     .arg("-it")
                     .arg(pod)
@@ -266,9 +266,7 @@ impl Cmd for Exec {
                     println!("kubectl exited abnormally");
                 }
             } else {
-                println!("No active pod");
-            }} else {
-                println!("No active namespace");
+                println!("No active kluster, or namespace, or pod");
             }
         } else {
             println!("No command specified")
@@ -336,5 +334,57 @@ impl Cmd for Containers {
 
     fn help(&self) -> &'static str {
         "list containers on active pod"
+    }
+}
+
+
+pub struct Events;
+
+impl Events {
+    fn format_event(&self, event: &Event) -> String {
+        format!("{}\n count: {}\n reason: {}\n",
+                event.message,
+                event.count,
+                event.reason)
+    }
+}
+
+impl Cmd for Events {
+    fn exec(&self, env: &mut Env, _args: &mut Iterator<Item=&str>) -> bool {
+        if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+            let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
+                              ns,pod,ns);
+            let oel: Option<EventList> = env.run_on_kluster(|k| {
+                k.get(url.as_str()).unwrap()
+            });
+            if let Some(el) = oel {
+                if el.items.len() > 0 {
+                    for e in el.items.iter() {
+                        println!("{}",self.format_event(e));
+                    }
+                } else {
+                    println!("No events");
+                }
+            } else {
+                println!("Failed to fetch events");
+            }
+        } else {
+            println!("No active pod");
+        }} else {
+            println!("No active namespace");
+        }
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "events"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "events"
+    }
+
+    fn help(&self) -> &'static str {
+        "Get events for the active pod"
     }
 }

@@ -30,13 +30,17 @@ extern crate serde_yaml;
 extern crate rustyline;
 
 mod cmd;
+mod completer;
 mod config;
 mod error;
 mod kube;
 
 use ansi_term::Colour::{Red, Green, Yellow};
 
+use rustyline::Editor;
+
 use cmd::Cmd;
+use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use kube::{PodList, Kluster};
 
@@ -182,7 +186,8 @@ fn main() {
     commands.push(Box::new(cmd::Exec));
     commands.push(Box::new(cmd::Containers));
 
-    let mut rl = rustyline::Editor::<()>::new();
+    let mut rl = Editor::<ClickCompleter>::new();
+    rl.set_completer(Some(ClickCompleter::new(&commands)));
     loop {
         let readline = rl.readline(env.prompt.as_str());
         match readline {

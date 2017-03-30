@@ -265,7 +265,11 @@ impl Cmd for Exec {
                 if !status.success() {
                     println!("kubectl exited abnormally");
                 }
-            }}
+            } else {
+                println!("No active pod");
+            }} else {
+                println!("No active namespace");
+            }
         } else {
             println!("No command specified")
         }
@@ -314,7 +318,11 @@ impl Cmd for Containers {
                 k.get_value(url.as_str()).unwrap()
             });
             println!("{}", self.format_value(pod_value.unwrap()));
-        }}
+        } else {
+            println!("No active pod");
+        }} else {
+            println!("No active namespace");
+        }
         false
     }
 

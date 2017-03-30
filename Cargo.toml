@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Nick Lanham <nick@afternight.org>"]
 
 [dependencies]
+ansi_term = "0.9"
 hyper = "0.10"
 hyper-rustls = "0.3"
 rustls = "0.5"

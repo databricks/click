@@ -15,7 +15,11 @@
 
 use ::Env;
 
+use serde_json::Value;
+
 use std::iter::Iterator;
+use std::io::{BufRead,BufReader};
+
 use kube::PodList;
 
 pub trait Cmd {
@@ -156,10 +160,23 @@ impl Cmd for Logs {
         if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
             if let Some(cont) = args.next() {
                 let url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                let logs = env.run_on_kluster(|k| {
-                    k.get_text(url.as_str()).unwrap()
+                let logs_reader = env.run_on_kluster(|k| {
+                    k.get_read(url.as_str()).unwrap()
                 });
-                println!("{}", logs.unwrap());
+                let mut reader = BufReader::new(logs_reader.unwrap());
+                let mut line = String::new();
+                loop {
+                    if let Ok(amt) = reader.read_line(&mut line) {
+                        if amt > 0 {
+                            print!("{}", line); // newlines already in line
+                            line.clear();
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
             } else {
                 println!("Must specify a container")
             }
@@ -180,4 +197,47 @@ impl Cmd for Logs {
     }
 }
 
+pub struct Describe;
+impl Describe {
+    fn format_value(&self, v: Value) -> String {
+        let metadata = v.get("metadata").unwrap();
+        let spec = v.get("spec").unwrap();
+        let status = v.get("status").unwrap();
+        format!("Name:\t\t{}\n\
+Namespace:\t{}\n\
+Node:\t\t{}\n\
+Created at:\t{}\n\
+Status:\t\t{}",
+                metadata.get("name").unwrap(),
+                metadata.get("namespace").unwrap(),
+                spec.get("nodeName").unwrap(),
+                metadata.get("creationTimestamp").unwrap(),
+                status.get("phase").unwrap(),
+        )
+    }
+}
+impl Cmd for Describe {
+    fn exec(&self, env: &mut Env, _: &mut Iterator<Item=&str>) -> bool {
+        if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+            let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+            let pod_value = env.run_on_kluster(|k| {
+                k.get_value(url.as_str()).unwrap()
+            });
+            println!("{}", self.format_value(pod_value.unwrap()));
+        }}
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "describe"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "describe"
+    }
+
+    fn help(&self) -> &'static str {
+        "Describe the active pod"
+    }
+}
 

@@ -16,6 +16,8 @@
 #[macro_use]
 extern crate serde_derive;
 
+extern crate ansi_term;
+
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate rustls;
@@ -30,6 +32,8 @@ mod cmd;
 mod config;
 mod error;
 mod kube;
+
+use ansi_term::Colour::{Red, Green, Yellow};
 
 use cmd::Cmd;
 use config::Config;
@@ -53,7 +57,7 @@ impl Env {
             namespace: None,
             current_pod: None,
             last_pods: None,
-            prompt: "[none] [none] [none] > ".to_owned()
+            prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
         }
     }
 
@@ -61,19 +65,19 @@ impl Env {
     fn set_prompt(&mut self) {
         self.prompt = format!("[{}] [{}] [{}] > ",
                               if let Some(ref k) = self.kluster {
-                                  k.name.as_str()
+                                  Red.bold().paint(k.name.as_str())
                               } else {
-                                  "none"
+                                  Red.paint("none")
                               },
                               if let Some(ref n) = self.namespace {
-                                  n.as_str()
+                                  Green.bold().paint(n.as_str())
                               } else {
-                                  "none"
+                                  Green.paint("none")
                               },
                               if let Some(ref p) = self.current_pod {
-                                  p.as_str()
+                                  Yellow.bold().paint(p.as_str())
                               } else {
-                                  "none"
+                                  Yellow.paint("none")
                               }
         );
 
@@ -166,6 +170,7 @@ fn main() {
     commands.push(Box::new(cmd::LPods));
     commands.push(Box::new(cmd::Namespace));
     commands.push(Box::new(cmd::Logs));
+    commands.push(Box::new(cmd::Describe));
 
     let mut rl = rustyline::Editor::<()>::new();
     loop {

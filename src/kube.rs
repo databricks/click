@@ -21,10 +21,11 @@ use hyper::header::{Authorization, Bearer};
 use hyper::net::HttpsConnector;
 
 use serde_json;
+use serde_json::Value;
 use hyper_rustls;
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::BufReader;
 use std::sync::Arc;
 
 
@@ -98,9 +99,18 @@ impl Kluster {
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 
-    pub fn get_text(&self, path: &str) -> Result<String, KubeError> {
-        let mut resp = try!(self.send_req(path));
-        let mut buf = String::new();
-        resp.read_to_string(&mut buf).map(|_| buf).map_err(|ioe| KubeError::from(ioe))
+    // pub fn get_text(&self, path: &str) -> Result<String, KubeError> {
+    //     let mut resp = try!(self.send_req(path));
+    //     let mut buf = String::new();
+    //     resp.read_to_string(&mut buf).map(|_| buf).map_err(|ioe| KubeError::from(ioe))
+    // }
+
+    pub fn get_read(&self, path: &str) -> Result<Response, KubeError> {
+        self.send_req(path)
+    }
+
+    pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
+        let resp = try!(self.send_req(path));
+        serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 }

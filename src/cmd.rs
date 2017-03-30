@@ -16,10 +16,13 @@
 
 use ::Env;
 
+use ansi_term::Colour::{Green};
+
 use serde_json::Value;
 
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
+use std::process::Command;
 
 use kube::PodList;
 
@@ -213,7 +216,7 @@ Status:\t\t{}",
                 metadata.get("namespace").unwrap(),
                 spec.get("nodeName").unwrap(),
                 metadata.get("creationTimestamp").unwrap(),
-                status.get("phase").unwrap(),
+                Green.paint(status.get("phase").unwrap().as_str().unwrap()),
         )
     }
 }
@@ -242,3 +245,88 @@ impl Cmd for Describe {
     }
 }
 
+
+pub struct Exec;
+impl Cmd for Exec {
+    fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
+        if let Some(cmd) = args.next() {
+            if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+                let status = Command::new("kubectl")
+                    .arg("--namespace")
+                    .arg(ns)
+                    .arg("--context")
+                    .arg("dev")
+                    .arg("exec")
+                    .arg("-it")
+                    .arg(pod)
+                    .arg(cmd)
+                    .status()
+                    .expect("failed to execute kubectl");
+                if !status.success() {
+                    println!("kubectl exited abnormally");
+                }
+            }}
+        } else {
+            println!("No command specified")
+        }
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "exec"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "exec"
+    }
+
+    fn help(&self) -> &'static str {
+        "exec specified command on active pod"
+    }
+}
+
+
+pub struct Containers;
+
+impl Containers {
+    fn format_value(&self, v: Value) -> String {
+        let mut buf = String::new();
+        if let Some(conts) = v.pointer("/status/containerStatuses").unwrap().as_array() {
+            for cont in conts {
+                buf.push_str(format!("Name:\t{}\n",cont.get("name").unwrap().as_str().unwrap()).as_str());
+                if let Some(o) = cont.get("state").unwrap().as_object() {
+                    buf.push_str(format!(" State:\t{}\n", Green.paint(o.keys().next().unwrap().as_str())).as_str());
+                } else {
+                    buf.push_str(" State:\tUnknown\n");
+                }
+                buf.push('\n');
+            }
+        }
+        buf
+    }
+}
+
+impl Cmd for Containers {
+    fn exec(&self, env: &mut Env, _args: &mut Iterator<Item=&str>) -> bool {
+        if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+            let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+            let pod_value = env.run_on_kluster(|k| {
+                k.get_value(url.as_str()).unwrap()
+            });
+            println!("{}", self.format_value(pod_value.unwrap()));
+        }}
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "containers" || l == "conts"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "containers"
+    }
+
+    fn help(&self) -> &'static str {
+        "list containers on active pod"
+    }
+}

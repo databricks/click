@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The Command Line Interactive Contoller for Kubernetes
 
 #[macro_use]
 extern crate serde_derive;
@@ -178,6 +179,8 @@ fn main() {
     commands.push(Box::new(cmd::Namespace));
     commands.push(Box::new(cmd::Logs));
     commands.push(Box::new(cmd::Describe));
+    commands.push(Box::new(cmd::Exec));
+    commands.push(Box::new(cmd::Containers));
 
     let mut rl = rustyline::Editor::<()>::new();
     loop {

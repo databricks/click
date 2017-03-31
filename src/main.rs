@@ -14,15 +14,15 @@
 
 //! The Command Line Interactive Contoller for Kubernetes
 
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate serde_derive;
+//#[macro_use] extern crate lazy_static;
 
 extern crate ansi_term;
 
 extern crate hyper;
 extern crate hyper_rustls;
+extern crate regex;
 extern crate rustls;
-
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
@@ -111,20 +111,8 @@ impl Env {
         self.set_prompt();
     }
 
-    fn set_podlist(&mut self, pods: Option<PodList>, print: bool) {
+    fn set_podlist(&mut self, pods: Option<PodList>) {
         self.last_pods = pods;
-        if print {
-            match self.last_pods {
-                Some(ref pl) => {
-                    for (i,pod) in pl.items.iter().enumerate() {
-                        println!("{}\t{}", i, pod.metadata.name);
-                    }
-                }
-                None => {
-                    println!("(podlist now empty)");
-                }
-            }
-        }
     }
 
     fn set_current_pod(&mut self, num: usize) {
@@ -179,6 +167,7 @@ fn main() {
     commands.push(Box::new(cmd::Quit));
     commands.push(Box::new(cmd::Context));
     commands.push(Box::new(cmd::Pods));
+    commands.push(Box::new(cmd::GPods));
     commands.push(Box::new(cmd::LPods));
     commands.push(Box::new(cmd::Namespace));
     commands.push(Box::new(cmd::Logs));

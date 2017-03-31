@@ -16,10 +16,13 @@
 
 use ::Env;
 
-use ansi_term::Colour::{Green};
+use ansi_term::Colour::{Blue, Green, Red, Yellow};
 
 use serde_json::Value;
 
+use regex::Regex;
+
+use ansi_term::ANSIString;
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
@@ -32,6 +35,36 @@ pub trait Cmd {
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn help(&self) -> &'static str;
+}
+
+fn color_phase(phase: &str) -> ANSIString {
+    match phase {
+        "Pending" | "Running" => Green.paint(phase),
+        "Succeeded" => Blue.paint(phase),
+        "Failed" => Red.paint(phase),
+        "Unknown" => Yellow.paint(phase),
+        _ => Yellow.paint(phase),
+    }
+}
+
+fn print_podlist(podlist: &PodList) {
+    let mut max_len = 0;
+    for pod in podlist.items.iter() {
+        if pod.metadata.name.len() > max_len {
+            max_len = pod.metadata.name.len();
+        }
+    }
+    max_len+=2;
+    let spacer = String::from_utf8(vec![b' '; max_len]).unwrap();
+    let sep = String::from_utf8(vec![b'-'; max_len+12]).unwrap();
+
+    println!("###  Name{}Phase",&spacer[0..(max_len-4)]);
+    println!("{}",sep);
+
+    for (i,pod) in podlist.items.iter().enumerate() {
+        let space = max_len - pod.metadata.name.len();
+        println!("{:>3}  {}{}{}", i, pod.metadata.name, &spacer[0..space], color_phase(pod.status.phase.as_str()));
+    }
 }
 
 pub struct Quit;
@@ -107,7 +140,10 @@ impl Cmd for Pods {
         let pl: Option<PodList> = env.run_on_kluster(|k| {
             k.get(urlstr.as_str()).unwrap()
         });
-        env.set_podlist(pl, true);
+        if let Some(ref l) = pl {
+            print_podlist(&l);
+        }
+        env.set_podlist(pl);
         false
     }
 
@@ -137,7 +173,10 @@ impl Cmd for LPods {
             let pl: Option<PodList> = env.run_on_kluster(|k| {
                 k.get(urlstr.as_str()).unwrap()
             });
-            env.set_podlist(pl, true);
+            if let Some(ref l) = pl {
+                print_podlist(l);
+            }
+            env.set_podlist(pl);
         } else {
             println!("Missing arg");
         }
@@ -154,6 +193,52 @@ impl Cmd for LPods {
 
     fn help(&self) -> &'static str {
         "Get pods with the specified lable (example: app=kinesis2prom)"
+    }
+}
+
+pub struct GPods;
+impl Cmd for GPods {
+    fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
+        if let Some(pattern) = args.next() {
+            if let Ok(regex) = Regex::new(pattern) {
+                let urlstr = if let Some(ref ns) = env.namespace {
+                    format!("/api/v1/namespaces/{}/pods", ns)
+                } else {
+                    "/api/v1/pods".to_owned()
+                };
+
+                let pl: Option<PodList> = env.run_on_kluster(|k| {
+                    k.get(urlstr.as_str()).unwrap()
+                });
+                if let Some(l) = pl {
+                    let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
+                    let new_podlist = PodList {
+                        items: filtered
+                    };
+                    print_podlist(&new_podlist);
+                    env.set_podlist(Some(new_podlist));
+                } else {
+                    env.set_podlist(pl);
+                }
+            } else {
+                println!("Invalid pattern: {}", pattern);
+            }
+        } else {
+            println!("Missing arg");
+        }
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "gpods"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "gpods"
+    }
+
+    fn help(&self) -> &'static str {
+        "Get pods filtered by specified regex"
     }
 }
 

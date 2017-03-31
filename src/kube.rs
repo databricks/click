@@ -41,8 +41,15 @@ pub struct PodMetadata {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PodStatus {
+    pub phase: String,
+}
+
+
+#[derive(Debug, Deserialize)]
 pub struct Pod {
     pub metadata: PodMetadata,
+    pub status: PodStatus,
 }
 
 #[derive(Debug, Deserialize)]

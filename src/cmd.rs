@@ -16,13 +16,12 @@
 
 use ::Env;
 
+use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
-
+use chrono::offset::local::Local;
 use serde_json::Value;
-
 use regex::Regex;
 
-use ansi_term::ANSIString;
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
@@ -378,16 +377,27 @@ pub struct Containers;
 impl Containers {
     fn format_value(&self, v: Value) -> String {
         let mut buf = String::new();
-        if let Some(conts) = v.pointer("/status/containerStatuses").unwrap().as_array() {
-            for cont in conts {
-                buf.push_str(format!("Name:\t{}\n",cont.get("name").unwrap().as_str().unwrap()).as_str());
-                if let Some(o) = cont.get("state").unwrap().as_object() {
-                    buf.push_str(format!(" State:\t{}\n", Green.paint(o.keys().next().unwrap().as_str())).as_str());
-                } else {
-                    buf.push_str(" State:\tUnknown\n");
+        if let Some(vconts) = v.pointer("/status/containerStatuses") {
+            // have that element
+            if let Some(conts) = vconts.as_array() {
+                for cont in conts {
+                    buf.push_str(format!("Name:\t{}\n",cont.get("name").unwrap().as_str().unwrap()).as_str());
+                    if let Some(o) = cont.get("state").unwrap().as_object() {
+                        buf.push_str(format!(" State:\t{}\n", Green.paint(o.keys().next().unwrap().as_str())).as_str());
+                    } else {
+                        buf.push_str(" State:\tUnknown\n");
+                    }
+                    buf.push('\n');
                 }
-                buf.push('\n');
             }
+        } else if let Some(sconts) = v.pointer("/spec/containers") {
+            if let Some(conts) = sconts.as_array() {
+                for cont in conts {
+                    buf.push_str(format!("Name:\t{}\n", cont.get("name").unwrap().as_str().unwrap()).as_str());
+                }
+            }
+        } else {
+            buf.push_str("Unable to find any containers.");
         }
         buf
     }
@@ -427,7 +437,8 @@ pub struct Events;
 
 impl Events {
     fn format_event(&self, event: &Event) -> String {
-        format!("{}\n count: {}\n reason: {}\n",
+        format!("{} - {}\n count: {}\n reason: {}\n",
+                event.last_timestamp.with_timezone(&Local),
                 event.message,
                 event.count,
                 event.reason)

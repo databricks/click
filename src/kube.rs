@@ -14,6 +14,8 @@
 
 //! Dealing with various kubernetes api calls
 
+use chrono::DateTime;
+use chrono::offset::utc::UTC;
 use serde::Deserialize;
 use hyper::{Client,Url};
 use hyper::client::response::Response;
@@ -63,6 +65,8 @@ pub struct Event {
     pub count: u32,
     pub message: String,
     pub reason: String,
+    #[serde(rename="lastTimestamp")]
+    pub last_timestamp: DateTime<UTC>,
 }
 
 #[derive(Debug, Deserialize)]

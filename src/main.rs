@@ -18,7 +18,7 @@
 //#[macro_use] extern crate lazy_static;
 
 extern crate ansi_term;
-
+extern crate chrono;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate regex;

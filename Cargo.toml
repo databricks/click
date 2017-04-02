@@ -6,6 +6,7 @@ authors = ["Nick Lanham <nick@afternight.org>"]
 [dependencies]
 ansi_term = "0.9"
 chrono = { version = "0.3", features = ["serde"] }
+clap = "2.22"
 hyper = "0.10"
 hyper-rustls = "0.3"
 lazy_static = "0.2"

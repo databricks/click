@@ -18,6 +18,7 @@
 //#[macro_use] extern crate lazy_static;
 
 extern crate ansi_term;
+extern crate clap;
 extern crate chrono;
 extern crate hyper;
 extern crate hyper_rustls;
@@ -36,6 +37,7 @@ mod error;
 mod kube;
 
 use ansi_term::Colour::{Red, Green, Yellow};
+use clap::{Arg, App};
 
 use rustyline::Editor;
 
@@ -43,6 +45,8 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use kube::{PodList, Kluster};
+
+use std::path::PathBuf;
 
 /// Keep track of our repl environment
 pub struct Env {
@@ -140,14 +144,31 @@ impl Env {
 }
 
 fn main() {
-    let mut conf_dir = match std::env::home_dir() {
-        Some(path) => path,
-        None => {
-            println!("Can't get your home dir, please specify a config dir");
-            // TODO: Allow to specify
-            std::process::exit(-2);
-        }
-    };
+    // Command line arg paring for click itself
+    let matches = App::new("Click")
+        .version("0.1")
+        .author("Nick Lanham <nick@databricks.com>")
+        .about("Command Line Interactive Contoller for Kubernetes")
+        .arg(Arg::with_name("config_dir")
+             .short("c")
+             .long("config_dir")
+             .value_name("DIR")
+             .help("Specify the directory to find kubernetes and click configs")
+             .takes_value(true))
+        .get_matches();
+
+    let mut conf_dir =
+        if let Some(dir) = matches.value_of("config_dir") {
+            PathBuf::from(dir)
+        } else {
+            match std::env::home_dir() {
+                Some(path) => path,
+                None => {
+                    println!("Can't get your home dir, please specify --config_dir");
+                    std::process::exit(-2);
+                }
+            }
+        };
 
     let mut click_path = conf_dir.clone();
     click_path.push(".kube");
@@ -170,7 +191,7 @@ fn main() {
     commands.push(Box::new(cmd::GPods));
     commands.push(Box::new(cmd::LPods));
     commands.push(Box::new(cmd::Namespace));
-    commands.push(Box::new(cmd::Logs));
+    commands.push(Box::new(cmd::Logs::new()));
     commands.push(Box::new(cmd::Describe));
     commands.push(Box::new(cmd::Exec));
     commands.push(Box::new(cmd::Containers));

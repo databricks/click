@@ -18,10 +18,12 @@ use ::Env;
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
+use clap::{Arg, App, AppSettings};
 use chrono::offset::local::Local;
 use serde_json::Value;
 use regex::Regex;
 
+use std::cell::RefCell;
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
@@ -242,33 +244,61 @@ impl Cmd for GPods {
 }
 
 
-pub struct Logs;
+pub struct Logs {
+    clap: RefCell<App<'static, 'static>>,
+}
+
+impl Logs {
+    pub fn new() -> Logs {
+        let clap = App::new("logs")
+            .about("Get logs from a container in the current pod")
+            .setting(AppSettings::NoBinaryName)
+            .setting(AppSettings::DisableVersion)
+            .arg(Arg::with_name("container")
+                 .help("Specify which container to get logs from")
+                 .required(true)
+                 .index(1))
+            .arg(Arg::with_name("follow")
+                 .short("f")
+                 .long("follow")
+                 .help("Follow the logs as new records arrive (stop with ^D)")
+                 .takes_value(false));
+        Logs {
+            clap: RefCell::new(clap),
+        }
+    }
+}
+
 impl Cmd for Logs {
     fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
-        if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
-            if let Some(cont) = args.next() {
-                let url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                let logs_reader = env.run_on_kluster(|k| {
-                    k.get_read(url.as_str()).unwrap()
-                });
-                let mut reader = BufReader::new(logs_reader.unwrap());
-                let mut line = String::new();
-                loop {
-                    if let Ok(amt) = reader.read_line(&mut line) {
-                        if amt > 0 {
-                            print!("{}", line); // newlines already in line
-                            line.clear();
+        match self.clap.borrow_mut().get_matches_from_safe_borrow(args) {
+            Ok(matches) => {
+                let cont = matches.value_of("container").unwrap(); // required so unwrap safe
+                if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+                    let url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
+                    let logs_reader = env.run_on_kluster(|k| {
+                        k.get_read(url.as_str()).unwrap()
+                    });
+                    let mut reader = BufReader::new(logs_reader.unwrap());
+                    let mut line = String::new();
+                    loop {
+                        if let Ok(amt) = reader.read_line(&mut line) {
+                            if amt > 0 {
+                                print!("{}", line); // newlines already in line
+                                line.clear();
+                            } else {
+                                break;
+                            }
                         } else {
                             break;
                         }
-                    } else {
-                        break;
                     }
-                }
-            } else {
-                println!("Must specify a container")
+                }}
+            },
+            Err(err) => {
+                println!("{}", err.message);
             }
-        }}
+        }
         false
     }
 

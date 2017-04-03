@@ -23,6 +23,7 @@ use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use chrono::offset::local::Local;
+use serde_json;
 use serde_json::Value;
 use regex::Regex;
 
@@ -194,6 +195,14 @@ fn print_nodelist(nodelist: &NodeList) {
     }
 }
 
+fn val_to_str<'a>(v: &'a Value, key: &str) -> &'a str {
+    if let Some(v) = v.get(key) {
+        v.as_str().unwrap_or("unknown")
+    } else {
+        "unknown"
+    }
+}
+
 // Command defintions below.  See documentation for the command! macro for an explanation of arguments passed here
 
 command!(Quit,
@@ -341,31 +350,61 @@ fn describe_format_value(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
     let spec = v.get("spec").unwrap();
     let status = v.get("status").unwrap();
+    let mut labelstr = "Labels:\t".to_owned();
+    if let Some(labels) = metadata.get("labels").unwrap().as_object() {
+        let mut first = true;
+        for label in labels.keys() {
+            if !first {
+                labelstr.push('\n');
+                labelstr.push('\t');
+            }
+            first = false;
+            labelstr.push('\t');
+            labelstr.push_str(label);
+            labelstr.push('=');
+            labelstr.push_str(labels.get(label).unwrap().as_str().unwrap());
+        }
+    }
+
     format!("Name:\t\t{}\n\
-Namespace:\t{}\n\
-Node:\t\t{}\n\
-Created at:\t{}\n\
-Status:\t\t{}",
-            metadata.get("name").unwrap(),
-            metadata.get("namespace").unwrap(),
-            spec.get("nodeName").unwrap(),
-            metadata.get("creationTimestamp").unwrap(),
-            Green.paint(status.get("phase").unwrap().as_str().unwrap()),
+Namespace:\t{}
+Node:\t\t{}
+IP:\t\t{}
+Created at:\t{}
+Status:\t\t{}
+{}",
+            val_to_str(metadata, "name"),
+            val_to_str(metadata, "namespace"),
+            val_to_str(spec, "nodeName"),
+            val_to_str(status, "podIP"),
+            val_to_str(metadata, "creationTimestamp"),
+            Green.paint(val_to_str(status, "phase")),
+            labelstr,
     )
 }
 
 command!(Describe,
          "describe",
          "Describe the active pod",
-         |clap| {clap},
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("json")
+                      .short("j")
+                      .long("json")
+                      .help("output full pod json")
+                      .takes_value(false))
+         },
          |l| { l == "describe" },
-         |_matches, env| {
+         |matches, env| {
              if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                  let pod_value = env.run_on_kluster(|k| {
                      k.get_value(url.as_str()).unwrap()
                  });
-                 println!("{}", describe_format_value(pod_value.unwrap()));
+                 if matches.is_present("json") {
+                     println!("{}", serde_json::to_string_pretty(&pod_value.unwrap()).unwrap());
+                 } else {
+                     println!("{}", describe_format_value(pod_value.unwrap()));
+                 }
              }}
          }
 );

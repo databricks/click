@@ -197,16 +197,14 @@ fn main() {
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
-    commands.push(Box::new(cmd::Context));
-    commands.push(Box::new(cmd::Pods));
-    commands.push(Box::new(cmd::GPods));
-    commands.push(Box::new(cmd::LPods));
-    commands.push(Box::new(cmd::Namespace));
+    commands.push(Box::new(cmd::Context::new()));
+    commands.push(Box::new(cmd::Pods::new()));
+    commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));
-    commands.push(Box::new(cmd::Describe));
-    commands.push(Box::new(cmd::Exec));
-    commands.push(Box::new(cmd::Containers));
-    commands.push(Box::new(cmd::Events));
+    commands.push(Box::new(cmd::Describe::new()));
+    commands.push(Box::new(cmd::Exec::new()));
+    commands.push(Box::new(cmd::Containers::new()));
+    commands.push(Box::new(cmd::Events::new()));
     commands.push(Box::new(cmd::Nodes::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
@@ -230,7 +228,7 @@ fn main() {
                         // help isn't a command as it needs access to the commands vec
                         if let Some(hcmd) = parts.next() {
                             if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
-                                println!("{}", cmd.help());
+                                cmd.print_help();
                             } else {
                                 println!("I don't know anything about {}, sorry", hcmd);
                             }

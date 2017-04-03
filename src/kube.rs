@@ -37,12 +37,16 @@ use error::KubeError;
 
 // Various things we can return
 
-// pods
+// objects
 #[derive(Debug, Deserialize)]
-pub struct PodMetadata {
+pub struct Metadata {
     pub name: String,
-    pub namespace: String
+    pub namespace: Option<String>,
+    #[serde(rename="creationTimestamp")]
+    pub creation_timestamp: Option<DateTime<UTC>>,
 }
+
+// pods
 
 #[derive(Debug, Deserialize)]
 pub struct PodStatus {
@@ -52,7 +56,7 @@ pub struct PodStatus {
 
 #[derive(Debug, Deserialize)]
 pub struct Pod {
-    pub metadata: PodMetadata,
+    pub metadata: Metadata,
     pub status: PodStatus,
 }
 
@@ -75,6 +79,40 @@ pub struct Event {
 pub struct EventList {
     pub items: Vec<Event>,
 }
+
+
+
+// Nodes
+#[derive(Debug, Deserialize)]
+pub struct NodeCondition {
+    #[serde(rename="type")]
+    pub typ: String,
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NodeStatus {
+    pub conditions: Vec<NodeCondition>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NodeSpec {
+    pub unschedulable: Option<bool>,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct Node {
+    pub metadata: Metadata,
+    pub spec: NodeSpec,
+    pub status: NodeStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NodeList {
+    pub items: Vec<Node>,
+}
+
 
 pub struct Kluster {
     pub name: String,

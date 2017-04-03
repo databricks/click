@@ -204,6 +204,7 @@ fn main() {
     commands.push(Box::new(cmd::Exec));
     commands.push(Box::new(cmd::Containers));
     commands.push(Box::new(cmd::Events));
+    commands.push(Box::new(cmd::Nodes::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.set_completer(Some(ClickCompleter::new(&commands)));

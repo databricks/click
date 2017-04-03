@@ -19,6 +19,8 @@ use ::Env;
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use clap::{Arg, App, AppSettings};
+use chrono::DateTime;
+use chrono::offset::utc::UTC;
 use chrono::offset::local::Local;
 use serde_json::Value;
 use regex::Regex;
@@ -30,7 +32,7 @@ use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use kube::{Event, EventList,PodList};
+use kube::{Event, EventList, PodList, NodeList, NodeCondition};
 
 pub trait Cmd {
     // break if returns true
@@ -47,6 +49,16 @@ fn color_phase(phase: &str) -> ANSIString {
         "Failed" => Red.paint(phase),
         "Unknown" => Yellow.paint(phase),
         _ => Yellow.paint(phase),
+    }
+}
+
+fn time_since(date: DateTime<UTC>) -> String {
+    let now = UTC::now();
+    let diff = now.signed_duration_since(date);
+    if diff.num_days() > 0 {
+        format!("{}d", diff.num_days())
+    } else {
+        format!("{}h", diff.num_hours())
     }
 }
 
@@ -67,6 +79,33 @@ fn print_podlist(podlist: &PodList) {
     for (i,pod) in podlist.items.iter().enumerate() {
         let space = max_len - pod.metadata.name.len();
         println!("{:>3}  {}{}{}", i, pod.metadata.name, &spacer[0..space], color_phase(pod.status.phase.as_str()));
+    }
+}
+
+fn print_nodelist(nodelist: &NodeList) {
+    for node in nodelist.items.iter() {
+        let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
+        let state =
+            if let Some(cond) = readycond.get(0) {
+                if cond.status == "True" {
+                    Green.paint("Ready")
+                } else {
+                    Red.paint("Not Ready")
+                }
+            } else {
+                Yellow.paint("Unknown")
+            };
+        let unsched =
+            if let Some(b) = node.spec.unschedulable {
+                if b {
+                    ",SchedulingDisabled"
+                } else {
+                    "\t\t\t"
+                }
+            } else {
+                "\t\t\t"
+            };
+        println!("{}\t{}{}\t{}", node.metadata.name, state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
     }
 }
 
@@ -520,5 +559,53 @@ impl Cmd for Events {
 
     fn help(&self) -> &'static str {
         "Get events for the active pod"
+    }
+}
+
+pub struct Nodes {
+    clap: RefCell<App<'static, 'static>>,
+}
+
+impl Nodes {
+    pub fn new() -> Nodes {
+        let clap = App::new("nodes")
+            .about("Get nodes in current namespace")
+            .setting(AppSettings::NoBinaryName)
+            .setting(AppSettings::DisableVersion);
+        Nodes {
+            clap: RefCell::new(clap),
+        }
+    }
+}
+
+impl Cmd for Nodes {
+    fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
+        match self.clap.borrow_mut().get_matches_from_safe_borrow(args) {
+            Ok(_matches) => {
+                let url = "/api/v1/nodes";
+                let nl: Option<NodeList> = env.run_on_kluster(|k| {
+                    k.get(url).unwrap()
+                });
+                if let Some(ref n) = nl {
+                    print_nodelist(&n);
+                }
+            },
+            Err(err) => {
+                println!("{}", err.message);
+            }
+        }
+        false
+    }
+
+    fn is(&self, l: &str) -> bool {
+        l == "nodes"
+    }
+
+    fn get_name(&self) -> &'static str {
+        "nodes"
+    }
+
+    fn help(&self) -> &'static str {
+        "get nodes"
     }
 }

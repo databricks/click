@@ -15,6 +15,7 @@
 //!  The commands one can run from the repl
 
 use ::Env;
+use kube::{Event, EventList, PodList, NodeList, NodeCondition};
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
@@ -31,8 +32,6 @@ use std::io::{BufRead,BufReader};
 use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-
-use kube::{Event, EventList, PodList, NodeList, NodeCondition};
 
 pub trait Cmd {
     // break if returns true
@@ -66,12 +65,28 @@ fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mu
 }
 
 /// Macro for defining a command
-/// Args are: cmd_name the name of the struct for the command
-/// name: the string name of the command
-/// about: an about string describing the command
-/// extra_args: a closure taking an App that addes any additional argument stuff and returns an App
-/// is_expr: a closure taking a string arg that checks if the passed string is one that should call this command
-/// cmd_expr: a closure taking matches and env that runs to execute the command
+///
+/// # Args
+/// * cmd_name: the name of the struct for the command
+/// * name: the string name of the command
+/// * about: an about string describing the command
+/// * extra_args: a closure taking an App that addes any additional argument stuff and returns an App
+/// * is_expr: a closure taking a string arg that checks if the passed string is one that should call this command
+/// * cmd_expr: a closure taking matches and env that runs to execute the command
+///
+/// # Example
+/// ```
+/// # #[macro_use] extern crate click;
+/// # fn main() {
+/// command!(Quit,
+///         "quit",
+///         "Quit click",
+///         |clap| {clap},
+///         |l| {l == "q" || l == "quit"},
+///         |_,env| {env.quit = true;}
+/// );
+/// # }
+/// ```
 macro_rules! command {
     ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $is_expr:expr, $cmd_expr:expr) => {
         pub struct $cmd_name {
@@ -130,6 +145,7 @@ fn time_since(date: DateTime<UTC>) -> String {
     }
 }
 
+/// Print out the specified list of pods in a pretty format
 fn print_podlist(podlist: &PodList) {
     let mut max_len = 4;
     for pod in podlist.items.iter() {
@@ -150,6 +166,7 @@ fn print_podlist(podlist: &PodList) {
     }
 }
 
+/// Print out the specified list of nodes in a pretty format
 fn print_nodelist(nodelist: &NodeList) {
     for node in nodelist.items.iter() {
         let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
@@ -176,6 +193,8 @@ fn print_nodelist(nodelist: &NodeList) {
         println!("{}\t{}{}\t{}", node.metadata.name, state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
     }
 }
+
+// Command defintions below.  See documentation for the command! macro for an explanation of arguments passed here
 
 command!(Quit,
          "quit",

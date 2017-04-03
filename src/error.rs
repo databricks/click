@@ -14,11 +14,11 @@
 
 
 use hyper;
-use std::{error, fmt, io};
-use std::convert::From;
-
 use serde_json;
 use serde_yaml;
+
+use std::{error, fmt, io};
+use std::convert::From;
 
 #[derive(Debug)]
 pub enum KubeErrNo {

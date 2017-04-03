@@ -30,7 +30,6 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
 
-#[macro_use]
 mod cmd;
 mod completer;
 mod config;
@@ -41,14 +40,14 @@ use ansi_term::Colour::{Red, Green, Yellow};
 use clap::{Arg, App};
 use rustyline::Editor;
 
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use kube::{PodList, Kluster};
-
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 /// Keep track of our repl environment
 pub struct Env {

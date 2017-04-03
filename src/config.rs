@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::fs::File;
 
 use ::Env;
-use kube::Kluster;
 use error::{KubeError,KubeErrNo};
+use kube::Kluster;
 
 /// Kubernetes cluster config
 

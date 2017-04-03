@@ -16,17 +16,16 @@
 
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
-use serde::Deserialize;
 use hyper::{Client,Url};
 use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
 use hyper::method::Method;
 use hyper::net::HttpsConnector;
-
+use hyper_rustls::TlsClient;
+use serde::Deserialize;
 use serde_json;
 use serde_json::Value;
-use hyper_rustls::TlsClient;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -35,7 +34,7 @@ use std::time::Duration;
 
 use error::KubeError;
 
-// Various things we can return
+// Various things we can return from the kubernetes api
 
 // objects
 #[derive(Debug, Deserialize)]

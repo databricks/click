@@ -27,6 +27,8 @@ use std::cell::RefCell;
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use kube::{Event, EventList,PodList};
 
@@ -274,14 +276,20 @@ impl Cmd for Logs {
         match self.clap.borrow_mut().get_matches_from_safe_borrow(args) {
             Ok(matches) => {
                 let cont = matches.value_of("container").unwrap(); // required so unwrap safe
+                let follow = matches.is_present("follow");
                 if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
-                    let url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
+                    let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
+                    if follow {
+                        url.push_str("&follow=true");
+                    }
                     let logs_reader = env.run_on_kluster(|k| {
-                        k.get_read(url.as_str()).unwrap()
+                        k.get_read(url.as_str(), Some(Duration::new(1, 0))).unwrap()
                     });
                     let mut reader = BufReader::new(logs_reader.unwrap());
                     let mut line = String::new();
-                    loop {
+
+                    env.ctrlcbool.store(false, Ordering::SeqCst);
+                    while !env.ctrlcbool.load(Ordering::SeqCst) {
                         if let Ok(amt) = reader.read_line(&mut line) {
                             if amt > 0 {
                                 print!("{}", line); // newlines already in line

@@ -18,18 +18,20 @@ use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use serde::Deserialize;
 use hyper::{Client,Url};
+use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
+use hyper::method::Method;
 use hyper::net::HttpsConnector;
 
 use serde_json;
 use serde_json::Value;
-use hyper_rustls;
+use hyper_rustls::TlsClient;
 
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
-
+use std::time::Duration;
 
 use error::KubeError;
 
@@ -78,13 +80,14 @@ pub struct Kluster {
     pub name: String,
     endpoint: Url,
     token: String,
+    cert_path: String,
     client: Client,
 }
 
 impl Kluster {
 
-    pub fn new(name: &str, cert_path: &str, server: &str, token: &str) -> Result<Kluster, KubeError> {
-        let mut tlsclient = hyper_rustls::TlsClient::new();
+    fn make_tlsclient(cert_path: &str) -> TlsClient {
+        let mut tlsclient = TlsClient::new();
         {
             // add the cert to the root store
             let mut cfg = Arc::get_mut(&mut tlsclient.cfg).unwrap();
@@ -95,13 +98,18 @@ impl Kluster {
                 println!("[WARNING] Couldn't add some certs from {}", cert_path);
             }
         }
+        tlsclient
+    }
+
+    pub fn new(name: &str, cert_path: &str, server: &str, token: &str) -> Result<Kluster, KubeError> {
 
 
         Ok(Kluster {
             name: name.to_owned(),
             endpoint: try!(Url::parse(server)),
             token: token.to_owned(),
-            client: Client::with_connector(HttpsConnector::new(tlsclient)),
+            cert_path: cert_path.to_owned(),
+            client: Client::with_connector(HttpsConnector::new(Kluster::make_tlsclient(cert_path))),
         })
     }
 
@@ -129,8 +137,28 @@ impl Kluster {
     //     resp.read_to_string(&mut buf).map(|_| buf).map_err(|ioe| KubeError::from(ioe))
     // }
 
-    pub fn get_read(&self, path: &str) -> Result<Response, KubeError> {
-        self.send_req(path)
+    pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
+        if timeout.is_some() {
+            let url = try!(self.endpoint.join(path));
+            let mut req = try!(Request::with_connector(Method::Get,
+                                                       url,
+                                                       &HttpsConnector::new(
+                                                           Kluster::make_tlsclient(self.cert_path.as_str())
+                                                       )));
+            { // scope for mutable borrow of req
+                let mut headers = req.headers_mut();
+                headers.set(Authorization(
+                    Bearer {
+                        token: self.token.clone()
+                    }
+                ));
+            }
+            try!(req.set_read_timeout(timeout));
+            let next = try!(req.start());
+            next.send().map_err(|he| KubeError::from(he))
+        } else {
+            self.send_req(path)
+        }
     }
 
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {

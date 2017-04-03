@@ -20,15 +20,15 @@
 extern crate ansi_term;
 extern crate clap;
 extern crate chrono;
+extern crate ctrlc;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate regex;
 extern crate rustls;
+extern crate rustyline;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
-
-extern crate rustyline;
 
 mod cmd;
 mod completer;
@@ -38,7 +38,6 @@ mod kube;
 
 use ansi_term::Colour::{Red, Green, Yellow};
 use clap::{Arg, App};
-
 use rustyline::Editor;
 
 use cmd::Cmd;
@@ -47,6 +46,8 @@ use config::{ClickConfig, Config};
 use kube::{PodList, Kluster};
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// Keep track of our repl environment
 pub struct Env {
@@ -55,17 +56,24 @@ pub struct Env {
     namespace: Option<String>,
     current_pod: Option<String>,
     last_pods: Option<PodList>,
+    pub ctrlcbool: Arc<AtomicBool>,
     prompt: String,
 }
 
 impl Env {
     fn new(config: Config) -> Env {
+        let cbool = Arc::new(AtomicBool::new(false));
+        let r = cbool.clone();
+        ctrlc::set_handler(move || {
+            r.store(true, Ordering::SeqCst);
+        }).expect("Error setting Ctrl-C handler");
         Env {
             config: config,
             kluster: None,
             namespace: None,
             current_pod: None,
             last_pods: None,
+            ctrlcbool: cbool,
             prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
         }
     }
@@ -234,8 +242,6 @@ fn main() {
                     else {
                         println!("Unknown command");
                     }
-                } else {
-                    println!("No command");
                 }
             }
             Err(_)   => {

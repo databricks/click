@@ -30,6 +30,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
 
+#[macro_use]
 mod cmd;
 mod completer;
 mod config;
@@ -52,6 +53,7 @@ use std::sync::Arc;
 /// Keep track of our repl environment
 pub struct Env {
     config: Config,
+    quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
     current_pod: Option<String>,
@@ -69,6 +71,7 @@ impl Env {
         }).expect("Error setting Ctrl-C handler");
         Env {
             config: config,
+            quit: false,
             kluster: None,
             namespace: None,
             current_pod: None,
@@ -193,7 +196,7 @@ fn main() {
     env.set_context(click_conf.context.as_ref().map(|x| &**x));
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
-    commands.push(Box::new(cmd::Quit));
+    commands.push(Box::new(cmd::Quit::new()));
     commands.push(Box::new(cmd::Context));
     commands.push(Box::new(cmd::Pods));
     commands.push(Box::new(cmd::GPods));
@@ -208,7 +211,7 @@ fn main() {
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.set_completer(Some(ClickCompleter::new(&commands)));
-    loop {
+    while !env.quit {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
@@ -221,9 +224,7 @@ fn main() {
                     }
                     else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
-                        if cmd.exec(&mut env, &mut parts) {
-                            break;
-                        }
+                        cmd.exec(&mut env, &mut parts);
                     }
                     else if cmdstr == "help" {
                         // help isn't a command as it needs access to the commands vec

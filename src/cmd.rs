@@ -18,7 +18,7 @@ use ::Env;
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
-use clap::{Arg, App, AppSettings};
+use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use chrono::offset::local::Local;
@@ -40,6 +40,65 @@ pub trait Cmd {
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn help(&self) -> &'static str;
+}
+
+/// Get the start of a clap object
+fn start_clap(name: &'static str, about: &'static str) -> App<'static, 'static> {
+    App::new(name)
+        .about(about)
+        .setting(AppSettings::NoBinaryName)
+        .setting(AppSettings::DisableVersion)
+}
+
+/// Run specified closure with the given matches, or print error.  Return true if execed, false on err
+fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mut Iterator<Item=&str>, func: F) -> bool
+    where F: FnOnce(ArgMatches,&mut Env) -> () {
+    match clap.borrow_mut().get_matches_from_safe_borrow(args) {
+        Ok(matches) => {
+            func(matches, env);
+            true
+        },
+        Err(err) => {
+            println!("{}", err.message);
+            false
+        }
+    }
+}
+
+/// Macro for defining a command
+macro_rules! command {
+    ($cmd_name:ident, $name:expr, $about:expr, $is_expr:expr, $cmd_expr:expr) => {
+        pub struct $cmd_name {
+            clap: RefCell<App<'static, 'static>>,
+        }
+
+        impl $cmd_name {
+            pub fn new() -> $cmd_name {
+                let clap = start_clap($name, $about);
+                $cmd_name {
+                    clap: RefCell::new(clap),
+                }
+            }
+        }
+
+        impl Cmd for $cmd_name {
+            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>) -> bool {
+                exec_match(&self.clap, env, args, $cmd_expr)
+            }
+
+            fn is(&self, l: &str) -> bool {
+                $is_expr(l)
+            }
+
+            fn get_name(&self) -> &'static str {
+                $name
+            }
+
+            fn help(&self) -> &'static str {
+                "Quit Click"
+            }
+        }
+    }
 }
 
 fn color_phase(phase: &str) -> ANSIString {
@@ -109,25 +168,12 @@ fn print_nodelist(nodelist: &NodeList) {
     }
 }
 
-pub struct Quit;
-impl Cmd for Quit {
-    fn exec(&self, _:&mut Env, _:&mut Iterator<Item=&str>) -> bool {
-        true
-    }
-
-    fn is(&self, l: &str) -> bool {
-        l == "q" || l == "quit"
-    }
-
-    fn get_name(&self) -> &'static str {
-        "quit"
-    }
-
-    fn help(&self) -> &'static str {
-        "Quit Click"
-    }
-}
-
+command!(Quit,
+         "quit",
+         "Quit click",
+         |l| {l == "q" || l == "quit"},
+         |_,env| {env.quit = true;}
+);
 
 pub struct Context;
 impl Cmd for Context {
@@ -312,40 +358,35 @@ impl Logs {
 
 impl Cmd for Logs {
     fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
-        match self.clap.borrow_mut().get_matches_from_safe_borrow(args) {
-            Ok(matches) => {
-                let cont = matches.value_of("container").unwrap(); // required so unwrap safe
-                let follow = matches.is_present("follow");
-                if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
-                    let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                    if follow {
-                        url.push_str("&follow=true");
-                    }
-                    let logs_reader = env.run_on_kluster(|k| {
-                        k.get_read(url.as_str(), Some(Duration::new(1, 0))).unwrap()
-                    });
-                    let mut reader = BufReader::new(logs_reader.unwrap());
-                    let mut line = String::new();
+        exec_match(&self.clap, env, args, |matches, env| {
+            let cont = matches.value_of("container").unwrap(); // required so unwrap safe
+            let follow = matches.is_present("follow");
+            if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+                let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
+                if follow {
+                    url.push_str("&follow=true");
+                }
+                let logs_reader = env.run_on_kluster(|k| {
+                    k.get_read(url.as_str(), Some(Duration::new(1, 0))).unwrap()
+                });
+                let mut reader = BufReader::new(logs_reader.unwrap());
+                let mut line = String::new();
 
-                    env.ctrlcbool.store(false, Ordering::SeqCst);
-                    while !env.ctrlcbool.load(Ordering::SeqCst) {
-                        if let Ok(amt) = reader.read_line(&mut line) {
-                            if amt > 0 {
-                                print!("{}", line); // newlines already in line
-                                line.clear();
-                            } else {
-                                break;
-                            }
+                env.ctrlcbool.store(false, Ordering::SeqCst);
+                while !env.ctrlcbool.load(Ordering::SeqCst) {
+                    if let Ok(amt) = reader.read_line(&mut line) {
+                        if amt > 0 {
+                            print!("{}", line); // newlines already in line
+                            line.clear();
                         } else {
                             break;
                         }
+                    } else {
+                        break;
                     }
-                }}
-            },
-            Err(err) => {
-                println!("{}", err.message);
-            }
-        }
+                }
+            }}
+        });
         false
     }
 
@@ -580,20 +621,15 @@ impl Nodes {
 
 impl Cmd for Nodes {
     fn exec(&self, env: &mut Env, args: &mut Iterator<Item=&str>) -> bool {
-        match self.clap.borrow_mut().get_matches_from_safe_borrow(args) {
-            Ok(_matches) => {
-                let url = "/api/v1/nodes";
-                let nl: Option<NodeList> = env.run_on_kluster(|k| {
-                    k.get(url).unwrap()
-                });
-                if let Some(ref n) = nl {
-                    print_nodelist(&n);
-                }
-            },
-            Err(err) => {
-                println!("{}", err.message);
+        exec_match(&self.clap, env, args, |_, env| {
+            let url = "/api/v1/nodes";
+            let nl: Option<NodeList> = env.run_on_kluster(|k| {
+                k.get(url).unwrap()
+            });
+            if let Some(ref n) = nl {
+                print_nodelist(&n);
             }
-        }
+        });
         false
     }
 

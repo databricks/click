@@ -30,6 +30,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
 
+mod certs;
 mod cmd;
 mod completer;
 mod config;

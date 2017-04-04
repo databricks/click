@@ -21,7 +21,8 @@ use std::fs::File;
 
 use ::Env;
 use error::{KubeError,KubeErrNo};
-use kube::Kluster;
+use kube::{Kluster, KlusterAuth};
+use certs::{get_cert, get_private_key};
 
 /// Kubernetes cluster config
 
@@ -70,7 +71,11 @@ struct IUser {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct UserConf {
-    pub token: String,
+    pub token: Option<String>,
+    #[serde(rename="client-certificate")]
+    pub client_cert: Option<String>,
+    #[serde(rename="client-key")]
+    pub client_key: Option<String>
 }
 
 
@@ -123,8 +128,25 @@ impl Config {
         self.contexts.get(context).map(|ctx| {
             self.clusters.get(&ctx.cluster).map(|cluster| {
                 self.users.get(&ctx.user).map(|user| {
-                    let cert_path = format!("/home/nick/.kube/{}",cluster.cert);
-                    Kluster::new(context, cert_path.as_str(), cluster.server.as_str(), user.token.as_str())
+                    let cert_path =
+                        if cluster.cert.chars().next().unwrap() == '/' {
+                            cluster.cert.clone()
+                        } else {
+                            format!("/home/nick/.kube/{}",cluster.cert)
+                        };
+                    let auth =
+                        if let Some(ref token) = user.token {
+                            KlusterAuth::with_token(token.as_str())
+                        } else if let (&Some(ref client_cert_path), &Some(ref key_path)) = (&user.client_cert, &user.client_key) {
+                            if let (Some(cert), Some(private_key)) = (get_cert(client_cert_path), get_private_key(key_path)) {
+                                KlusterAuth::with_cert_and_key(cert, private_key)
+                            } else {
+                                panic!("Can't read/convert cert or private key");
+                            }
+                        } else {
+                            panic!("Invalid kubeconfig!  Each user must have either a token or a client-certificate AND a client-key.");
+                        };
+                    Kluster::new(context, cert_path.as_str(), cluster.server.as_str(), auth)
                 }).ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
             }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
         }).ok_or(KubeError::Kube(KubeErrNo::InvalidContext)).

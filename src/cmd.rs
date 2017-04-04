@@ -460,11 +460,22 @@ command!(Exec,
                       .help("The command to execute")
                       .required(true)
                       .index(1))
+                 .arg(Arg::with_name("container")
+                      .short("c")
+                      .long("container")
+                      .help("Exec in the specified container")
+                      .takes_value(true))
          },
          |l| { l == "exec" },
          |matches, env| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
              if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod().as_ref()) {
+                 let contargs =
+                     if let Some(container) = matches.value_of("container") {
+                         vec!("-c", container)
+                     } else {
+                         vec!()
+                     };
                  let status = Command::new("kubectl")
                      .arg("--namespace")
                      .arg(ns)
@@ -473,6 +484,7 @@ command!(Exec,
                      .arg("exec")
                      .arg("-it")
                      .arg(pod)
+                     .args(contargs.iter())
                      .arg(cmd)
                      .status()
                      .expect("failed to execute kubectl");

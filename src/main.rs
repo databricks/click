@@ -36,7 +36,7 @@ mod config;
 mod error;
 mod kube;
 
-use ansi_term::Colour::{Red, Green, Yellow};
+use ansi_term::Colour::{Blue, Red, Green, Yellow};
 use clap::{Arg, App};
 use rustyline::Editor;
 
@@ -47,7 +47,15 @@ use std::sync::Arc;
 use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
-use kube::{PodList, Kluster};
+use kube::{Kluster, NodeList, PodList};
+
+/// An object we can have as a "current" thing
+/// Includes pods and nodes at the moment
+enum KObj {
+    None,
+    Pod(String),
+    Node(String),
+}
 
 /// Keep track of our repl environment
 pub struct Env {
@@ -55,8 +63,9 @@ pub struct Env {
     quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
-    current_pod: Option<String>,
+    current_object: KObj,
     last_pods: Option<PodList>,
+    last_nodes: Option<NodeList>,
     pub ctrlcbool: Arc<AtomicBool>,
     prompt: String,
 }
@@ -73,8 +82,9 @@ impl Env {
             quit: false,
             kluster: None,
             namespace: None,
-            current_pod: None,
+            current_object: KObj::None,
             last_pods: None,
+            last_nodes: None,
             ctrlcbool: cbool,
             prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
         }
@@ -93,10 +103,10 @@ impl Env {
                               } else {
                                   Green.paint("none")
                               },
-                              if let Some(ref p) = self.current_pod {
-                                  Yellow.bold().paint(p.as_str())
-                              } else {
-                                  Yellow.paint("none")
+                              match self.current_object {
+                                  KObj::None => Yellow.paint("none"),
+                                  KObj::Pod(ref name) => Yellow.bold().paint(name.as_str()),
+                                  KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
                               }
         );
 
@@ -127,15 +137,39 @@ impl Env {
 
     fn set_podlist(&mut self, pods: Option<PodList>) {
         self.last_pods = pods;
+        self.last_nodes = None;
     }
 
-    fn set_current_pod(&mut self, num: usize) {
+    fn set_nodelist(&mut self, nodes: Option<NodeList>) {
+        self.last_pods = None;
+        self.last_nodes = nodes;
+    }
+
+    fn set_current(&mut self, num: usize) {
         if let Some(ref pl) = self.last_pods {
-            self.current_pod = pl.items.get(num).map(|p| p.metadata.name.clone());
+            if let Some(name) = pl.items.get(num).map(|p| p.metadata.name.clone()) {
+                self.current_object = KObj::Pod(name);
+            } else {
+                self.current_object = KObj::None;
+            }
+        } else if let Some(ref nl) = self.last_nodes {
+            if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
+                self.current_object = KObj::Node(name);
+            } else {
+                self.current_object = KObj::None;
+            }
         } else {
-            println!("No active pod list");
+            println!("No active pod or node list");
         }
         self.set_prompt();
+    }
+
+    fn current_pod(&self) -> Option<&String> {
+        if let KObj::Pod(ref name) = self.current_object {
+            Some(name)
+        } else {
+            None
+        }
     }
 
     fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
@@ -217,7 +251,7 @@ fn main() {
                 if let Some(cmdstr) = parts.next() {
                     // There was something typed
                     if let Ok(num) = cmdstr.parse::<usize>() {
-                        env.set_current_pod(num);
+                        env.set_current(num);
                     }
                     else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command

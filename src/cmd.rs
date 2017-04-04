@@ -31,6 +31,7 @@ use std::cell::RefCell;
 use std::iter::Iterator;
 use std::io::{BufRead,BufReader};
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -169,7 +170,20 @@ fn print_podlist(podlist: &PodList) {
 
 /// Print out the specified list of nodes in a pretty format
 fn print_nodelist(nodelist: &NodeList) {
+    let mut max_len = 4;
     for node in nodelist.items.iter() {
+        if node.metadata.name.len() > max_len {
+            max_len = node.metadata.name.len();
+        }
+    }
+    max_len+=2;
+    let spacer = String::from_utf8(vec![b' '; max_len]).unwrap();
+    let sep = String::from_utf8(vec![b'-'; max_len+35]).unwrap();
+
+    println!("###  Name{}State                     Age",&spacer[0..(max_len-4)]);
+    println!("{}",sep);
+
+    for (i, node) in nodelist.items.iter().enumerate() {
         let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
         let state =
             if let Some(cond) = readycond.get(0) {
@@ -184,14 +198,15 @@ fn print_nodelist(nodelist: &NodeList) {
         let unsched =
             if let Some(b) = node.spec.unschedulable {
                 if b {
-                    ",SchedulingDisabled"
+                    ",SchedulingDisabled  "
                 } else {
-                    "\t\t\t"
+                    "                     "
                 }
             } else {
-                "\t\t\t"
+                "                     "
             };
-        println!("{}\t{}{}\t{}", node.metadata.name, state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
+        let space = max_len - node.metadata.name.len();
+        println!("{:>3}  {}{}{}{}{}", i, node.metadata.name, &spacer[0..space], state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
     }
 }
 
@@ -317,7 +332,7 @@ command!(Logs,
          |matches, env| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
              let follow = matches.is_present("follow");
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
                  if follow {
                      url.push_str("&follow=true");
@@ -346,10 +361,12 @@ command!(Logs,
 );
 
 /// Utility function for describe to print out value
-fn describe_format_value(v: Value) -> String {
+fn describe_format_pod(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
     let spec = v.get("spec").unwrap();
     let status = v.get("status").unwrap();
+    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
+
     let mut labelstr = "Labels:\t".to_owned();
     if let Some(labels) = metadata.get("labels").unwrap().as_object() {
         let mut first = true;
@@ -370,16 +387,24 @@ fn describe_format_value(v: Value) -> String {
 Namespace:\t{}
 Node:\t\t{}
 IP:\t\t{}
-Created at:\t{}
+Created at:\t{} ({})
 Status:\t\t{}
 {}",
             val_to_str(metadata, "name"),
             val_to_str(metadata, "namespace"),
             val_to_str(spec, "nodeName"),
             val_to_str(status, "podIP"),
-            val_to_str(metadata, "creationTimestamp"),
+            created, created.with_timezone(&Local),
             Green.paint(val_to_str(status, "phase")),
             labelstr,
+    )
+}
+
+/// Utility function for describe to print out value
+fn describe_format_node(v: Value) -> String {
+    let metadata = v.get("metadata").unwrap();
+    format!("Name: {}",
+            val_to_str(metadata, "name"),
     )
 }
 
@@ -395,17 +420,35 @@ command!(Describe,
          },
          |l| { l == "describe" },
          |matches, env| {
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
-                 let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
-                 let pod_value = env.run_on_kluster(|k| {
-                     k.get_value(url.as_str()).unwrap()
-                 });
-                 if matches.is_present("json") {
-                     println!("{}", serde_json::to_string_pretty(&pod_value.unwrap()).unwrap());
-                 } else {
-                     println!("{}", describe_format_value(pod_value.unwrap()));
-                 }
-             }}
+             match env.current_object {
+                 ::KObj::None => println!("No active object to describe"),
+                 ::KObj::Pod(ref pod) => {
+                     if let Some(ref ns) = env.namespace {
+                         // describe the active pod
+                         let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+                         let pod_value = env.run_on_kluster(|k| {
+                             k.get_value(url.as_str()).unwrap()
+                         });
+                         if matches.is_present("json") {
+                             println!("{}", serde_json::to_string_pretty(&pod_value.unwrap()).unwrap());
+                         } else {
+                             println!("{}", describe_format_pod(pod_value.unwrap()));
+                         }
+                     }
+                 },
+                 ::KObj::Node(ref node) => {
+                     // describe the active node
+                     let url = format!("/api/v1/nodes/{}", node);
+                     let node_value = env.run_on_kluster(|k| {
+                         k.get_value(url.as_str()).unwrap()
+                     });
+                     if matches.is_present("json") {
+                         println!("{}", serde_json::to_string_pretty(&node_value.unwrap()).unwrap());
+                     } else {
+                         println!("{}", describe_format_node(node_value.unwrap()));
+                     }
+                 },
+             }
          }
 );
 
@@ -421,7 +464,7 @@ command!(Exec,
          |l| { l == "exec" },
          |matches, env| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
-             if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod.as_ref()) {
+             if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod().as_ref()) {
                  let status = Command::new("kubectl")
                      .arg("--namespace")
                      .arg(ns)
@@ -475,7 +518,7 @@ command!(Containers,
          |clap| { clap },
          |l| { l == "conts" || l == "containers" },
          |_matches, env| {
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                  let pod_value = env.run_on_kluster(|k| {
                      k.get_value(url.as_str()).unwrap()
@@ -504,7 +547,7 @@ command!(Events,
          |clap| { clap },
          |l| { l == "events" },
          |_matches, env| {
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod {
+             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
                                    ns,pod,ns);
                  let oel: Option<EventList> = env.run_on_kluster(|k| {
@@ -542,5 +585,6 @@ command!(Nodes,
              if let Some(ref n) = nl {
                  print_nodelist(&n);
              }
+             env.set_nodelist(nl);
          }
 );

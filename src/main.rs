@@ -146,6 +146,11 @@ impl Env {
         self.last_nodes = nodes;
     }
 
+    fn clear_current(&mut self) {
+        self.current_object = KObj::None;
+        self.set_prompt();
+    }
+
     fn set_current(&mut self, num: usize) {
         if let Some(ref pl) = self.last_pods {
             if let Some(name) = pl.items.get(num).map(|p| p.metadata.name.clone()) {
@@ -240,6 +245,7 @@ fn main() {
     commands.push(Box::new(cmd::Containers::new()));
     commands.push(Box::new(cmd::Events::new()));
     commands.push(Box::new(cmd::Nodes::new()));
+    commands.push(Box::new(cmd::Clear::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.set_completer(Some(ClickCompleter::new(&commands)));

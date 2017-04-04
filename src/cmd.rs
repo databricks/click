@@ -245,14 +245,23 @@ command!(Context,
          }
 );
 
+command!(Clear,
+         "clear",
+         "Clear the currently selected kubernetes object",
+         |clap| {clap},
+         |l| { l == "clear" },
+         |_, env| {
+             env.clear_current();
+         }
+);
 
 command!(Namespace,
          "namespace",
-         "Set the current namespace",
+         "Set the current namespace (no arg for no namespace)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("namespace")
                       .help("The namespace to use")
-                      .required(true)
+                      .required(false)
                       .index(1))
          },
          |l| {l == "ns" || l == "namespace"},
@@ -285,9 +294,22 @@ command!(Pods,
                  "/api/v1/pods".to_owned()
              };
 
+             let mut pushed_label = false;
              if let Some(label_selector) = matches.value_of("label") {
                  urlstr.push_str("?labelSelector=");
                  urlstr.push_str(label_selector);
+                 pushed_label = true;
+             }
+
+             if let ::KObj::Node(ref node) = env.current_object {
+                 if pushed_label {
+                     urlstr.push('&');
+                 } else {
+                     urlstr.push('?');
+                 }
+                 urlstr.push_str("fieldSelector=spec.nodeName=");
+                 urlstr.push_str(node);
+                 urlstr.push_str("&status.phase!=Failed,status.phase!=Succeeded");
              }
 
              let pl: Option<PodList> = env.run_on_kluster(|k| {
@@ -360,15 +382,10 @@ command!(Logs,
          }
 );
 
-/// Utility function for describe to print out value
-fn describe_format_pod(v: Value) -> String {
-    let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let status = v.get("status").unwrap();
-    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
-
+/// get labels out of metadata
+fn get_label_str(v: &Value) -> String {
     let mut labelstr = "Labels:\t".to_owned();
-    if let Some(labels) = metadata.get("labels").unwrap().as_object() {
+    if let Some(labels) = v.get("labels").unwrap().as_object() {
         let mut first = true;
         for label in labels.keys() {
             if !first {
@@ -382,6 +399,15 @@ fn describe_format_pod(v: Value) -> String {
             labelstr.push_str(labels.get(label).unwrap().as_str().unwrap());
         }
     }
+    labelstr
+}
+
+/// Utility function for describe to print out value
+fn describe_format_pod(v: Value) -> String {
+    let metadata = v.get("metadata").unwrap();
+    let spec = v.get("spec").unwrap();
+    let status = v.get("status").unwrap();
+    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
 
     format!("Name:\t\t{}\n\
 Namespace:\t{}
@@ -396,15 +422,24 @@ Status:\t\t{}
             val_to_str(status, "podIP"),
             created, created.with_timezone(&Local),
             Green.paint(val_to_str(status, "phase")),
-            labelstr,
+            get_label_str(metadata),
     )
 }
 
 /// Utility function for describe to print out value
 fn describe_format_node(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
-    format!("Name: {}",
+    let spec = v.get("spec").unwrap();
+    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
+
+    format!("Name:\t\t{}
+{}
+Created at:\t{} ({})
+ProviderId:\t{}",
             val_to_str(metadata, "name"),
+            get_label_str(metadata),
+            created, created.with_timezone(&Local),
+            val_to_str(spec, "providerID"),
     )
 }
 

@@ -148,23 +148,55 @@ fn time_since(date: DateTime<UTC>) -> String {
 }
 
 /// Print out the specified list of pods in a pretty format
-fn print_podlist(podlist: &PodList) {
+fn print_podlist(podlist: &PodList, show_namespace: bool) {
     let mut max_len = 4;
+    let mut phase_len = 4;
     for pod in podlist.items.iter() {
         if pod.metadata.name.len() > max_len {
             max_len = pod.metadata.name.len();
         }
+        if show_namespace && (pod.status.phase.len() > phase_len) {
+            phase_len = pod.status.phase.len();
+        }
     }
     max_len+=2;
-    let spacer = String::from_utf8(vec![b' '; max_len]).unwrap();
-    let sep = String::from_utf8(vec![b'-'; max_len+12]).unwrap();
 
-    println!("###  Name{}Phase",&spacer[0..(max_len-4)]);
-    println!("{}",sep);
+    let sep_len =
+        if show_namespace {
+            phase_len+=2;
+            max_len + phase_len + 14
+        } else {
+            phase_len = 0;
+            max_len + 12
+        };
+
+    let spacer_len =
+        if max_len > phase_len {
+            max_len
+        } else {
+            phase_len
+        };
+
+    let spacer = String::from_utf8(vec![b' '; spacer_len]).unwrap();
+    let sep = String::from_utf8(vec![b'-'; sep_len]).unwrap();
+
+    print!("###  Name{}Phase",&spacer[0..(max_len-4)]);
+
+
+    if show_namespace {
+        print!("{}Namespace",&spacer[0..(phase_len-5)]);
+    }
+
+    println!("\n{}",sep);
 
     for (i,pod) in podlist.items.iter().enumerate() {
         let space = max_len - pod.metadata.name.len();
-        println!("{:>3}  {}{}{}", i, pod.metadata.name, &spacer[0..space], color_phase(pod.status.phase.as_str()));
+        print!("{:>3}  {}{}{}", i, pod.metadata.name, &spacer[0..space], color_phase(pod.status.phase.as_str()));
+        if show_namespace {
+            let pspace = phase_len - pod.status.phase.len();
+            print!("{}{}", &spacer[0..pspace], pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned()));
+        }
+        println!();
     }
 }
 
@@ -309,7 +341,6 @@ command!(Pods,
                  }
                  urlstr.push_str("fieldSelector=spec.nodeName=");
                  urlstr.push_str(node);
-                 urlstr.push_str("&status.phase!=Failed,status.phase!=Succeeded");
              }
 
              let pl: Option<PodList> = env.run_on_kluster(|k| {
@@ -322,14 +353,14 @@ command!(Pods,
                          let new_podlist = PodList {
                              items: filtered
                          };
-                         print_podlist(&new_podlist);
+                         print_podlist(&new_podlist, env.namespace.is_none());
                          env.set_podlist(Some(new_podlist));
                      } else {
                          println!("Invalid regex: {}", pattern);
                      }
                  }
                  else {
-                     print_podlist(&l);
+                     print_podlist(&l, env.namespace.is_none());
                      env.set_podlist(Some(l));
                  }
              }

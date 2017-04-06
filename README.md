@@ -11,6 +11,9 @@ and kubernetes object.  Commands are then applied to the active config
 so it's not necessary to keep specifying what objects to target.
 
 # Building
+You'll need rust and cargo.  See [here](http://doc.crates.io/) for
+instructions on how to do that.
+
 Checkout the code and run `cargo build --release`.
 
 # Running

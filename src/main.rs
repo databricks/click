@@ -41,6 +41,7 @@ use ansi_term::Colour::{Blue, Red, Green, Yellow};
 use clap::{Arg, App};
 use rustyline::Editor;
 
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -200,6 +201,24 @@ impl Env {
     }
 }
 
+impl fmt::Display for Env {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Env {{
+  Current Context: {}
+  Availble Contexts: {:?}
+  Kubernetes Config File: {}
+}}",
+               if let Some(ref k) = self.kluster {
+                   Red.bold().paint(k.name.as_str())
+               } else {
+                   Red.paint("none")
+               },
+               self.config.contexts.keys(),
+               self.config.source_file,
+        )
+    }
+}
+
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")
@@ -253,6 +272,7 @@ fn main() {
     commands.push(Box::new(cmd::Events::new()));
     commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Clear::new()));
+    commands.push(Box::new(cmd::EnvCmd::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.set_completer(Some(ClickCompleter::new(&commands)));

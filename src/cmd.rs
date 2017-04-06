@@ -674,3 +674,13 @@ command!(Nodes,
              env.set_nodelist(nl);
          }
 );
+
+command!(EnvCmd,
+         "env",
+         "Print info about the current environment",
+         |clap| { clap },
+         |l| { l == "env" },
+         |_matches, env| {
+             println!("{}", env);
+         }
+);

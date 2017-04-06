@@ -90,6 +90,7 @@ impl IConfig {
 // This is actual config we expose
 #[derive(Debug)]
 pub struct Config {
+    pub source_file: String,
     pub clusters: HashMap<String, ClusterConf>,
     pub contexts: HashMap<String, ContextConf>,
     pub users: HashMap<String, UserConf>,
@@ -118,6 +119,7 @@ impl Config {
         }
 
         Config {
+            source_file: path.to_owned(),
             clusters: cluster_map,
             contexts: context_map,
             users: user_map,

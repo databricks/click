@@ -22,6 +22,7 @@ use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
 use hyper::method::Method;
 use hyper::net::HttpsConnector;
+use hyper::status::StatusCode;
 use hyper_rustls::TlsClient;
 use serde::Deserialize;
 use serde_json;
@@ -33,7 +34,7 @@ use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Duration;
 
-use error::KubeError;
+use error::{KubeErrNo, KubeError};
 
 // Various things we can return from the kubernetes api
 
@@ -184,10 +185,21 @@ impl Kluster {
         req.send().map_err(|he| KubeError::from(he))
     }
 
+    fn check_resp(&self, resp: Response) -> Result<Response, KubeError> {
+        if resp.status == StatusCode::Ok {
+            Ok(resp)
+        } else if resp.status == StatusCode::Unauthorized {
+            Err(KubeError::Kube(KubeErrNo::Unauthorized))
+        } else {
+            Err(KubeError::Kube(KubeErrNo::Unknown))
+        }
+    }
+
     pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
         where T: Deserialize {
 
         let resp = try!(self.send_req(path));
+        let resp = try!(self.check_resp(resp));
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 
@@ -217,14 +229,17 @@ impl Kluster {
             }
             try!(req.set_read_timeout(timeout));
             let next = try!(req.start());
-            next.send().map_err(|he| KubeError::from(he))
+            let resp = try!(next.send().map_err(|he| KubeError::from(he)));
+            self.check_resp(resp)
         } else {
-            self.send_req(path)
+            let resp = try!(self.send_req(path));
+            self.check_resp(resp)
         }
     }
 
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
         let resp = try!(self.send_req(path));
+        let resp = try!(self.check_resp(resp));
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 }

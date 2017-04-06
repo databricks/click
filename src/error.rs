@@ -25,6 +25,8 @@ pub enum KubeErrNo {
     InvalidContext,
     InvalidCluster,
     InvalidUser,
+    Unauthorized,
+    Unknown,
 }
 
 impl fmt::Display for KubeErrNo {
@@ -33,6 +35,8 @@ impl fmt::Display for KubeErrNo {
             &KubeErrNo::InvalidContext => write!(f, "Invalid Context Name"),
             &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
+            &KubeErrNo::Unauthorized => write!(f, "Not authorized to talk to cluster, check credentials in config"),
+            &KubeErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
         }
     }
 }
@@ -43,6 +47,8 @@ impl error::Error for KubeErrNo {
             &KubeErrNo::InvalidContext => "Invalid Context Name",
             &KubeErrNo::InvalidCluster => "Invalid Cluster Name",
             &KubeErrNo::InvalidUser => "Invalid User Name",
+            &KubeErrNo::Unauthorized => "Not authorized to talk to cluster, check credentials in config",
+            &KubeErrNo::Unknown => "Unknown error talking to cluster",
         }
     }
 

@@ -344,7 +344,7 @@ command!(Pods,
              }
 
              let pl: Option<PodList> = env.run_on_kluster(|k| {
-                 k.get(urlstr.as_str()).unwrap()
+                 k.get(urlstr.as_str())
              });
              if let Some(l) = pl {
                  if let Some(pattern) = matches.value_of("regex") {
@@ -391,22 +391,24 @@ command!(Logs,
                      url.push_str("&follow=true");
                  }
                  let logs_reader = env.run_on_kluster(|k| {
-                     k.get_read(url.as_str(), Some(Duration::new(1, 0))).unwrap()
+                     k.get_read(url.as_str(), Some(Duration::new(1, 0)))
                  });
-                 let mut reader = BufReader::new(logs_reader.unwrap());
-                 let mut line = String::new();
+                 if let Some(lreader) = logs_reader {
+                     let mut reader = BufReader::new(lreader);
+                     let mut line = String::new();
 
-                 env.ctrlcbool.store(false, Ordering::SeqCst);
-                 while !env.ctrlcbool.load(Ordering::SeqCst) {
-                     if let Ok(amt) = reader.read_line(&mut line) {
-                         if amt > 0 {
-                             print!("{}", line); // newlines already in line
-                             line.clear();
+                     env.ctrlcbool.store(false, Ordering::SeqCst);
+                     while !env.ctrlcbool.load(Ordering::SeqCst) {
+                         if let Ok(amt) = reader.read_line(&mut line) {
+                             if amt > 0 {
+                                 print!("{}", line); // newlines already in line
+                                 line.clear();
+                             } else {
+                                 break;
+                             }
                          } else {
                              break;
                          }
-                     } else {
-                         break;
                      }
                  }
              }}
@@ -493,12 +495,14 @@ command!(Describe,
                          // describe the active pod
                          let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                          let pod_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str()).unwrap()
+                             k.get_value(url.as_str())
                          });
-                         if matches.is_present("json") {
-                             println!("{}", serde_json::to_string_pretty(&pod_value.unwrap()).unwrap());
-                         } else {
-                             println!("{}", describe_format_pod(pod_value.unwrap()));
+                         if let Some(pval) = pod_value {
+                             if matches.is_present("json") {
+                                 println!("{}", serde_json::to_string_pretty(&pval).unwrap());
+                             } else {
+                                 println!("{}", describe_format_pod(pval));
+                             }
                          }
                      }
                  },
@@ -506,12 +510,14 @@ command!(Describe,
                      // describe the active node
                      let url = format!("/api/v1/nodes/{}", node);
                      let node_value = env.run_on_kluster(|k| {
-                         k.get_value(url.as_str()).unwrap()
+                         k.get_value(url.as_str())
                      });
-                     if matches.is_present("json") {
-                         println!("{}", serde_json::to_string_pretty(&node_value.unwrap()).unwrap());
-                     } else {
-                         println!("{}", describe_format_node(node_value.unwrap()));
+                     if let Some(nval) = node_value {
+                         if matches.is_present("json") {
+                             println!("{}", serde_json::to_string_pretty(&nval).unwrap());
+                         } else {
+                             println!("{}", describe_format_node(nval));
+                         }
                      }
                  },
              }
@@ -599,9 +605,11 @@ command!(Containers,
              if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                  let pod_value = env.run_on_kluster(|k| {
-                     k.get_value(url.as_str()).unwrap()
+                     k.get_value(url.as_str())
                  });
-                 println!("{}", containers_format_value(pod_value.unwrap()));
+                 if let Some(podval) = pod_value {
+                     println!("{}", containers_format_value(podval));
+                 }
              } else {
                  println!("No active pod");
              }} else {
@@ -629,7 +637,7 @@ command!(Events,
                  let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
                                    ns,pod,ns);
                  let oel: Option<EventList> = env.run_on_kluster(|k| {
-                     k.get(url.as_str()).unwrap()
+                     k.get(url.as_str())
                  });
                  if let Some(el) = oel {
                      if el.items.len() > 0 {
@@ -658,7 +666,7 @@ command!(Nodes,
          |_matches, env| {
              let url = "/api/v1/nodes";
              let nl: Option<NodeList> = env.run_on_kluster(|k| {
-                 k.get(url).unwrap()
+                 k.get(url)
              });
              if let Some(ref n) = nl {
                  print_nodelist(&n);

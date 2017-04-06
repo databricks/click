@@ -48,6 +48,7 @@ use std::sync::Arc;
 use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
+use error::KubeError;
 use kube::{Kluster, NodeList, PodList};
 
 /// An object we can have as a "current" thing
@@ -179,11 +180,17 @@ impl Env {
     }
 
     fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
-        where F: FnOnce(&Kluster) -> R {
+        where F: FnOnce(&Kluster) -> Result<R, KubeError> {
 
         match self.kluster {
             Some(ref k) => {
-                Some(f(k))
+                match f(k) {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        println!("{}", e);
+                        None
+                    },
+                }
             },
             None => {
                 println!("Need to have an active context");

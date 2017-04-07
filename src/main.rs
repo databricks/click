@@ -273,6 +273,7 @@ fn main() {
     commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Clear::new()));
     commands.push(Box::new(cmd::EnvCmd::new()));
+    commands.push(Box::new(cmd::Delete::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
 

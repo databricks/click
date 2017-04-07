@@ -195,6 +195,7 @@ impl Kluster {
         }
     }
 
+    /// Get a resource and deserialize it as a T
     pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
         where T: Deserialize {
 
@@ -203,12 +204,8 @@ impl Kluster {
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 
-    // pub fn get_text(&self, path: &str) -> Result<String, KubeError> {
-    //     let mut resp = try!(self.send_req(path));
-    //     let mut buf = String::new();
-    //     resp.read_to_string(&mut buf).map(|_| buf).map_err(|ioe| KubeError::from(ioe))
-    // }
-
+    /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
+    /// like printing logs)
     pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
         if timeout.is_some() {
             let url = try!(self.endpoint.join(path));
@@ -237,9 +234,26 @@ impl Kluster {
         }
     }
 
+    /// Get a serde_json::Value
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
         let resp = try!(self.send_req(path));
         let resp = try!(self.check_resp(resp));
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
+    }
+
+    /// Issue an HTTP DELETE request to the specified path
+    pub fn delete(&self, path: &str) -> Result<Response, KubeError> {
+        let url = try!(self.endpoint.join(path));
+        let req = self.client.delete(url);
+        let req =
+            if let KlusterAuth::Token(ref token) = self.auth {
+                req.header(Authorization(
+                    Bearer {
+                        token: token.clone()
+                    }))
+            } else {
+                req
+            };
+        req.send().map_err(|he| KubeError::from(he))
     }
 }

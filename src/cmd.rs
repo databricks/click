@@ -28,8 +28,9 @@ use serde_json::Value;
 use regex::Regex;
 
 use std::cell::RefCell;
+use std::error::Error;
 use std::iter::Iterator;
-use std::io::{BufRead,BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
@@ -623,6 +624,65 @@ command!(Exec,
                  }
              } else {
                  println!("No active kluster, or namespace, or pod");
+             }
+         }
+);
+
+command!(Delete,
+         "delete",
+         "Delete the active pod (will ask for confirmation)",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("grace")
+                      .short("g")
+                      .long("gracePeriod")
+                      .help("The duration in seconds before the object should be deleted.")
+                      .validator(|s: String| {
+                          s.parse::<u32>().map(|_| ()).map_err(|e| e.description().to_owned())
+                      })
+                      .takes_value(true))
+                 .arg(Arg::with_name("orphan")
+                      .short("o")
+                      .long("orphan")
+                      .help("If specified, dependent objects are orphaned.")
+                      .takes_value(false))
+         },
+         |l| { l == "delete" },
+         noop_complete,
+         |matches, env| {
+             if let (Some(ref ns), Some(ref pod)) = (env.namespace.as_ref(), env.current_pod().as_ref()) {
+                 print!("Delete pod {} [y/N]? ", pod);
+                 io::stdout().flush().ok().expect("Could not flush stdout");
+                 let mut conf = String::new();
+                 if let Ok(_) = io::stdin().read_line(&mut conf) {
+                     if conf == "y" || conf == "yes" {
+                         let mut url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+                         if let Some(grace) = matches.value_of("grace") {
+                             // already validated that it's a legit number
+                             url.push_str("&gracePeriodSeconds=");
+                             url.push_str(grace);
+                         }
+                         if matches.is_present("orphan") {
+                             if matches.is_present("grace") {
+                                 url.push('&');
+                             }
+                             url.push_str("orphanDependents=true");
+                         }
+                         let result = env.run_on_kluster(|k| {
+                             k.delete(url.as_str())
+                         });
+                         if let Some(_) = result {
+                             println!("Deleted");
+                         } else {
+                             println!("Failed to delete");
+                         }
+                     } else {
+                         println!("Not deleting");
+                     }
+                 } else {
+                     println!("Not deleting");
+                 }
+             } else {
+                 println!("No active namespace, or pod");
              }
          }
 );

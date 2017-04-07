@@ -42,6 +42,7 @@ pub trait Cmd {
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>);
     fn print_help(&self);
+    fn about(&self) -> &'static str;
 }
 
 /// Get the start of a clap object
@@ -122,8 +123,13 @@ macro_rules! command {
 
             fn print_help(&self) {
                 if let Err(res) = self.clap.borrow_mut().print_help() {
-                    println!("Couldn't print help: {}", res);
+                    print!("Couldn't print help: {}", res);
                 }
+                println!(); // clap print_help doesn't add final newline
+            }
+
+            fn about(&self) -> &'static str {
+                $about
             }
 
             fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>) {

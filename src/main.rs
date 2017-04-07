@@ -304,8 +304,9 @@ fn main() {
                             }
                         } else {
                             println!("Available commands (type 'help command' for details):");
+                            let spacer = "          ";
                             for c in commands.iter() {
-                                println!("  {}",c.get_name());
+                                println!("  {}{}{}", c.get_name(), &spacer[0..(12-c.get_name().len())], c.about());
                             }
                         }
                     }

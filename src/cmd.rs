@@ -17,8 +17,7 @@
 use ::Env;
 use kube::{DeploymentList, Event, EventList, PodList, NodeList, NodeCondition};
 
-use ansi_term::ANSIString;
-use ansi_term::Colour::{Blue, Green, Red, Yellow};
+use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
@@ -250,7 +249,7 @@ fn print_nodelist(nodelist: &NodeList) {
 /// Print out the specified list of deployments in a pretty format
 fn print_deployments(deplist: &DeploymentList) {
     let mut table = Table::new();
-    table.set_titles(row!["####", "NAME", "DESIRED", "CURRENT", "UP TO DATE", "AVAILABLE", "AGE"]);
+    table.set_titles(row!["####", "Name", "Desired", "Current", "Up To Date", "Available", "Age"]);
     for (i, dep) in deplist.items.iter().enumerate() {
         let mut row = Vec::new();
         row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
@@ -562,6 +561,8 @@ command!(Describe,
                                  println!("{}", describe_format_pod(pval));
                              }
                          }
+                     } else {
+                         println!("Can't describe when not in a namespace");
                      }
                  },
                  ::KObj::Node(ref node) => {
@@ -575,6 +576,21 @@ command!(Describe,
                              println!("{}", serde_json::to_string_pretty(&nval).unwrap());
                          } else {
                              println!("{}", describe_format_node(nval));
+                         }
+                     }
+                 },
+                 ::KObj::Deployment(ref deployment) => {
+                     if let Some(ref ns) = env.namespace {
+                         let url = format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, deployment);
+                         let dep_value = env.run_on_kluster(|k| {
+                             k.get_value(url.as_str())
+                         });
+                         if let Some(dval) = dep_value {
+                             if matches.is_present("json") {
+                                 println!("{}", serde_json::to_string_pretty(&dval).unwrap());
+                             } else {
+                                 println!("Deployment not supported without -j yet");
+                             }
                          }
                      }
                  },
@@ -843,6 +859,6 @@ command!(Deployments,
              if let Some(ref d) = dl {
                  print_deployments(&d);
              }
-             //env.set_nodelist(nl);
+             env.set_deplist(dl);
          }
 );

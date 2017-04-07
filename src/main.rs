@@ -14,6 +14,7 @@
 
 //! The Command Line Interactive Contoller for Kubernetes
 
+#[macro_use] extern crate prettytable;
 #[macro_use] extern crate serde_derive;
 //#[macro_use] extern crate lazy_static;
 
@@ -264,13 +265,14 @@ fn main() {
     commands.push(Box::new(cmd::Quit::new()));
     commands.push(Box::new(cmd::Context::new()));
     commands.push(Box::new(cmd::Pods::new()));
+    commands.push(Box::new(cmd::Nodes::new()));
+    commands.push(Box::new(cmd::Deployments::new()));
     commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));
     commands.push(Box::new(cmd::Describe::new()));
     commands.push(Box::new(cmd::Exec::new()));
     commands.push(Box::new(cmd::Containers::new()));
     commands.push(Box::new(cmd::Events::new()));
-    commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Clear::new()));
     commands.push(Box::new(cmd::EnvCmd::new()));
     commands.push(Box::new(cmd::Delete::new()));

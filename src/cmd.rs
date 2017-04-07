@@ -15,7 +15,7 @@
 //!  The commands one can run from the repl
 
 use ::Env;
-use kube::{Event, EventList, PodList, NodeList, NodeCondition};
+use kube::{DeploymentList, Event, EventList, PodList, NodeList, NodeCondition};
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
@@ -23,6 +23,9 @@ use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use chrono::offset::local::Local;
+use prettytable::{format, Table};
+use prettytable::cell::Cell;
+use prettytable::row::Row;
 use serde_json;
 use serde_json::Value;
 use regex::Regex;
@@ -264,6 +267,33 @@ fn print_nodelist(nodelist: &NodeList) {
         let space = max_len - node.metadata.name.len();
         println!("{:>3}  {}{}{}{}{}", i, node.metadata.name, &spacer[0..space], state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
     }
+}
+
+/// Print out the specified list of deployments in a pretty format
+fn print_deployments(deplist: &DeploymentList) {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "NAME", "DESIRED", "CURRENT", "UP TO DATE", "AVAILABLE", "AGE"]);
+    for (i, dep) in deplist.items.iter().enumerate() {
+        let mut row = Vec::new();
+        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new(dep.metadata.name.as_str()));
+        row.push(Cell::new_align(format!("{}", dep.spec.replicas).as_str(), format::Alignment::CENTER));
+        row.push(Cell::new_align(format!("{}", dep.status.replicas).as_str(), format::Alignment::CENTER));
+        row.push(Cell::new_align(format!("{}", dep.status.updated).as_str(), format::Alignment::CENTER));
+        row.push(Cell::new_align(format!("{}", dep.status.available).as_str(), format::Alignment::CENTER));
+        row.push(Cell::new(format!("{}", time_since(dep.metadata.creation_timestamp.unwrap())).as_str()));
+        table.add_row(Row::new(row));
+    }
+    let format = format::FormatBuilder::new()
+				.column_separator('|')
+        .separators(
+            &[format::LinePosition::Title, format::LinePosition::Bottom],
+						format::LineSeparator::new('-', '+', '+', '+')
+				)
+        .padding(1,1)
+        .build();
+    table.set_format(format);
+    table.printstd();
 }
 
 fn val_to_str<'a>(v: &'a Value, key: &str) -> &'a str {
@@ -780,7 +810,7 @@ command!(Events,
 
 command!(Nodes,
          "nodes",
-         "Get nodes in current namespace",
+         "Get nodes in current context",
          identity,
          |l| { l == "nodes" },
          noop_complete,
@@ -804,5 +834,45 @@ command!(EnvCmd,
          noop_complete,
          |_matches, env| {
              println!("{}", env);
+         }
+);
+
+command!(Deployments,
+         "deployments",
+         "Get deployments (in current namespace if there is one)",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("label")
+                      .short("l")
+                      .long("label")
+                      .help("Get deployments with specified label selector")
+                      .takes_value(true))
+                 .arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter deployments by the specified regex")
+                      .takes_value(true))
+         },
+         |l| { l == "deps" || l == "deployments" },
+         noop_complete,
+         |matches, env| {
+             let mut urlstr = if let Some(ref ns) = env.namespace {
+                 format!("/apis/extensions/v1beta1/namespaces/{}/deployments", ns)
+             } else {
+                 "/apis/extensions/v1beta1/deployments".to_owned()
+             };
+
+             if let Some(label_selector) = matches.value_of("label") {
+                 urlstr.push_str("?labelSelector=");
+                 urlstr.push_str(label_selector);
+             }
+
+             let dl: Option<DeploymentList> = env.run_on_kluster(|k| {
+                 k.get(urlstr.as_str())
+             });
+
+             if let Some(ref d) = dl {
+                 print_deployments(&d);
+             }
+             //env.set_nodelist(nl);
          }
 );

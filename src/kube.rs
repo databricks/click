@@ -114,6 +114,48 @@ pub struct NodeList {
     pub items: Vec<Node>,
 }
 
+
+// Deployments
+fn replicas_none() -> u32 {
+    0
+}
+
+fn replicas_one() -> u32 {
+    1
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeploymentSpec {
+    #[serde(default="replicas_one")]
+    pub replicas: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeploymentStatus {
+    #[serde(default="replicas_none")]
+    pub replicas: u32,
+    #[serde(default="replicas_none", rename="availableReplicas")]
+    pub available: u32,
+    #[serde(default="replicas_none", rename="updatedReplicas")]
+    pub updated: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Deployment {
+    pub metadata: Metadata,
+    pub spec: DeploymentSpec,
+    pub status: DeploymentStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeploymentList {
+    pub items: Vec<Deployment>,
+}
+
+
+
+// Kubernetes authentication data
+
 // Auth is either a token or a cert and key
 pub enum KlusterAuth {
     Token(String),

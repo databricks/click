@@ -275,7 +275,10 @@ fn main() {
     commands.push(Box::new(cmd::EnvCmd::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
-    rl.set_completer(Some(ClickCompleter::new(&commands)));
+
+    // see comment on ClickCompleter::new for why a raw pointer is needed
+    let raw_env: *const Env = &env;
+    rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
     while !env.quit {
         let readline = rl.readline(env.prompt.as_str());
         match readline {

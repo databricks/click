@@ -40,6 +40,7 @@ pub trait Cmd {
     fn exec(&self, &mut Env, &mut Iterator<Item=&str>) -> bool;
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
+    fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>);
     fn print_help(&self);
 }
 
@@ -75,6 +76,7 @@ fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mu
 /// * extra_args: a closure taking an App that addes any additional argument stuff and returns an App
 /// * is_expr: a closure taking a string arg that checks if the passed string is one that should call this command
 /// * cmd_expr: a closure taking matches and env that runs to execute the command
+/// * cmplt_expr: an expression to return possible compeltions for the command
 ///
 /// # Example
 /// ```
@@ -90,7 +92,7 @@ fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mu
 /// # }
 /// ```
 macro_rules! command {
-    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $is_expr:expr, $cmd_expr:expr) => {
+    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $is_expr:expr, $cmplt_expr: expr, $cmd_expr:expr) => {
         pub struct $cmd_name {
             clap: RefCell<App<'static, 'static>>,
         }
@@ -123,8 +125,23 @@ macro_rules! command {
                     println!("Couldn't print help: {}", res);
                 }
             }
+
+            fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>) {
+                $cmplt_expr(args, env)
+            }
         }
     }
+}
+
+/// Just return what we're given.  Useful for no-op closures in
+/// command! macro invocation
+fn identity<T>(t: T) -> T {
+    t
+}
+
+/// A completer that does nothing, used for commands that don't do completion
+fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
+    (0, Vec::new())
 }
 
 fn color_phase(phase: &str) -> ANSIString {
@@ -255,8 +272,9 @@ fn val_to_str<'a>(v: &'a Value, key: &str) -> &'a str {
 command!(Quit,
          "quit",
          "Quit click",
-         |clap| {clap},
+         identity,
          |l| {l == "q" || l == "quit"},
+         noop_complete,
          |_,env| {env.quit = true;}
 );
 
@@ -270,18 +288,47 @@ command!(Context,
                       .index(1))
          },
          |l| {l == "ctx" || l == "context"},
+         |args: Vec<&str>, env: &Env| {
+             if args.len() == 0 {
+                 // full command, but no args yet, so suggest everything
+                 let mut v = Vec::new();
+                 for context in env.config.contexts.keys() {
+                     v.push(context.clone());
+                 }
+                 (0, v)
+             }
+             else if args.len() == 1 {
+                 // we only take one arg
+                 let mut v = Vec::new();
+                 let line = args.get(0).unwrap(); // we just checked
+                 for context in env.config.contexts.keys() {
+                     if context.starts_with(line) {
+                         v.push(context.clone());
+                     }
+                 }
+                 (line.len(), v)
+             } else {
+                 (0, Vec::new())
+             }
+         },
          |matches, env| {
              let context = matches.value_of("context");
+             if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
+                 if k.name == c { // no-op if we're already in the specified context
+                     return;
+                 }
+             }
              env.set_context(context);
-             // TODO: Clear current pod
+             env.clear_current();
          }
 );
 
 command!(Clear,
          "clear",
          "Clear the currently selected kubernetes object",
-         |clap| {clap},
+         identity,
          |l| { l == "clear" },
+         noop_complete,
          |_, env| {
              env.clear_current();
          }
@@ -297,6 +344,7 @@ command!(Namespace,
                       .index(1))
          },
          |l| {l == "ns" || l == "namespace"},
+         noop_complete,
          |matches, env| {
              let ns = matches.value_of("namespace");
              env.set_namespace(ns);
@@ -319,6 +367,7 @@ command!(Pods,
                       .takes_value(true))
          },
          |l| { l == "pods" },
+         noop_complete,
          |matches, env| {
              let mut urlstr = if let Some(ref ns) = env.namespace {
                  format!("/api/v1/namespaces/{}/pods", ns)
@@ -382,6 +431,7 @@ command!(Logs,
                       .takes_value(false))
          },
          |l| { l == "logs" },
+         noop_complete,
          |matches, env| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
              let follow = matches.is_present("follow");
@@ -487,6 +537,7 @@ command!(Describe,
                       .takes_value(false))
          },
          |l| { l == "describe" },
+         noop_complete,
          |matches, env| {
              match env.current_object {
                  ::KObj::None => println!("No active object to describe"),
@@ -539,6 +590,7 @@ command!(Exec,
                       .takes_value(true))
          },
          |l| { l == "exec" },
+         noop_complete,
          |matches, env| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
              if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod().as_ref()) {
@@ -599,8 +651,9 @@ fn containers_format_value(v: Value) -> String {
 command!(Containers,
          "containers",
          "List containers on active pod",
-         |clap| { clap },
+         identity,
          |l| { l == "conts" || l == "containers" },
+         noop_complete,
          |_matches, env| {
              if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
@@ -630,8 +683,9 @@ fn format_event(event: &Event) -> String {
 command!(Events,
          "events",
          "Get events for the active pod",
-         |clap| { clap },
+         identity,
          |l| { l == "events" },
+         noop_complete,
          |_matches, env| {
              if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
@@ -661,8 +715,9 @@ command!(Events,
 command!(Nodes,
          "nodes",
          "Get nodes in current namespace",
-         |clap| { clap },
+         identity,
          |l| { l == "nodes" },
+         noop_complete,
          |_matches, env| {
              let url = "/api/v1/nodes";
              let nl: Option<NodeList> = env.run_on_kluster(|k| {
@@ -678,8 +733,9 @@ command!(Nodes,
 command!(EnvCmd,
          "env",
          "Print info about the current environment",
-         |clap| { clap },
+         identity,
          |l| { l == "env" },
+         noop_complete,
          |_matches, env| {
              println!("{}", env);
          }

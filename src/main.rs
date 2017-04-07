@@ -16,7 +16,7 @@
 
 #[macro_use] extern crate prettytable;
 #[macro_use] extern crate serde_derive;
-//#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate lazy_static;
 
 extern crate ansi_term;
 extern crate clap;

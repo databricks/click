@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!  The commands one can run from the repl
+ //!  The commands one can run from the repl
 
 use ::Env;
 use kube::{DeploymentList, Event, EventList, PodList, NodeList, NodeCondition};
@@ -38,6 +38,16 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+
+lazy_static! {
+    static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
+        .separators(
+            &[format::LinePosition::Title, format::LinePosition::Bottom],
+						format::LineSeparator::new('-', '+', '+', '+')
+				)
+        .padding(1,1)
+        .build();
+}
 
 pub trait Cmd {
     // break if returns true
@@ -154,13 +164,13 @@ fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
     (0, Vec::new())
 }
 
-fn color_phase(phase: &str) -> ANSIString {
+fn phase_style(phase: &str) -> &str {
     match phase {
-        "Pending" | "Running" => Green.paint(phase),
-        "Succeeded" => Blue.paint(phase),
-        "Failed" => Red.paint(phase),
-        "Unknown" => Yellow.paint(phase),
-        _ => Yellow.paint(phase),
+        "Pending" | "Running" => "Fg",
+        "Succeeded" => "Fb",
+        "Failed" => "Fr",
+        "Unknown" => "Fr",
+        _ => "Fr",
     }
 }
 
@@ -176,97 +186,65 @@ fn time_since(date: DateTime<UTC>) -> String {
 
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(podlist: &PodList, show_namespace: bool) {
-    let mut max_len = 4;
-    let mut phase_len = 4;
-    for pod in podlist.items.iter() {
-        if pod.metadata.name.len() > max_len {
-            max_len = pod.metadata.name.len();
-        }
-        if show_namespace && (pod.status.phase.len() > phase_len) {
-            phase_len = pod.status.phase.len();
-        }
-    }
-    max_len+=2;
-
-    let sep_len =
-        if show_namespace {
-            phase_len+=2;
-            max_len + phase_len + 14
-        } else {
-            phase_len = 0;
-            max_len + 12
-        };
-
-    let spacer_len =
-        if max_len > phase_len {
-            max_len
-        } else {
-            phase_len
-        };
-
-    let spacer = String::from_utf8(vec![b' '; spacer_len]).unwrap();
-    let sep = String::from_utf8(vec![b'-'; sep_len]).unwrap();
-
-    print!("###  Name{}Phase",&spacer[0..(max_len-4)]);
-
-
+    let mut table = Table::new();
+    let mut title_row = row!["####", "Name", "Phase"];
     if show_namespace {
-        print!("{}Namespace",&spacer[0..(phase_len-5)]);
+        title_row.add_cell(Cell::new("Namespace"));
     }
-
-    println!("\n{}",sep);
+    table.set_titles(title_row);
 
     for (i,pod) in podlist.items.iter().enumerate() {
-        let space = max_len - pod.metadata.name.len();
-        print!("{:>3}  {}{}{}", i, pod.metadata.name, &spacer[0..space], color_phase(pod.status.phase.as_str()));
+        let mut row = Vec::new();
+        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new(pod.metadata.name.as_str()));
+        row.push(Cell::new(pod.status.phase.as_str()).style_spec(phase_style(pod.status.phase.as_str())));
+
         if show_namespace {
-            let pspace = phase_len - pod.status.phase.len();
-            print!("{}{}", &spacer[0..pspace], pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned()));
+            row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
         }
-        println!();
+        table.add_row(Row::new(row));
     }
+    table.set_format(TBLFMT.clone());
+    table.printstd();
 }
 
 /// Print out the specified list of nodes in a pretty format
 fn print_nodelist(nodelist: &NodeList) {
-    let mut max_len = 4;
-    for node in nodelist.items.iter() {
-        if node.metadata.name.len() > max_len {
-            max_len = node.metadata.name.len();
-        }
-    }
-    max_len+=2;
-    let spacer = String::from_utf8(vec![b' '; max_len]).unwrap();
-    let sep = String::from_utf8(vec![b'-'; max_len+35]).unwrap();
-
-    println!("###  Name{}State                     Age",&spacer[0..(max_len-4)]);
-    println!("{}",sep);
-
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "State", "Age"]);
     for (i, node) in nodelist.items.iter().enumerate() {
         let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
-        let state =
+        let (state, state_style) =
             if let Some(cond) = readycond.get(0) {
                 if cond.status == "True" {
-                    Green.paint("Ready")
+                    ("Ready", "Fg")
                 } else {
-                    Red.paint("Not Ready")
+                    ("Not Ready", "Fr")
                 }
             } else {
-                Yellow.paint("Unknown")
+                ("Unknown", "Fy")
             };
-        let unsched =
+
+        let state =
             if let Some(b) = node.spec.unschedulable {
                 if b {
-                    ",SchedulingDisabled  "
+                    format!("{},SchedulingDisabled", state)
                 } else {
-                    "                     "
+                    state.to_owned()
                 }
             } else {
-                "                     "
+                state.to_owned()
             };
-        let space = max_len - node.metadata.name.len();
-        println!("{:>3}  {}{}{}{}{}", i, node.metadata.name, &spacer[0..space], state, unsched, time_since(node.metadata.creation_timestamp.unwrap()));
+
+        let mut row = Vec::new();
+        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new(node.metadata.name.as_str()));
+        row.push(Cell::new(state.as_str()).style_spec(state_style));
+        row.push(Cell::new(format!("{}", time_since(node.metadata.creation_timestamp.unwrap())).as_str()));
+        table.add_row(Row::new(row));
     }
+    table.set_format(TBLFMT.clone());
+    table.printstd();
 }
 
 /// Print out the specified list of deployments in a pretty format
@@ -284,15 +262,7 @@ fn print_deployments(deplist: &DeploymentList) {
         row.push(Cell::new(format!("{}", time_since(dep.metadata.creation_timestamp.unwrap())).as_str()));
         table.add_row(Row::new(row));
     }
-    let format = format::FormatBuilder::new()
-				.column_separator('|')
-        .separators(
-            &[format::LinePosition::Title, format::LinePosition::Bottom],
-						format::LineSeparator::new('-', '+', '+', '+')
-				)
-        .padding(1,1)
-        .build();
-    table.set_format(format);
+    table.set_format(TBLFMT.clone());
     table.printstd();
 }
 

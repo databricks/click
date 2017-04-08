@@ -207,10 +207,32 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
     table.printstd();
 }
 
+/// Build a multi-line string of the specified labels
+fn label_string(labels: &Option<serde_json::Map<String, Value>>) -> String {
+    let mut buf = String::new();
+    if let &Some(ref lbs) = labels {
+        for (key,val) in lbs.iter() {
+            buf.push_str(key);
+            buf.push('=');
+            if let Some(s) = val.as_str() {
+                buf.push_str(s);
+            } else {
+                buf.push_str(format!("{}", val).as_str());
+            }
+            buf.push('\n');
+        }
+    }
+    buf
+}
+
 /// Print out the specified list of nodes in a pretty format
-fn print_nodelist(nodelist: &NodeList) {
+fn print_nodelist(nodelist: &NodeList, labels: bool) {
     let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "State", "Age"]);
+    let mut title_row = row!["####", "Name", "State", "Age"];
+    if labels {
+        title_row.add_cell(Cell::new("Labels"));
+    }
+    table.set_titles(title_row);
     for (i, node) in nodelist.items.iter().enumerate() {
         let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
         let (state, state_style) =
@@ -227,7 +249,7 @@ fn print_nodelist(nodelist: &NodeList) {
         let state =
             if let Some(b) = node.spec.unschedulable {
                 if b {
-                    format!("{},SchedulingDisabled", state)
+                    format!("{}\nSchedulingDisabled", state)
                 } else {
                     state.to_owned()
                 }
@@ -240,6 +262,9 @@ fn print_nodelist(nodelist: &NodeList) {
         row.push(Cell::new(node.metadata.name.as_str()));
         row.push(Cell::new(state.as_str()).style_spec(state_style));
         row.push(Cell::new(format!("{}", time_since(node.metadata.creation_timestamp.unwrap())).as_str()));
+        if labels {
+            row.push(Cell::new(label_string(&node.metadata.labels).as_str()));
+        }
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
@@ -539,7 +564,7 @@ command!(Describe,
              clap.arg(Arg::with_name("json")
                       .short("j")
                       .long("json")
-                      .help("output full pod json")
+                      .help("output full json")
                       .takes_value(false))
          },
          |l| { l == "describe" },
@@ -797,16 +822,22 @@ command!(Events,
 command!(Nodes,
          "nodes",
          "Get nodes in current context",
-         identity,
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("labels")
+                      .short("l")
+                      .long("labels")
+                      .help("include labels in output")
+                      .takes_value(false))
+         },
          |l| { l == "nodes" },
          noop_complete,
-         |_matches, env| {
+         |matches, env| {
              let url = "/api/v1/nodes";
              let nl: Option<NodeList> = env.run_on_kluster(|k| {
                  k.get(url)
              });
              if let Some(ref n) = nl {
-                 print_nodelist(&n);
+                 print_nodelist(&n, matches.is_present("labels"));
              }
              env.set_nodelist(nl);
          }

@@ -26,7 +26,7 @@ use hyper::status::StatusCode;
 use hyper_rustls::TlsClient;
 use serde::Deserialize;
 use serde_json;
-use serde_json::Value;
+use serde_json::{Map,Value};
 use rustls::{Certificate, PrivateKey};
 
 use std::fs::File;
@@ -45,6 +45,7 @@ pub struct Metadata {
     pub namespace: Option<String>,
     #[serde(rename="creationTimestamp")]
     pub creation_timestamp: Option<DateTime<UTC>>,
+    pub labels: Option<Map<String, Value>>,
 }
 
 // pods

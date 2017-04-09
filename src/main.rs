@@ -266,12 +266,15 @@ fn main() {
              .takes_value(true))
         .get_matches();
 
-    let mut conf_dir =
+    let conf_dir =
         if let Some(dir) = matches.value_of("config_dir") {
             PathBuf::from(dir)
         } else {
             match std::env::home_dir() {
-                Some(path) => path,
+                Some(mut path) => {
+                    path.push(".kube");
+                    path
+                },
                 None => {
                     println!("Can't get your home dir, please specify --config_dir");
                     std::process::exit(-2);
@@ -280,14 +283,16 @@ fn main() {
         };
 
     let mut click_path = conf_dir.clone();
-    click_path.push(".kube");
     click_path.push("click.config");
     let mut click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
 
-    conf_dir.push(".kube");
-    conf_dir.push("config");
+    let mut config_path = conf_dir.clone();
+    config_path.push("config");
 
-    let config = Config::from_file(conf_dir.as_path().to_str().unwrap());
+    let config = Config::from_file(config_path.as_path().to_str().unwrap());
+
+    let mut hist_path = conf_dir.clone();
+    hist_path.push("click.history");
 
     let mut env = Env::new(config);
     env.set_namespace(click_conf.namespace.as_ref().map(|x| &**x));
@@ -310,10 +315,12 @@ fn main() {
     commands.push(Box::new(cmd::Delete::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
+    rl.load_history(hist_path.as_path()).unwrap_or_default();
 
     // see comment on ClickCompleter::new for why a raw pointer is needed
     let raw_env: *const Env = &env;
     rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
+
     while !env.quit {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
@@ -357,4 +364,7 @@ fn main() {
     }
     click_conf.from_env(&env);
     click_conf.save_to_file(click_path.as_path().to_str().unwrap()).unwrap();
+    if let Err(e) = rl.save_history(hist_path.as_path()) {
+        println!("Couldn't save command history: {}", e);
+    }
 }

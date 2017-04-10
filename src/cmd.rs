@@ -547,6 +547,51 @@ fn get_label_str(v: &Value) -> String {
     labelstr
 }
 
+/// Get volume info out of volume array
+fn get_volume_str(v: &Value) -> String {
+    let mut buf = String::new();
+    buf.push_str("Volumes:\n");
+    if let Some(vol_arry) = v.as_array() {
+        for vol in vol_arry.iter() {
+            buf.push_str(format!("  Name: {}\n", val_to_str(vol, "name")).as_str());
+            if vol.get("emptyDir").is_some() {
+                buf.push_str("    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n")
+            }
+            if let Some(conf_map) = vol.get("configMap") {
+                buf.push_str("    Type:\tConfigMap (a volume populated by a ConfigMap)\n");
+                buf.push_str(format!("    Name:\t{}\n", val_to_str(conf_map, "name")).as_str());
+            }
+            if let Some(secret) = vol.get("secret") {
+                buf.push_str("    Type:\tSecret (a volume populated by a Secret)\n");
+                buf.push_str(format!("    SecretName:\t{}\n", val_to_str(secret, "secretName")).as_str());
+            }
+            if let Some(aws) = vol.get("awsElasticBlockStore") {
+                buf.push_str("    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n");
+                buf.push_str(format!("    VolumeId:\t{}\n", val_to_str(aws, "volumeID")).as_str());
+                buf.push_str(format!("    FSType:\t{}\n", val_to_str(aws, "fsType")).as_str());
+                let mut pnum = 0;
+                if let Some(part) = aws.get("partition") {
+                    if let Some(p) = part.as_u64() {
+                        pnum = p;
+                    }
+                }
+                buf.push_str(format!("    Partition#:\t{}\n", pnum).as_str());
+                if let Some(read_only) = aws.get("readOnly") {
+                    if read_only.as_bool().unwrap() {
+                        buf.push_str("    Read-Only:\tTrue\n");
+                    }
+                    else {
+                        buf.push_str("    Read-Only:\tFalse\n");
+                    }
+                } else {
+                    buf.push_str("    Read-Only:\tFalse\n");
+                }
+            }
+        }
+    }
+    buf
+}
+
 /// Utility function for describe to print out value
 fn describe_format_pod(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
@@ -554,13 +599,22 @@ fn describe_format_pod(v: Value) -> String {
     let status = v.get("status").unwrap();
     let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
 
+    let volumes = spec.get("volumes");
+    let volstr =
+        if let Some(vols) = volumes {
+            get_volume_str(vols)
+        } else {
+            "No Volumes".to_owned()
+        };
+
     format!("Name:\t\t{}\n\
 Namespace:\t{}
 Node:\t\t{}
 IP:\t\t{}
 Created at:\t{} ({})
 Status:\t\t{}
-{}",
+{}
+{}", // TODO: Controllers
             val_to_str(metadata, "name"),
             val_to_str(metadata, "namespace"),
             val_to_str(spec, "nodeName"),
@@ -568,6 +622,7 @@ Status:\t\t{}
             created, created.with_timezone(&Local),
             Green.paint(val_to_str(status, "phase")),
             get_label_str(metadata),
+            volstr,
     )
 }
 
@@ -783,10 +838,28 @@ fn containers_string(pod: &Pod) -> String {
             buf.push_str(format!("Name:\t{}\n", cont.name).as_str());
             buf.push_str(format!("  Image:\t{}\n", cont.image).as_str());
             buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
+
+            // find the spec for this container
+            let mut spec_it = pod.spec.containers.iter().filter(|cs| {
+                cs.name == cont.name
+            });
+            if let Some(spec) = spec_it.next() {
+                if let Some(ref vols) = spec.volume_mounts {
+                    buf.push_str("  Volumes:\n");
+                    for vol in vols.iter() {
+                        buf.push_str(format!("   {}\n", vol.name).as_str());
+                        buf.push_str(format!("    Path:\t{}\n", vol.mount_path).as_str());
+                        buf.push_str(format!("    Sub-Path:\t{}\n", vol.sub_path.as_ref().unwrap_or(&"".to_owned())).as_str());
+                        buf.push_str(format!("    Read-Only:\t{}\n", vol.read_only.unwrap_or(false)).as_str());
+                    }
+                } else {
+                    buf.push_str("  No Volumes\n");
+                }
+            }
             buf.push('\n');
         }
     } else {
-        buf.push_str("<No Containers>");
+        buf.push_str("<No Containers>\n");
     }
     buf
 }

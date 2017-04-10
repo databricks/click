@@ -41,6 +41,15 @@ use error::{KubeErrNo, KubeError};
 // Various things we can return from the kubernetes api
 
 // objects
+
+#[derive(Debug, Deserialize)]
+pub struct OwnerReference {
+    pub controller: bool,
+    pub kind: String,
+    pub name: String,
+    pub uid: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Metadata {
     pub name: String,
@@ -50,6 +59,8 @@ pub struct Metadata {
     #[serde(rename="deletionTimestamp")]
     pub deletion_timestamp: Option<DateTime<UTC>>,
     pub labels: Option<Map<String, Value>>,
+    #[serde(rename="ownerReferences")]
+    pub owner_refs: Option<Vec<OwnerReference>>,
 }
 
 // pods
@@ -122,10 +133,38 @@ pub struct PodStatus {
     pub container_statuses: Option<Vec<ContainerStatus>>
 }
 
+#[derive(Debug, Deserialize)]
+pub struct VolumeMount {
+    #[serde(rename="mountPath")]
+    pub mount_path: String,
+    pub name: String,
+    #[serde(rename="readOnly")]
+    pub read_only: Option<bool>,
+    #[serde(rename="subPath")]
+    pub sub_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ContainerSpec {
+    pub name: String,
+    pub args: Option<Vec<String>>,
+    pub command: Option<Vec<String>>,
+    #[serde(rename="volumeMounts")]
+    pub volume_mounts: Option<Vec<VolumeMount>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PodSpec {
+    pub hostname: Option<String>,
+    #[serde(rename="nodeName")]
+    pub node_name: String,
+    pub containers: Vec<ContainerSpec>,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Pod {
     pub metadata: Metadata,
+    pub spec: PodSpec,
     pub status: PodStatus,
 }
 

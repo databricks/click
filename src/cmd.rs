@@ -15,7 +15,7 @@
  //!  The commands one can run from the repl
 
 use ::Env;
-use kube::{DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition};
+use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition};
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -31,6 +31,7 @@ use regex::Regex;
 
 use std::cell::RefCell;
 use std::error::Error;
+
 use std::iter::Iterator;
 use std::io::{self, BufRead, BufReader, Write};
 use std::process::Command;
@@ -163,11 +164,28 @@ fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
     (0, Vec::new())
 }
 
+/// Check if a pod has a waiting container
+fn has_waiting(pod: &Pod) -> bool {
+    if let Some(ref stats) = pod.status.container_statuses {
+        stats.iter().any(|cs| {
+            if let ContainerState::Waiting { .. } = cs.state {
+                true
+            } else {
+                false
+            }
+        })
+    } else {
+        false
+    }
+}
+
 // Figure out the right thing to print for the phase of the given pod
 fn phase_str(pod: &Pod) -> &str {
     if let Some(_) = pod.metadata.deletion_timestamp {
         // Was deleted
         "Terminating"
+    } else if has_waiting(pod) {
+        "ContainerCreating"
     } else {
         pod.status.phase.as_str()
     }
@@ -176,6 +194,8 @@ fn phase_str(pod: &Pod) -> &str {
 fn phase_style(phase: &str) -> &str {
     match phase {
         "Pending" | "Running" => "Fg",
+        "Terminated" => "Fr",
+        "ContainerCreating" => "Fy",
         "Succeeded" => "Fb",
         "Failed" => "Fr",
         "Unknown" => "Fr",
@@ -206,7 +226,8 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
         let mut row = Vec::new();
         row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
         row.push(Cell::new(pod.metadata.name.as_str()));
-        row.push(Cell::new(phase_str(pod)).style_spec(phase_style(pod.status.phase.as_str())));
+        let ps = phase_str(pod);
+        row.push(Cell::new(ps).style_spec(phase_style(ps)));
 
         if show_namespace {
             row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
@@ -722,7 +743,7 @@ command!(Delete,
                      io::stdout().flush().ok().expect("Could not flush stdout");
                      let mut conf = String::new();
                      if let Ok(_) = io::stdin().read_line(&mut conf) {
-                         if conf == "y" || conf == "yes" {
+                         if conf.trim() == "y" || conf.trim() == "yes" {
                              if let Some(grace) = matches.value_of("grace") {
                                  // already validated that it's a legit number
                                  url.push_str("&gracePeriodSeconds=");
@@ -755,29 +776,17 @@ command!(Delete,
          }
 );
 
-fn containers_format_value(v: Value) -> String {
+fn containers_string(pod: &Pod) -> String {
     let mut buf = String::new();
-    if let Some(vconts) = v.pointer("/status/containerStatuses") {
-        // have that element
-        if let Some(conts) = vconts.as_array() {
-            for cont in conts {
-                buf.push_str(format!("Name:\t{}\n",cont.get("name").unwrap().as_str().unwrap()).as_str());
-                if let Some(o) = cont.get("state").unwrap().as_object() {
-                    buf.push_str(format!(" State:\t{}\n", Green.paint(o.keys().next().unwrap().as_str())).as_str());
-                } else {
-                    buf.push_str(" State:\tUnknown\n");
-                }
-                buf.push('\n');
-            }
-        }
-    } else if let Some(sconts) = v.pointer("/spec/containers") {
-        if let Some(conts) = sconts.as_array() {
-            for cont in conts {
-                buf.push_str(format!("Name:\t{}\n", cont.get("name").unwrap().as_str().unwrap()).as_str());
-            }
+    if let Some(ref stats) = pod.status.container_statuses {
+        for cont in stats.iter() {
+            buf.push_str(format!("Name:\t{}\n", cont.name).as_str());
+            buf.push_str(format!("  Image:\t{}\n", cont.image).as_str());
+            buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
+            buf.push('\n');
         }
     } else {
-        buf.push_str("Unable to find any containers.");
+        buf.push_str("<No Containers>");
     }
     buf
 }
@@ -791,11 +800,11 @@ command!(Containers,
          |_matches, env| {
              if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
-                 let pod_value = env.run_on_kluster(|k| {
-                     k.get_value(url.as_str())
+                 let pod_opt: Option<Pod> = env.run_on_kluster(|k| {
+                     k.get(url.as_str())
                  });
-                 if let Some(podval) = pod_value {
-                     println!("{}", containers_format_value(podval));
+                 if let Some(pod) = pod_opt {
+                     print!("{}", containers_string(&pod)); // extra newline in returned string
                  }
              } else {
                  println!("No active pod");

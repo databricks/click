@@ -14,6 +14,7 @@
 
 //! Dealing with various kubernetes api calls
 
+use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use hyper::{Client,Url};
@@ -29,6 +30,7 @@ use serde_json;
 use serde_json::{Map,Value};
 use rustls::{Certificate, PrivateKey};
 
+use std::fmt;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
@@ -53,8 +55,71 @@ pub struct Metadata {
 // pods
 
 #[derive(Debug, Deserialize)]
+pub enum ContainerState {
+    #[serde(rename="running")]
+    Running {
+        #[serde(rename="startedAt")]
+        started_at: DateTime<UTC>
+    },
+    #[serde(rename="terminated")]
+    Terminated {
+        #[serde(rename="containerId")]
+        container_id: Option<String>,
+        #[serde(rename="exitCode")]
+        exit_code: u32,
+        #[serde(rename="finishedAt")]
+        finished_at: DateTime<UTC>,
+        message: String,
+        reason: String,
+        signal: u32,
+        #[serde(rename="startedAt")]
+        started_at: DateTime<UTC>
+    },
+    #[serde(rename="waiting")]
+    Waiting {
+        message: Option<String>,
+        reason: String
+    },
+}
+
+impl fmt::Display for ContainerState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &ContainerState::Running{ started_at } => {
+                write!(f, "{} (started: {})", Green.paint("running"), started_at)
+            },
+            &ContainerState::Terminated {
+                container_id: _,
+                ref exit_code,
+                ref finished_at,
+                message: _,
+                reason: _,
+                signal: _,
+                started_at: _,
+            } => write!(f, "{} at {} (exit code: {})", Red.paint("terminated"), finished_at, exit_code),
+            &ContainerState::Waiting {
+                message: _,
+                ref reason,
+            } => write!(f, "{} ({})", Yellow.paint("waiting"), reason),
+        }
+    }
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct ContainerStatus {
+    #[serde(rename="containerID")]
+    pub id: Option<String>,
+    pub name: String,
+    pub image: String,
+    pub state: ContainerState,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PodStatus {
     pub phase: String,
+    #[serde(rename="containerStatuses")]
+    pub container_statuses: Option<Vec<ContainerStatus>>
 }
 
 

@@ -313,6 +313,7 @@ fn main() {
     commands.push(Box::new(cmd::Clear::new()));
     commands.push(Box::new(cmd::EnvCmd::new()));
     commands.push(Box::new(cmd::Delete::new()));
+    commands.push(Box::new(cmd::UtcCmd::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

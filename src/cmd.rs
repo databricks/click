@@ -893,3 +893,14 @@ command!(Deployments,
              env.set_deplist(dl);
          }
 );
+
+command!(UtcCmd,
+         "utc",
+         "Print current time in UTC",
+         identity,
+         |l| { l == "utc" },
+         noop_complete,
+         |_, _| {
+             println!("{}", UTC::now());
+         }
+);

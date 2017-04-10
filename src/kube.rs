@@ -45,6 +45,8 @@ pub struct Metadata {
     pub namespace: Option<String>,
     #[serde(rename="creationTimestamp")]
     pub creation_timestamp: Option<DateTime<UTC>>,
+    #[serde(rename="deletionTimestamp")]
+    pub deletion_timestamp: Option<DateTime<UTC>>,
     pub labels: Option<Map<String, Value>>,
 }
 

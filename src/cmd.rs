@@ -15,7 +15,7 @@
  //!  The commands one can run from the repl
 
 use ::Env;
-use kube::{DeploymentList, Event, EventList, PodList, NodeList, NodeCondition};
+use kube::{DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition};
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -163,6 +163,16 @@ fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
     (0, Vec::new())
 }
 
+// Figure out the right thing to print for the phase of the given pod
+fn phase_str(pod: &Pod) -> &str {
+    if let Some(_) = pod.metadata.deletion_timestamp {
+        // Was deleted
+        "Terminating"
+    } else {
+        pod.status.phase.as_str()
+    }
+}
+
 fn phase_style(phase: &str) -> &str {
     match phase {
         "Pending" | "Running" => "Fg",
@@ -196,7 +206,7 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
         let mut row = Vec::new();
         row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
         row.push(Cell::new(pod.metadata.name.as_str()));
-        row.push(Cell::new(pod.status.phase.as_str()).style_spec(phase_style(pod.status.phase.as_str())));
+        row.push(Cell::new(phase_str(pod)).style_spec(phase_style(pod.status.phase.as_str())));
 
         if show_namespace {
             row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
@@ -671,7 +681,7 @@ command!(Exec,
 
 command!(Delete,
          "delete",
-         "Delete the active pod (will ask for confirmation)",
+         "Delete the active object (will ask for confirmation)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("grace")
                       .short("g")
@@ -690,40 +700,57 @@ command!(Delete,
          |l| { l == "delete" },
          noop_complete,
          |matches, env| {
-             if let (Some(ref ns), Some(ref pod)) = (env.namespace.as_ref(), env.current_pod().as_ref()) {
-                 print!("Delete pod {} [y/N]? ", pod);
-                 io::stdout().flush().ok().expect("Could not flush stdout");
-                 let mut conf = String::new();
-                 if let Ok(_) = io::stdin().read_line(&mut conf) {
-                     if conf == "y" || conf == "yes" {
-                         let mut url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
-                         if let Some(grace) = matches.value_of("grace") {
-                             // already validated that it's a legit number
-                             url.push_str("&gracePeriodSeconds=");
-                             url.push_str(grace);
-                         }
-                         if matches.is_present("orphan") {
-                             if matches.is_present("grace") {
-                                 url.push('&');
+             if let Some(ref ns) = env.namespace {
+                 if let Some(mut url) = match env.current_object {
+                     ::KObj::Pod(ref pod) => {
+                         print!("Delete pod {} [y/N]? ", pod);
+                         Some(format!("/api/v1/namespaces/{}/pods/{}", ns, pod))
+                     },
+                     ::KObj::Deployment(ref dep) => {
+                         print!("Delete deployment {} [y/N]? ", dep);
+                         Some(format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, dep))
+                     },
+                     ::KObj::None => {
+                         println!("No active object");
+                         None
+                     },
+                     _ => {
+                         println!("Can only delete pods or deployments");
+                         None
+                     },
+                 } {
+                     io::stdout().flush().ok().expect("Could not flush stdout");
+                     let mut conf = String::new();
+                     if let Ok(_) = io::stdin().read_line(&mut conf) {
+                         if conf == "y" || conf == "yes" {
+                             if let Some(grace) = matches.value_of("grace") {
+                                 // already validated that it's a legit number
+                                 url.push_str("&gracePeriodSeconds=");
+                                 url.push_str(grace);
                              }
-                             url.push_str("orphanDependents=true");
-                         }
-                         let result = env.run_on_kluster(|k| {
-                             k.delete(url.as_str())
-                         });
-                         if let Some(_) = result {
-                             println!("Deleted");
+                             if matches.is_present("orphan") {
+                                 if matches.is_present("grace") {
+                                     url.push('&');
+                                 }
+                                 url.push_str("orphanDependents=true");
+                             }
+                             let result = env.run_on_kluster(|k| {
+                                 k.delete(url.as_str())
+                             });
+                             if let Some(_) = result {
+                                 println!("Deleted");
+                             } else {
+                                 println!("Failed to delete");
+                             }
                          } else {
-                             println!("Failed to delete");
+                             println!("Not deleting");
                          }
                      } else {
-                         println!("Not deleting");
+                         println!("Could not read response, not deleting.");
                      }
-                 } else {
-                     println!("Not deleting");
                  }
              } else {
-                 println!("No active namespace, or pod");
+                 println!("No active namespace"); // TODO: Can you delete without a namespace?
              }
          }
 );

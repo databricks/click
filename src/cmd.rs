@@ -214,9 +214,15 @@ fn time_since(date: DateTime<UTC>) -> String {
 }
 
 /// Print out the specified list of pods in a pretty format
-fn print_podlist(podlist: &PodList, show_namespace: bool) {
+fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_namespace: bool) {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
+    if show_labels {
+        title_row.add_cell(Cell::new("Labels"));
+    }
+    if show_annot {
+        title_row.add_cell(Cell::new("Annotations"));
+    }
     if show_namespace {
         title_row.add_cell(Cell::new("Namespace"));
     }
@@ -241,6 +247,14 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
         };
         row.push(Cell::new(format!("{}", restarts).as_str()));
 
+        if show_labels {
+            row.push(Cell::new(keyval_string(&pod.metadata.labels).as_str()));
+        }
+
+        if show_annot {
+            row.push(Cell::new(keyval_string(&pod.metadata.annotations).as_str()));
+        }
+
         if show_namespace {
             row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
         }
@@ -250,10 +264,10 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
     table.printstd();
 }
 
-/// Build a multi-line string of the specified labels
-fn label_string(labels: &Option<serde_json::Map<String, Value>>) -> String {
+/// Build a multi-line string of the specified keyvals
+fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
     let mut buf = String::new();
-    if let &Some(ref lbs) = labels {
+    if let &Some(ref lbs) = keyvals {
         for (key,val) in lbs.iter() {
             buf.push_str(key);
             buf.push('=');
@@ -306,7 +320,7 @@ fn print_nodelist(nodelist: &NodeList, labels: bool) {
         row.push(Cell::new(state.as_str()).style_spec(state_style));
         row.push(Cell::new(format!("{}", time_since(node.metadata.creation_timestamp.unwrap())).as_str()));
         if labels {
-            row.push(Cell::new(label_string(&node.metadata.labels).as_str()));
+            row.push(Cell::new(keyval_string(&node.metadata.labels).as_str()));
         }
         table.add_row(Row::new(row));
     }
@@ -439,6 +453,16 @@ command!(Pods,
                       .long("regex")
                       .help("Filter pods by the specified regex")
                       .takes_value(true))
+                 .arg(Arg::with_name("showlabels")
+                      .short("L")
+                      .long("show-labels")
+                      .help("Show pod labels as column in output")
+                      .takes_value(false))
+                 .arg(Arg::with_name("showannot")
+                      .short("A")
+                      .long("show-annotations")
+                      .help("Show pod annotations as column in output")
+                      .takes_value(false))
          },
          |l| { l == "pods" },
          noop_complete,
@@ -469,23 +493,26 @@ command!(Pods,
              let pl: Option<PodList> = env.run_on_kluster(|k| {
                  k.get(urlstr.as_str())
              });
+
              if let Some(l) = pl {
-                 if let Some(pattern) = matches.value_of("regex") {
-                     if let Ok(regex) = Regex::new(pattern) {
-                         let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
-                         let new_podlist = PodList {
-                             items: filtered
-                         };
-                         print_podlist(&new_podlist, env.namespace.is_none());
-                         env.set_podlist(Some(new_podlist));
+                 let final_list =
+                     if let Some(pattern) = matches.value_of("regex") {
+                         if let Ok(regex) = Regex::new(pattern) {
+                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
+                             Some(PodList {
+                                 items: filtered
+                             })
+                         } else {
+                             println!("Invalid regex: {}", pattern);
+                             None
+                         }
                      } else {
-                         println!("Invalid regex: {}", pattern);
-                     }
+                         Some(l)
+                     };
+                 if let Some(ref l) = final_list {
+                     print_podlist(l, matches.is_present("showlabels"), matches.is_present("showannot"), env.namespace.is_none());
                  }
-                 else {
-                     print_podlist(&l, env.namespace.is_none());
-                     env.set_podlist(Some(l));
-                 }
+                 env.set_podlist(final_list);
              }
          }
 );

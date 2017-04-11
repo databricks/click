@@ -59,6 +59,7 @@ pub struct Metadata {
     #[serde(rename="deletionTimestamp")]
     pub deletion_timestamp: Option<DateTime<UTC>>,
     pub labels: Option<Map<String, Value>>,
+    pub annotations: Option<Map<String, Value>>,
     #[serde(rename="ownerReferences")]
     pub owner_refs: Option<Vec<OwnerReference>>,
 }

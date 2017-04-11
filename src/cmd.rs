@@ -216,7 +216,7 @@ fn time_since(date: DateTime<UTC>) -> String {
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(podlist: &PodList, show_namespace: bool) {
     let mut table = Table::new();
-    let mut title_row = row!["####", "Name", "Phase", "Age"];
+    let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
     if show_namespace {
         title_row.add_cell(Cell::new("Namespace"));
     }
@@ -234,6 +234,12 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
             row.push(Cell::new("unknown"));
         }
 
+        let restarts = if let Some(ref stats) = pod.status.container_statuses {
+            stats.iter().fold(0, |acc, ref x| acc + x.restart_count)
+        } else {
+            0
+        };
+        row.push(Cell::new(format!("{}", restarts).as_str()));
 
         if show_namespace {
             row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
@@ -533,25 +539,27 @@ command!(Logs,
          }
 );
 
-/// get labels out of metadata
-fn get_label_str(v: &Value) -> String {
-    let mut labelstr = "Labels:\t".to_owned();
-    if let Some(labels) = v.get("labels").unwrap().as_object() {
+
+/// get key/vals out of metadata
+fn get_keyval_str(v: &Value, parent: &str, title: &str) -> String {
+    let mut outstr = title.to_owned();
+    if let Some(keyvals) = v.get(parent).unwrap().as_object() {
         let mut first = true;
-        for label in labels.keys() {
+        for key in keyvals.keys() {
             if !first {
-                labelstr.push('\n');
-                labelstr.push('\t');
+                outstr.push('\n');
+                outstr.push('\t');
             }
             first = false;
-            labelstr.push('\t');
-            labelstr.push_str(label);
-            labelstr.push('=');
-            labelstr.push_str(labels.get(label).unwrap().as_str().unwrap());
+            outstr.push('\t');
+            outstr.push_str(key);
+            outstr.push('=');
+            outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
         }
     }
-    labelstr
+    outstr
 }
+
 
 /// Get volume info out of volume array
 fn get_volume_str(v: &Value) -> String {
@@ -620,6 +628,7 @@ IP:\t\t{}
 Created at:\t{} ({})
 Status:\t\t{}
 {}
+{}
 {}", // TODO: Controllers
             val_to_str(metadata, "name"),
             val_to_str(metadata, "namespace"),
@@ -627,7 +636,8 @@ Status:\t\t{}
             val_to_str(status, "podIP"),
             created, created.with_timezone(&Local),
             Green.paint(val_to_str(status, "phase")),
-            get_label_str(metadata),
+            get_keyval_str(metadata, "labels", "Labels:\t"),
+            get_keyval_str(metadata, "annotations", "Annotations:"),
             volstr,
     )
 }
@@ -643,7 +653,7 @@ fn describe_format_node(v: Value) -> String {
 Created at:\t{} ({})
 ProviderId:\t{}",
             val_to_str(metadata, "name"),
-            get_label_str(metadata),
+            get_keyval_str(metadata, "labels", "Labels"),
             created, created.with_timezone(&Local),
             val_to_str(spec, "providerID"),
     )

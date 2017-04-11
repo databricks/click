@@ -123,6 +123,8 @@ pub struct ContainerStatus {
     pub id: Option<String>,
     pub name: String,
     pub image: String,
+    #[serde(rename="restartCount")]
+    pub restart_count: u32,
     pub state: ContainerState,
 }
 

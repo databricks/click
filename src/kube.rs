@@ -80,9 +80,9 @@ pub enum ContainerState {
         exit_code: u32,
         #[serde(rename="finishedAt")]
         finished_at: DateTime<UTC>,
-        message: String,
+        message: Option<String>,
         reason: String,
-        signal: u32,
+        signal: Option<u32>,
         #[serde(rename="startedAt")]
         started_at: DateTime<UTC>
     },

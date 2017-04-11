@@ -216,7 +216,7 @@ fn time_since(date: DateTime<UTC>) -> String {
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(podlist: &PodList, show_namespace: bool) {
     let mut table = Table::new();
-    let mut title_row = row!["####", "Name", "Phase"];
+    let mut title_row = row!["####", "Name", "Phase", "Age"];
     if show_namespace {
         title_row.add_cell(Cell::new("Namespace"));
     }
@@ -228,6 +228,12 @@ fn print_podlist(podlist: &PodList, show_namespace: bool) {
         row.push(Cell::new(pod.metadata.name.as_str()));
         let ps = phase_str(pod);
         row.push(Cell::new(ps).style_spec(phase_style(ps)));
+        if let Some(ts) = pod.metadata.creation_timestamp {
+            row.push(Cell::new(time_since(ts).as_str()));
+        } else {
+            row.push(Cell::new("unknown"));
+        }
+
 
         if show_namespace {
             row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));

@@ -40,6 +40,7 @@ mod kube;
 
 use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
 use clap::{Arg, App};
+use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use std::fmt;
@@ -392,6 +393,7 @@ fn main() {
                     }
                 }
             }
+            Err(ReadlineError::Interrupted) => { }, // don't exit on Ctrl-C
             Err(_)   => {
                 break;
             }

@@ -1147,10 +1147,27 @@ command!(Deployments,
                  k.get(urlstr.as_str())
              });
 
-             if let Some(ref d) = dl {
-                 print_deployments(&d);
+             if let Some(l) = dl {
+                 let final_list =
+                     if let Some(pattern) = matches.value_of("regex") {
+                         if let Ok(regex) = Regex::new(pattern) {
+                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
+                             Some(DeploymentList {
+                                 items: filtered
+                             })
+                         } else {
+                             println!("Invalid regex: {}", pattern);
+                             None
+                         }
+                     } else {
+                         Some(l)
+                     };
+
+                 if let Some(ref d) = final_list {
+                     print_deployments(&d);
+                 }
+                 env.set_deplist(final_list);
              }
-             env.set_deplist(dl);
          }
 );
 

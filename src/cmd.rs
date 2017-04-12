@@ -495,7 +495,38 @@ command!(Namespace,
                       .index(1))
          },
          |l| {l == "ns" || l == "namespace"},
-         noop_complete,
+         |args: Vec<&str>, env: &Env| {
+             if args.len() == 0 {
+                 // no args yet, suggest all namespaces
+                 let v_opt = env.run_on_kluster(|k| {
+                     k.namespaces_for_context()
+                 });
+                 if let Some(v) = v_opt {
+                     (0, v)
+                 } else {
+                     (0, Vec::new())
+                 }
+             }
+             else if args.len() == 1 {
+                 // only one arg
+                 let mut v = Vec::new();
+                 let line = args.get(0).unwrap(); // we just checked
+                 let v_opt = env.run_on_kluster(|k| {
+                     k.namespaces_for_context()
+                 });
+                 if let Some(nv) = v_opt {
+                     for ns in nv.iter() {
+                         if ns.starts_with(line) {
+                             v.push(ns.clone());
+                         }
+                     }
+                 }
+                 (line.len(), v)
+             }
+             else {
+                 (0, Vec::new())
+             }
+         },
          |matches, env| {
              let ns = matches.value_of("namespace");
              env.set_namespace(ns);

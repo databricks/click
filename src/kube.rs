@@ -302,6 +302,23 @@ pub struct ServiceList {
     pub items: Vec<Service>,
 }
 
+// Namespaces
+#[derive(Debug, Deserialize)]
+pub struct NamespaceStatus {
+    pub phase: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Namespace {
+    pub metadata: Metadata,
+    pub status: NamespaceStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NamespaceList {
+    pub items: Vec<Namespace>,
+}
+
 // Kubernetes authentication data
 
 // Auth is either a token or a cert and key
@@ -445,5 +462,15 @@ impl Kluster {
                 req
             };
         req.send().map_err(|he| KubeError::from(he))
+    }
+
+    /// Get all namespaces in this cluster
+    pub fn namespaces_for_context(&self) -> Result<Vec<String>, KubeError> {
+        let mut vec = Vec::new();
+        let res = try!(self.get::<NamespaceList>("/api/v1/namespaces"));
+        for ns in res.items.iter() {
+            vec.push(ns.metadata.name.clone());
+        }
+        Ok(vec)
     }
 }

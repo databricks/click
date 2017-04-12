@@ -25,6 +25,10 @@ use error::{KubeError,KubeErrNo};
 use kube::{Kluster, KlusterAuth};
 use certs::{get_cert, get_private_key};
 
+fn empty_str() -> String {
+    "".to_owned()
+}
+
 /// Kubernetes cluster config
 
 #[derive(Debug, Deserialize)]
@@ -43,7 +47,7 @@ struct ICluster {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ClusterConf {
-    #[serde(rename="certificate-authority")]
+    #[serde(rename="certificate-authority", default="empty_str")]
     pub cert: String,
     pub server: String,
 }
@@ -59,7 +63,7 @@ struct IContext {
 pub struct ContextConf {
     pub cluster: String,
     //#[serde(default = "default")]
-    pub namespace: String,
+    pub namespace: Option<String>,
     pub user: String,
 }
 
@@ -104,7 +108,11 @@ impl Config {
         // copy over clusters
         let mut cluster_map = HashMap::new();
         for cluster in iconf.clusters.iter() {
-            cluster_map.insert(cluster.name.clone(), cluster.conf.clone());
+            if cluster.conf.cert != "" {
+                cluster_map.insert(cluster.name.clone(), cluster.conf.clone());
+            } else {
+                println!("Ignoring invalid cluster \"{}\": has no cert", cluster.name);
+            }
         }
 
         // copy over contexts

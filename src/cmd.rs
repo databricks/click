@@ -15,7 +15,9 @@
  //!  The commands one can run from the repl
 
 use ::Env;
-use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition, ServiceList};
+use kube::{ContainerState, DeploymentList, Event, EventList,
+           Pod, PodList, NamespaceList, NodeList, NodeCondition,
+           ServiceList};
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -193,8 +195,8 @@ fn phase_str(pod: &Pod) -> &str {
 
 fn phase_style(phase: &str) -> &str {
     match phase {
-        "Pending" | "Running" => "Fg",
-        "Terminated" => "Fr",
+        "Pending" | "Running" | "Active" => "Fg",
+        "Terminated" | "Terminating" => "Fr",
         "ContainerCreating" => "Fy",
         "Succeeded" => "Fb",
         "Failed" => "Fr",
@@ -403,6 +405,22 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool) {
             };
         row.push(Cell::new(port_strs.join(",").as_str()));
         row.push(Cell::new(format!("{}", time_since(service.metadata.creation_timestamp.unwrap())).as_str()));
+        table.add_row(Row::new(row));
+    }
+    table.set_format(TBLFMT.clone());
+    table.printstd();
+}
+
+/// Print out the specified list of deployments in a pretty format
+fn print_namespaces(nslist: &NamespaceList) {
+    let mut table = Table::new();
+    table.set_titles(row!["Name", "Status", "Age"]);
+    for (i, ns) in nslist.items.iter().enumerate() {
+        let mut row = Vec::new();
+        row.push(Cell::new(ns.metadata.name.as_str()));
+        let ps = ns.status.phase.as_str();
+        row.push(Cell::new(ps).style_spec(phase_style(ps)));
+        row.push(Cell::new(format!("{}", time_since(ns.metadata.creation_timestamp.unwrap())).as_str()));
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
@@ -1200,6 +1218,46 @@ command!(Deployments,
                      print_deployments(&d);
                  }
                  env.set_deplist(final_list);
+             }
+         }
+);
+
+command!(Namespaces,
+         "namespaces",
+         "Get namespaces in current context",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter namespaces by the specified regex")
+                      .takes_value(true))
+         },
+         |l| { l == "namespaces" },
+         noop_complete,
+         |matches, env| {
+             let nl: Option<NamespaceList> = env.run_on_kluster(|k| {
+                 k.get("/api/v1/namespaces")
+             });
+
+             if let Some(l) = nl {
+                 let final_list =
+                     if let Some(pattern) = matches.value_of("regex") {
+                         if let Ok(regex) = Regex::new(pattern) {
+                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
+                             Some(NamespaceList {
+                                 items: filtered
+                             })
+                         } else {
+                             println!("Invalid regex: {}", pattern);
+                             None
+                         }
+                     } else {
+                         Some(l)
+                     };
+
+                 if let Some(ref n) = final_list {
+                     print_namespaces(&n);
+                 }
              }
          }
 );

@@ -208,8 +208,10 @@ fn time_since(date: DateTime<UTC>) -> String {
     let diff = now.signed_duration_since(date);
     if diff.num_days() > 0 {
         format!("{}d", diff.num_days())
-    } else {
+    } else if diff.num_hours() > 0 {
         format!("{}h", diff.num_hours())
+    } else {
+        format!("{}m", diff.num_minutes())
     }
 }
 

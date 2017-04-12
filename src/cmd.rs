@@ -15,7 +15,7 @@
  //!  The commands one can run from the repl
 
 use ::Env;
-use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition};
+use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NodeList, NodeCondition, ServiceList};
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -213,6 +213,15 @@ fn time_since(date: DateTime<UTC>) -> String {
     }
 }
 
+/// if s is longer than max_len it will be shorted and have ... added to be max_len
+fn shorten_to(s: String, max_len: usize) -> String {
+    if s.len() > max_len {
+        format!("{}...", &s[0..(max_len-3)])
+    } else {
+        s
+    }
+}
+
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_namespace: bool) {
     let mut table = Table::new();
@@ -346,6 +355,58 @@ fn print_deployments(deplist: &DeploymentList) {
     table.set_format(TBLFMT.clone());
     table.printstd();
 }
+
+/// Print out the specified list of deployments in a pretty format
+fn print_servicelist(servlist: &ServiceList, _show_labels: bool) {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "ClusterIP", "External IPs", "Port(s)", "Age"]);
+    for (i, service) in servlist.items.iter().enumerate() {
+        let mut row = Vec::new();
+        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new(service.metadata.name.as_str()));
+        row.push(Cell::new(format!("{}", service.spec.cluster_ip.as_ref().unwrap_or(&"<none>".to_owned())).as_str()));
+        if let Some(ref eips) = service.spec.external_ips {
+            row.push(Cell::new(shorten_to(eips.join(", "), 18).as_str()));
+        } else {
+            // look in the status for the elb name
+            if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
+                if let Some(ing_arry) = ing_val.as_array() {
+                    let strs: Vec<&str> = ing_arry.iter().map(|v| {
+                        if let Some(hv) = v.get("hostname") {
+                            hv.as_str().unwrap_or("")
+                        } else {
+                            ""
+                        }
+                    }).collect();
+                    let s = strs.join(", ");
+                    row.push(Cell::new(shorten_to(s,18).as_str()));
+                } else {
+                    row.push(Cell::new("<none>"));
+                }
+            } else {
+                row.push(Cell::new("<none>"));
+            }
+        }
+        let port_strs: Vec<String> =
+            if let Some(ref ports) = service.spec.ports {
+                ports.iter().map(|p| {
+                    if let Some(np) = p.node_port {
+                        format!("{}:{}/{}", p.port, np, p.protocol)
+                    } else {
+                        format!("{}/{}", p.port, p.protocol)
+                    }
+                }).collect()
+            } else {
+                vec!["<none>".to_owned()]
+            };
+        row.push(Cell::new(port_strs.join(",").as_str()));
+        row.push(Cell::new(format!("{}", time_since(service.metadata.creation_timestamp.unwrap())).as_str()));
+        table.add_row(Row::new(row));
+    }
+    table.set_format(TBLFMT.clone());
+    table.printstd();
+}
+
 
 fn val_to_str<'a>(v: &'a Value, key: &str) -> &'a str {
     if let Some(v) = v.get(key) {
@@ -536,7 +597,7 @@ command!(Logs,
          |matches, env| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
              let follow = matches.is_present("follow");
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
+             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
                  if follow {
                      url.push_str("&follow=true");
@@ -702,7 +763,7 @@ command!(Describe,
              match env.current_object {
                  ::KObj::None => println!("No active object to describe"),
                  ::KObj::Pod(ref pod) => {
-                     if let Some(ref ns) = env.namespace {
+                     if let Some(ref ns) = env.current_object_namespace {
                          // describe the active pod
                          let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                          let pod_value = env.run_on_kluster(|k| {
@@ -716,7 +777,7 @@ command!(Describe,
                              }
                          }
                      } else {
-                         println!("Can't describe when not in a namespace");
+                         println!("Don't know namespace for {}", pod);
                      }
                  },
                  ::KObj::Node(ref node) => {
@@ -734,7 +795,7 @@ command!(Describe,
                      }
                  },
                  ::KObj::Deployment(ref deployment) => {
-                     if let Some(ref ns) = env.namespace {
+                     if let Some(ref ns) = env.current_object_namespace {
                          let url = format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, deployment);
                          let dep_value = env.run_on_kluster(|k| {
                              k.get_value(url.as_str())
@@ -744,6 +805,21 @@ command!(Describe,
                                  println!("{}", serde_json::to_string_pretty(&dval).unwrap());
                              } else {
                                  println!("Deployment not supported without -j yet");
+                             }
+                         }
+                     }
+                 },
+                 ::KObj::Service(ref service) => {
+                     if let Some(ref ns) = env.current_object_namespace {
+                         let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
+                         let service_value = env.run_on_kluster(|k| {
+                             k.get_value(url.as_str())
+                         });
+                         if let Some(sval) = service_value {
+                             if matches.is_present("json") {
+                                 println!("{}", serde_json::to_string_pretty(&sval).unwrap());
+                             } else {
+                                 println!("Service not supported without -j yet");
                              }
                          }
                      }
@@ -770,7 +846,7 @@ command!(Exec,
          noop_complete,
          |matches, env| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
-             if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.namespace.as_ref(), env.current_pod().as_ref()) {
+             if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.current_object_namespace.as_ref(), env.current_pod().as_ref()) {
                  let contargs =
                      if let Some(container) = matches.value_of("container") {
                          vec!("-c", container)
@@ -819,7 +895,7 @@ command!(Delete,
          |l| { l == "delete" },
          noop_complete,
          |matches, env| {
-             if let Some(ref ns) = env.namespace {
+             if let Some(ref ns) = env.current_object_namespace {
                  if let Some(mut url) = match env.current_object {
                      ::KObj::Pod(ref pod) => {
                          print!("Delete pod {} [y/N]? ", pod);
@@ -914,7 +990,7 @@ command!(Containers,
          |l| { l == "conts" || l == "containers" },
          noop_complete,
          |_matches, env| {
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
+             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                  let pod_opt: Option<Pod> = env.run_on_kluster(|k| {
                      k.get(url.as_str())
@@ -946,7 +1022,7 @@ command!(Events,
          |l| { l == "events" },
          noop_complete,
          |_matches, env| {
-             if let Some(ref ns) = env.namespace { if let Some(ref pod) = env.current_pod() {
+             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
                                    ns,pod,ns);
                  let oel: Option<EventList> = env.run_on_kluster(|k| {
@@ -994,6 +1070,38 @@ command!(Nodes,
              env.set_nodelist(nl);
          }
 );
+
+command!(Services,
+         "services",
+         "Get services in current context and namespace (if set)",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("labels")
+                      .short("l")
+                      .long("labels")
+                      .help("include labels in output")
+                      .takes_value(false))
+         },
+         |l| { l == "services" },
+         noop_complete,
+         |matches, env| {
+             let url =
+                 if let Some(ref ns) = env.namespace {
+                     format!("/api/v1/namespaces/{}/services", ns)
+                 } else {
+                     "/api/v1/services".to_owned()
+                 };
+             let sl: Option<ServiceList> = env.run_on_kluster(|k| {
+                 k.get(url.as_str())
+             });
+             if let Some(ref s) = sl {
+                 print_servicelist(&s, matches.is_present("labels"));
+             } else {
+                 println!("no services");
+             }
+             env.set_servicelist(sl);
+         }
+);
+
 
 command!(EnvCmd,
          "env",

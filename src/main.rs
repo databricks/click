@@ -38,7 +38,7 @@ mod config;
 mod error;
 mod kube;
 
-use ansi_term::Colour::{Blue, Red, Green, Yellow, Purple};
+use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
 use clap::{Arg, App};
 use rustyline::Editor;
 
@@ -51,7 +51,7 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{Kluster, NodeList, PodList, DeploymentList};
+use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList};
 
 /// An object we can have as a "current" thing
 /// Includes pods and nodes at the moment
@@ -60,6 +60,7 @@ enum KObj {
     Pod(String),
     Node(String),
     Deployment(String),
+    Service(String),
 }
 
 enum LastList {
@@ -67,6 +68,7 @@ enum LastList {
     PodList(PodList),
     NodeList(NodeList),
     DeploymentList(DeploymentList),
+    ServiceList(ServiceList),
 }
 
 /// Keep track of our repl environment
@@ -76,6 +78,7 @@ pub struct Env {
     kluster: Option<Kluster>,
     namespace: Option<String>,
     current_object: KObj,
+    pub current_object_namespace: Option<String>,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
     prompt: String,
@@ -94,6 +97,7 @@ impl Env {
             kluster: None,
             namespace: None,
             current_object: KObj::None,
+            current_object_namespace: None,
             last_objs: LastList::None,
             ctrlcbool: cbool,
             prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
@@ -118,6 +122,7 @@ impl Env {
                                   KObj::Pod(ref name) => Yellow.bold().paint(name.as_str()),
                                   KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
                                   KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
+                                  KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
                               }
         );
 
@@ -142,6 +147,15 @@ impl Env {
     }
 
     fn set_namespace(&mut self, namespace: Option<&str>) {
+        let mut do_clear = false;
+        if let (&Some(ref my_ns), Some(new_ns)) = (&self.namespace, namespace) {
+            if my_ns.as_str() != new_ns {
+                do_clear = true; // need to use bool since self is borrowed here
+            }
+        }
+        if do_clear {
+            self.clear_current();
+        }
         self.namespace = namespace.map(|n| n.to_owned());
         self.set_prompt();
     }
@@ -170,6 +184,14 @@ impl Env {
         }
     }
 
+    fn set_servicelist(&mut self, services: Option<ServiceList>) {
+        if let Some(list) = services {
+            self.last_objs = LastList::ServiceList(list);
+        } else {
+            self.last_objs = LastList::None;
+        }
+    }
+
     fn clear_current(&mut self) {
         self.current_object = KObj::None;
         self.set_prompt();
@@ -181,8 +203,9 @@ impl Env {
                 println!("No active object list");
             },
             LastList::PodList(ref pl) => {
-                if let Some(name) = pl.items.get(num).map(|p| p.metadata.name.clone()) {
-                    self.current_object = KObj::Pod(name);
+                if let Some(pod) = pl.items.get(num) {
+                    self.current_object = KObj::Pod(pod.metadata.name.clone());
+                    self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
                 }
@@ -190,13 +213,23 @@ impl Env {
             LastList::NodeList(ref nl) => {
                 if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
                     self.current_object = KObj::Node(name);
+                    self.current_object_namespace = None;
                 } else {
                     self.current_object = KObj::None;
                 }
             },
             LastList::DeploymentList(ref dl) => {
-                if let Some(name) = dl.items.get(num).map(|d| d.metadata.name.clone()) {
-                    self.current_object = KObj::Deployment(name);
+                if let Some(dep) = dl.items.get(num) {
+                    self.current_object = KObj::Deployment(dep.metadata.name.clone());
+                    self.current_object_namespace = dep.metadata.namespace.clone();
+                } else {
+                    self.current_object = KObj::None;
+                }
+            },
+            LastList::ServiceList(ref sl) => {
+                if let Some(service) = sl.items.get(num) {
+                    self.current_object = KObj::Service(service.metadata.name.clone());
+                    self.current_object_namespace = service.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
                 }
@@ -304,6 +337,7 @@ fn main() {
     commands.push(Box::new(cmd::Pods::new()));
     commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Deployments::new()));
+    commands.push(Box::new(cmd::Services::new()));
     commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));
     commands.push(Box::new(cmd::Describe::new()));

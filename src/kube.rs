@@ -263,6 +263,44 @@ pub struct DeploymentList {
 }
 
 
+// Services
+fn tcp_str() -> String {
+    "TCP".to_owned()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServicePort {
+    pub name: Option<String>,
+    #[serde(rename="nodePort")]
+    pub node_port: Option<u32>,
+    pub port: u32,
+    #[serde(default="tcp_str")]
+    pub protocol: String,
+    #[serde(rename="targetPort")]
+    pub target_pod: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServiceSpec {
+    #[serde(rename="clusterIP")]
+    pub cluster_ip: Option<String>,
+    #[serde(rename="externalIPs")]
+    pub external_ips: Option<Vec<String>>,
+    pub ports: Option<Vec<ServicePort>>,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct Service {
+    pub metadata: Metadata,
+    pub spec: ServiceSpec,
+    pub status: Value,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServiceList {
+    pub items: Vec<Service>,
+}
 
 // Kubernetes authentication data
 

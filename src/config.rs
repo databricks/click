@@ -17,6 +17,7 @@
 use serde_yaml;
 
 use std::collections::HashMap;
+use std::env::{self};
 use std::fs::File;
 
 use ::Env;
@@ -134,7 +135,7 @@ impl Config {
                         if cluster.cert.chars().next().unwrap() == '/' {
                             cluster.cert.clone()
                         } else {
-                            format!("/home/nick/.kube/{}",cluster.cert)
+                            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), cluster.cert)
                         };
                     let auth =
                         if let Some(ref token) = user.token {

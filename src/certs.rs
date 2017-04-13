@@ -15,10 +15,24 @@
 use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigner;
 
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::{BufReader, Read};
 use std::path::Path;
 use std::process::Command;
+
+fn need_update(outpath: &Path, inpath: &Path) -> bool {
+    if !outpath.exists() {
+        return true;
+    }
+    let out_metadata_res = metadata(&outpath);
+    let in_metadata_res = metadata(&inpath);
+    if let (Ok(out_metadata), Ok(in_metadata)) = (out_metadata_res, in_metadata_res) {
+        if let (Ok(out_mtime), Ok(in_mtime)) = (out_metadata.modified(), in_metadata.modified()) {
+            return out_mtime < in_mtime
+        }
+    }
+    false
+}
 
 // might need to convert to der format
 pub fn get_cert(path: &str) -> Option<Certificate> {
@@ -29,7 +43,7 @@ pub fn get_cert(path: &str) -> Option<Certificate> {
             let parent = inpath.parent().unwrap();
             let filename = inpath.file_name().unwrap();
             let outpath = parent.join(format!("{}.der", filename.to_str().unwrap()));
-            if !outpath.exists() {
+            if need_update(&outpath, inpath) {
                 println!("Converting {} to der", inpath.to_str().unwrap());
                 Command::new("openssl")
                     .arg("x509")
@@ -77,7 +91,7 @@ fn get_private_key_internal(path: &str, try_conv: bool) -> Option<PrivateKey> {
                 let parent = inpath.parent().unwrap();
                 let filename = inpath.file_name().unwrap();
                 let outpath = parent.join(format!("{}.der", filename.to_str().unwrap()));
-                if !outpath.exists() {
+                if need_update(&outpath, inpath) {
                     println!("Converting {} to der", path);
                     Command::new("openssl")
                         .arg("rsa")

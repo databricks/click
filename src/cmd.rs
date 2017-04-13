@@ -415,7 +415,7 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool) {
 fn print_namespaces(nslist: &NamespaceList) {
     let mut table = Table::new();
     table.set_titles(row!["Name", "Status", "Age"]);
-    for (i, ns) in nslist.items.iter().enumerate() {
+    for ns in nslist.items.iter() {
         let mut row = Vec::new();
         row.push(Cell::new(ns.metadata.name.as_str()));
         let ps = ns.status.phase.as_str();

@@ -31,9 +31,9 @@ use serde_json;
 use serde_json::Value;
 use regex::Regex;
 
+use std;
 use std::cell::RefCell;
 use std::error::Error;
-
 use std::iter::Iterator;
 use std::io::{self, BufRead, BufReader, Write};
 use std::process::Command;
@@ -1270,5 +1270,201 @@ command!(UtcCmd,
          noop_complete,
          |_, _| {
              println!("{}", UTC::now());
+         }
+);
+
+command!(PortForward,
+         "port-forward",
+         "Forward one (or more) local ports to the currently active pod
+
+Examples:
+  # Forward local ports 5000 and 6000 to pod ports 5000 and 6000
+  port-forward 5000 6000
+
+  # Forward port 8080 locally to port 9090 on the pod
+  port-forward 8080:9090
+
+  # Forwards a random port locally to port 3456 on the pod
+  port-forward 0:3456
+
+  # Forwards a random port locally to port 3456 on the pod
+  port-forward :3456
+",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("ports")
+                      .help("the ports to forward")
+                      .multiple(true)
+                      .validator(|s: String| {
+                          let parts:Vec<&str> = s.split(':').collect();
+                          if parts.len() > 2 {
+                              Err(format!("Invalid port specification '{}', can only contain one ':'", s))
+                          } else {
+                              for part in parts {
+                                  if !(part == "") {
+                                      if let Err(e) = part.parse::<u32>() {
+                                          return Err(e.description().to_owned());
+                                      }
+                                  }
+                              }
+                              Ok(())
+                          }
+                      })
+                      .required(true)
+                      .index(1))
+         },
+         |l| { l == "pf" || l == "port-forward" },
+         noop_complete,
+         |matches, env| {
+             let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
+
+             let pod =
+             {
+                 let epod = env.current_pod();
+                 match epod {
+                     Some(p) => {
+                         p.clone()
+                     }
+                     None => {
+                         println!("No active pod");
+                         return;
+                     }
+                 }
+             };
+
+             let ns =
+                 if let Some(ref ns) = env.current_object_namespace {
+                     ns.clone()
+                 } else {
+                     println!("No current namespace");
+                     return;
+                 };
+
+             let context =
+                 if let Some(ref kluster) = env.kluster {
+                     kluster.name.clone()
+                 } else {
+                     println!("No active context");
+                     return;
+                 };
+
+             match Command::new("kubectl")
+                 .arg("--namespace")
+                 .arg(ns)
+                 .arg("--context")
+                 .arg(context)
+                 .arg("port-forward")
+                 .arg(&pod)
+                 .args(ports.iter())
+                 .spawn() {
+                     Ok(child) => {
+                         env.add_port_forward(::PortForward {
+                             child: child,
+                             pod: pod,
+                             ports: ports.iter().map(|s| (*s).to_owned()).collect()
+                         });
+                     }
+                     Err(e) => {
+                         println!("Couldn't execute kubectl, not forwarding.  Error is: {}", e.description());
+                     }
+                 }
+         }
+);
+
+/// Print out port forwards found in iterator
+fn print_pfs(pfs: std::slice::Iter<::PortForward>) {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Pod", "Ports"]);
+    for (i, pf) in pfs.enumerate() {
+        let mut row = Vec::new();
+        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new(pf.pod.as_str()));
+        row.push(Cell::new(pf.ports.join(", ").as_str()));
+
+        // TODO: Add this when try_wait stabalizes
+        // let status =
+        //     match pf.child.try_wait() {
+        //         Ok(Some(stat)) => format!("Exited with code {}", stat),
+        //         Ok(None) => format!("Running"),
+        //         Err(e) => format!("Error: {}", e.description()),
+        //     };
+        // row.push(Cell::new(status.as_str()));
+
+        table.add_row(Row::new(row));
+    }
+    table.set_format(TBLFMT.clone());
+    table.printstd();
+}
+
+
+command!(PortForwards,
+         "port-forwards",
+         "List or control active port forwards.  Default is to list.
+
+Example:
+  # List all active port forwards
+  pfs
+
+  # Stop item number 3 in list from above command
+  pfs stop 3
+",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("action")
+                      .help("Action to take")
+                      .required(false)
+                      .possible_values(&["list", "stop"])
+                      .index(1))
+                 .arg(Arg::with_name("index")
+                      .help("Index (from 'port-forwards list') of port forward to take action on")
+                      .validator(|s: String| {
+                          s.parse::<usize>().map(|_| ()).map_err(|e| e.description().to_owned())
+                      })
+                      .required(false)
+                      .index(2))
+         },
+         |l| { l == "pfs" || l == "port-forwards" },
+         noop_complete,
+         |matches, env| {
+             let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
+             if let Some(index) = matches.value_of("index") {
+                 let i = index.parse::<usize>().unwrap();
+                 match env.get_port_forward(i) {
+                     Some(pf) => {
+                         if stop {
+                             print!("Stop port-forward: ");
+                         }
+                         print!("Pod: {}, Ports: {}", pf.pod, pf.ports.join(", "));
+                     }
+                     None => {
+                         println!("Invalid index (try without args to get a list)");
+                         return;
+                     }
+                 }
+
+                 if stop {
+                     print!("  [y/N]? ");
+                     io::stdout().flush().ok().expect("Could not flush stdout");
+                     let mut conf = String::new();
+                     if let Ok(_) = io::stdin().read_line(&mut conf) {
+                         if conf.trim() == "y" || conf.trim() == "yes" {
+                             match env.stop_port_forward(i) {
+                                 Ok(()) => {
+                                     println!("Stopped");
+                                 },
+                                 Err(e) => {
+                                     println!("Failed to stop: {}", e.description());
+                                 }
+                             }
+                         } else {
+                             println!("Not stopping");
+                         }
+                     } else {
+                         println!("Could not read response, not stopping.");
+                     }
+                 } else {
+                     println!(); // just flush the above description
+                 }
+             } else {
+                 print_pfs(env.get_port_forwards());
+             }
          }
 );

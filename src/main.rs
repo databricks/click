@@ -45,6 +45,7 @@ use rustyline::Editor;
 
 use std::fmt;
 use std::path::PathBuf;
+use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -72,6 +73,13 @@ enum LastList {
     ServiceList(ServiceList),
 }
 
+/// An ongoing port forward
+struct PortForward{
+    child: Child,
+    pod: String,
+    ports: Vec<String>,
+}
+
 /// Keep track of our repl environment
 pub struct Env {
     config: Config,
@@ -82,6 +90,7 @@ pub struct Env {
     pub current_object_namespace: Option<String>,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
+    port_forwards: Vec<PortForward>,
     prompt: String,
 }
 
@@ -101,6 +110,7 @@ impl Env {
             current_object_namespace: None,
             last_objs: LastList::None,
             ctrlcbool: cbool,
+            port_forwards: Vec::new(),
             prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
         }
     }
@@ -266,6 +276,28 @@ impl Env {
             }
         }
     }
+
+    /// Add a new task for the env to keep track of
+    fn add_port_forward(&mut self, pf: PortForward) {
+        self.port_forwards.push(pf);
+    }
+
+    fn get_port_forwards(&self) -> std::slice::Iter<PortForward> {
+        self.port_forwards.iter()
+    }
+
+    fn get_port_forward(&self, i: usize) -> Option<&PortForward> {
+        self.port_forwards.get(i)
+    }
+
+    fn stop_port_forward(&mut self, i: usize) -> Result<(), std::io::Error> {
+        if i < self.port_forwards.len() {
+            let mut pf = self.port_forwards.remove(i);
+            pf.child.kill()
+        } else {
+            Ok(())
+        }
+    }
 }
 
 impl fmt::Display for Env {
@@ -350,6 +382,8 @@ fn main() {
     commands.push(Box::new(cmd::Delete::new()));
     commands.push(Box::new(cmd::UtcCmd::new()));
     commands.push(Box::new(cmd::Namespaces::new()));
+    commands.push(Box::new(cmd::PortForward::new()));
+    commands.push(Box::new(cmd::PortForwards::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

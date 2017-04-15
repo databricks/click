@@ -1275,21 +1275,7 @@ command!(UtcCmd,
 
 command!(PortForward,
          "port-forward",
-         "Forward one (or more) local ports to the currently active pod
-
-Examples:
-  # Forward local ports 5000 and 6000 to pod ports 5000 and 6000
-  port-forward 5000 6000
-
-  # Forward port 8080 locally to port 9090 on the pod
-  port-forward 8080:9090
-
-  # Forwards a random port locally to port 3456 on the pod
-  port-forward 0:3456
-
-  # Forwards a random port locally to port 3456 on the pod
-  port-forward :3456
-",
+         "Forward one (or more) local ports to the currently active pod",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("ports")
                       .help("the ports to forward")
@@ -1311,6 +1297,19 @@ Examples:
                       })
                       .required(true)
                       .index(1))
+                 .after_help("
+Examples:
+  # Forward local ports 5000 and 6000 to pod ports 5000 and 6000
+  port-forward 5000 6000
+
+  # Forward port 8080 locally to port 9090 on the pod
+  port-forward 8080:9090
+
+  # Forwards a random port locally to port 3456 on the pod
+  port-forward 0:3456
+
+  # Forwards a random port locally to port 3456 on the pod
+  port-forward :3456")
          },
          |l| { l == "pf" || l == "port-forward" },
          noop_complete,
@@ -1398,15 +1397,7 @@ fn print_pfs(pfs: std::slice::Iter<::PortForward>) {
 
 command!(PortForwards,
          "port-forwards",
-         "List or control active port forwards.  Default is to list.
-
-Example:
-  # List all active port forwards
-  pfs
-
-  # Stop item number 3 in list from above command
-  pfs stop 3
-",
+         "List or control active port forwards.  Default is to list.",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("action")
                       .help("Action to take")
@@ -1420,6 +1411,12 @@ Example:
                       })
                       .required(false)
                       .index(2))
+                 .after_help("Example:
+  # List all active port forwards
+  pfs
+
+  # Stop item number 3 in list from above command
+  pfs stop 3")
          },
          |l| { l == "pfs" || l == "port-forwards" },
          noop_complete,

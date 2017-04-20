@@ -35,10 +35,12 @@ use std;
 use std::cell::RefCell;
 use std::error::Error;
 use std::iter::Iterator;
-use std::io::{self, BufRead, BufReader, Write};
-use std::process::Command;
+use std::io::{self, BufRead, BufReader, Read, Write};
+use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::Ordering;
+use std::thread;
 use std::time::Duration;
 
 lazy_static! {
@@ -1354,12 +1356,42 @@ Examples:
                  .arg("port-forward")
                  .arg(&pod)
                  .args(ports.iter())
+                 .stdout(Stdio::piped())
                  .spawn() {
-                     Ok(child) => {
+                     Ok(mut child) => {
+                         let mut stdout = child.stdout.take().unwrap();
+                         let output = Arc::new(Mutex::new(String::new()));
+                         let output_clone = output.clone();
+
+                         thread::spawn(move || {
+                             let mut buffer = [0;128];
+                             loop {
+                                 match stdout.read(&mut buffer[..]) {
+                                     Ok(read) => {
+                                         if read > 0 {
+                                             let readstr = String::from_utf8_lossy(&buffer[0..read]);
+                                             let mut res = output_clone.lock().unwrap();
+                                             res.push_str(&*readstr);
+                                         } else {
+                                             break;
+                                         }
+                                     },
+                                     Err(e) => {
+                                         println!("Error reading child output: {}", e.description());
+                                         break;
+                                     }
+                                 }
+                             }
+                         });
+
+                         let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
+                         println!("Forwarding port(s): {}", pvec.join(", "));
+
                          env.add_port_forward(::PortForward {
                              child: child,
                              pod: pod,
-                             ports: ports.iter().map(|s| (*s).to_owned()).collect()
+                             ports: pvec,
+                             output: output,
                          });
                      }
                      Err(e) => {
@@ -1402,7 +1434,7 @@ command!(PortForwards,
              clap.arg(Arg::with_name("action")
                       .help("Action to take")
                       .required(false)
-                      .possible_values(&["list", "stop"])
+                      .possible_values(&["list", "output", "stop"])
                       .index(1))
                  .arg(Arg::with_name("index")
                       .help("Index (from 'port-forwards list') of port forward to take action on")
@@ -1422,6 +1454,7 @@ command!(PortForwards,
          noop_complete,
          |matches, env| {
              let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
+             let output = matches.is_present("action") && matches.value_of("action").unwrap() == "output";
              if let Some(index) = matches.value_of("index") {
                  let i = index.parse::<usize>().unwrap();
                  match env.get_port_forward(i) {
@@ -1429,7 +1462,11 @@ command!(PortForwards,
                          if stop {
                              print!("Stop port-forward: ");
                          }
-                         print!("Pod: {}, Ports: {}", pf.pod, pf.ports.join(", "));
+                         print!("Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
+
+                         if output {
+                             print!(" Output:\n{}", *pf.output.lock().unwrap());
+                         }
                      }
                      None => {
                          println!("Invalid index (try without args to get a list)");

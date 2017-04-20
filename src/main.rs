@@ -47,7 +47,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cmd::Cmd;
 use completer::ClickCompleter;
@@ -78,6 +78,7 @@ struct PortForward{
     child: Child,
     pod: String,
     ports: Vec<String>,
+    output: Arc<Mutex<String>>,
 }
 
 /// Keep track of our repl environment
@@ -286,8 +287,8 @@ impl Env {
         self.port_forwards.iter()
     }
 
-    fn get_port_forward(&self, i: usize) -> Option<&PortForward> {
-        self.port_forwards.get(i)
+    fn get_port_forward(&mut self, i: usize) -> Option<&mut PortForward> {
+        self.port_forwards.get_mut(i)
     }
 
     fn stop_port_forward(&mut self, i: usize) -> Result<(), std::io::Error> {
@@ -297,6 +298,13 @@ impl Env {
         } else {
             Ok(())
         }
+    }
+
+    fn stop_all_forwards(&mut self) {
+        for pf in self.port_forwards.iter_mut() {
+            pf.child.kill().unwrap();
+        }
+        self.port_forwards = Vec::new();
     }
 }
 
@@ -439,4 +447,5 @@ fn main() {
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);
     }
+    env.stop_all_forwards();
 }

@@ -59,6 +59,8 @@ impl error::Error for KubeErrNo {
 
 #[derive(Debug)]
 pub enum KubeError {
+    ParseErr(String),
+    PipeErr(String),
     Kube(KubeErrNo),
     Io(io::Error),
     HyperParse(hyper::error::ParseError),
@@ -71,6 +73,8 @@ pub enum KubeError {
 impl fmt::Display for KubeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
+            KubeError::PipeErr(ref s) => write!(f, "Pipe Error: {}", s),
             KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
@@ -84,6 +88,8 @@ impl fmt::Display for KubeError {
 impl error::Error for KubeError {
     fn description(&self) -> &str {
         match *self {
+            KubeError::ParseErr(ref s) => s,
+            KubeError::PipeErr(ref s) => s,
             KubeError::Kube(ref err) => err.description(),
             KubeError::Io(ref err) => err.description(),
             KubeError::HyperParse(ref err) => err.description(),
@@ -95,6 +101,8 @@ impl error::Error for KubeError {
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
+            KubeError::ParseErr(_) => None,
+            KubeError::PipeErr(_) => None,
             KubeError::Kube(ref err) => Some(err),
             KubeError::Io(ref err) => Some(err),
             KubeError::HyperParse(ref err) => Some(err),

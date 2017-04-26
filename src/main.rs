@@ -17,6 +17,7 @@
 #[macro_use] extern crate prettytable;
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate lazy_static;
+#[macro_use] mod output;
 
 extern crate ansi_term;
 extern crate clap;
@@ -30,6 +31,7 @@ extern crate rustyline;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
+extern crate term;
 
 mod certs;
 mod cmd;
@@ -43,7 +45,9 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+use std::error::Error;
 use std::fmt;
+use std::fs::File;
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,6 +58,7 @@ use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
 use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList};
+use output::ClickWriter;
 
 /// An object we can have as a "current" thing
 /// Includes pods and nodes at the moment
@@ -326,6 +331,44 @@ impl fmt::Display for Env {
     }
 }
 
+/// Things the can come after a | or > char in input
+enum RightExpr<'a> {
+    None,
+    /// pipe to command with args
+    Pipe(&'a str),
+    /// redir to file
+    Redir(&'a str),
+}
+
+fn parse_line<'a>(line: &'a String) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+    match (line.find('|'), line.find('>')) {
+        (Some(_), Some(_)) => {
+            Err(KubeError::ParseErr("Input cannot contain | and >".to_owned()))
+        },
+        (Some(pipeidx), None) => {
+            let (left,right) = line.split_at(pipeidx);
+            let rtrim = right[1..].trim(); // remove | char and whitespace
+            if rtrim.is_empty() {
+                Err(KubeError::ParseErr("Pipe command is empty".to_owned()))
+            } else {
+                Ok((left, RightExpr::Pipe(rtrim)))
+            }
+        }
+        (None, Some(rediridx)) => {
+            let (left, right) = line.split_at(rediridx);
+            let rtrim = right[1..].trim(); // remove > char and whitespace
+            if rtrim.is_empty() {
+                Err(KubeError::ParseErr("Filename is empty".to_owned()))
+            } else {
+                Ok((left, RightExpr::Redir(rtrim)))
+            }
+        }
+        (None, None) => {
+            Ok((line, RightExpr::None))
+        }
+    }
+}
+
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")
@@ -400,40 +443,75 @@ fn main() {
     let raw_env: *const Env = &env;
     rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
 
+    let mut writer = ClickWriter::new();
+
     while !env.quit {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                let mut parts = line.split_whitespace();
-                if let Some(cmdstr) = parts.next() {
-                    // There was something typed
-                    if let Ok(num) = cmdstr.parse::<usize>() {
-                        env.set_current(num);
-                    }
-                    else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
-                        // found a matching command
-                        cmd.exec(&mut env, &mut parts);
-                    }
-                    else if cmdstr == "help" {
-                        // help isn't a command as it needs access to the commands vec
-                        if let Some(hcmd) = parts.next() {
-                            if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
-                                cmd.print_help();
-                            } else {
-                                println!("I don't know anything about {}, sorry", hcmd);
-                            }
-                        } else {
-                            println!("Available commands (type 'help command' for details):");
-                            let spacer = "                  ";
-                            for c in commands.iter() {
-                                println!("  {}{}{}", c.get_name(), &spacer[0..(20-c.get_name().len())], c.about());
+                match  parse_line(&line) {
+                    Ok((left, right)) => {
+
+                        // set up output
+                        match right {
+                            RightExpr::None => {}, // do nothing
+                            RightExpr::Pipe(cmd) => {
+                                if let Err(e) = writer.setup_pipe(cmd) {
+                                    println!("{}", e.description());
+                                    continue;
+                                }
+                            },
+                            RightExpr::Redir(filename) => {
+                                match File::create(filename) {
+                                    Ok(out_file) => {
+                                        writer.out_file = Some(out_file);
+                                    }
+                                    Err(ref e) => {
+                                        println!("Can't open output file: {}", e);
+                                        continue;
+                                    }
+                                }
                             }
                         }
-                    }
-                    else {
-                        println!("Unknown command");
-                    }
+
+                        let mut parts = left.split_whitespace();
+                        if let Some(cmdstr) = parts.next() {
+                            // There was something typed
+                            if let Ok(num) = cmdstr.parse::<usize>() {
+                                env.set_current(num);
+                            }
+                            else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
+                                // found a matching command
+                                cmd.exec(&mut env, &mut parts, &mut writer);
+                            }
+                            else if cmdstr == "help" {
+                                // help isn't a command as it needs access to the commands vec
+                                if let Some(hcmd) = parts.next() {
+                                    if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
+                                        cmd.print_help();
+                                    } else {
+                                        println!("I don't know anything about {}, sorry", hcmd);
+                                    }
+                                } else {
+                                    println!("Available commands (type 'help command' for details):");
+                                    let spacer = "                  ";
+                                    for c in commands.iter() {
+                                        println!("  {}{}{}", c.get_name(), &spacer[0..(20-c.get_name().len())], c.about());
+                                    }
+                                }
+                            }
+                            else {
+                                println!("Unknown command");
+                            }
+                        }
+
+                        // reset output
+                        writer.finish_output();
+                    },
+                    Err(err) => {
+                        println!("{}", err);
+                    },
                 }
             }
             Err(ReadlineError::Interrupted) => { }, // don't exit on Ctrl-C

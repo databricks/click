@@ -18,6 +18,7 @@ use ::Env;
 use kube::{ContainerState, DeploymentList, Event, EventList,
            Pod, PodList, NamespaceList, NodeList, NodeCondition,
            ServiceList};
+use output::ClickWriter;
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -27,6 +28,7 @@ use chrono::offset::local::Local;
 use prettytable::{format, Table};
 use prettytable::cell::Cell;
 use prettytable::row::Row;
+use term::terminfo::TerminfoTerminal;
 use serde_json;
 use serde_json::Value;
 use regex::Regex;
@@ -35,7 +37,7 @@ use std;
 use std::cell::RefCell;
 use std::error::Error;
 use std::iter::Iterator;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write, stderr};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -55,7 +57,7 @@ lazy_static! {
 
 pub trait Cmd {
     // break if returns true
-    fn exec(&self, &mut Env, &mut Iterator<Item=&str>) -> bool;
+    fn exec(&self, &mut Env, &mut Iterator<Item=&str>, &mut ClickWriter) -> bool;
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>);
@@ -72,11 +74,11 @@ fn start_clap(name: &'static str, about: &'static str) -> App<'static, 'static> 
 }
 
 /// Run specified closure with the given matches, or print error.  Return true if execed, false on err
-fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mut Iterator<Item=&str>, func: F) -> bool
-    where F: FnOnce(ArgMatches,&mut Env) -> () {
+fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mut Iterator<Item=&str>, writer: &mut ClickWriter, func: F) -> bool
+    where F: FnOnce(ArgMatches,&mut Env, &mut ClickWriter) -> () {
     match clap.borrow_mut().get_matches_from_safe_borrow(args) {
         Ok(matches) => {
-            func(matches, env);
+            func(matches, env, writer);
             true
         },
         Err(err) => {
@@ -94,8 +96,8 @@ fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mu
 /// * about: an about string describing the command
 /// * extra_args: a closure taking an App that addes any additional argument stuff and returns an App
 /// * is_expr: a closure taking a string arg that checks if the passed string is one that should call this command
-/// * cmd_expr: a closure taking matches and env that runs to execute the command
 /// * cmplt_expr: an expression to return possible compeltions for the command
+/// * cmd_expr: a closure taking matches, env, and writer that runs to execute the command
 ///
 /// # Example
 /// ```
@@ -106,7 +108,7 @@ fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mu
 ///         "Quit click",
 ///         |clap| {clap},
 ///         |l| {l == "q" || l == "quit"},
-///         |_,env| {env.quit = true;}
+///         |matches, env, writer| {env.quit = true;}
 /// );
 /// # }
 /// ```
@@ -127,8 +129,8 @@ macro_rules! command {
         }
 
         impl Cmd for $cmd_name {
-            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>) -> bool {
-                exec_match(&self.clap, env, args, $cmd_expr)
+            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>, writer: &mut ClickWriter) -> bool {
+                exec_match(&self.clap, env, args, writer, $cmd_expr)
             }
 
             fn is(&self, l: &str) -> bool {
@@ -139,7 +141,7 @@ macro_rules! command {
                 $name
             }
 
-            fn print_help(&self) {
+            fn print_help(&self) { // TODO: put though the ClickWriter?
                 if let Err(res) = self.clap.borrow_mut().print_help() {
                     print!("Couldn't print help: {}", res);
                 }
@@ -228,8 +230,20 @@ fn shorten_to(s: String, max_len: usize) -> String {
     }
 }
 
+fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
+    match TerminfoTerminal::new(writer) {
+        Some(ref mut term) => {
+            table.print_term(term).unwrap_or(());
+            true
+        },
+        None => {
+            false
+        },
+    }
+}
+
 /// Print out the specified list of pods in a pretty format
-fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_namespace: bool) {
+fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_namespace: bool, writer: &mut ClickWriter) {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
     if show_labels {
@@ -276,7 +290,9 @@ fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_na
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
-    table.printstd();
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
+    }
 }
 
 /// Build a multi-line string of the specified keyvals
@@ -298,7 +314,7 @@ fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
 }
 
 /// Print out the specified list of nodes in a pretty format
-fn print_nodelist(nodelist: &NodeList, labels: bool) {
+fn print_nodelist(nodelist: &NodeList, labels: bool, writer: &mut ClickWriter) {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "State", "Age"];
     if labels {
@@ -340,11 +356,13 @@ fn print_nodelist(nodelist: &NodeList, labels: bool) {
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
-    table.printstd();
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
+    }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_deployments(deplist: &DeploymentList) {
+fn print_deployments(deplist: &DeploymentList, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "Desired", "Current", "Up To Date", "Available", "Age"]);
     for (i, dep) in deplist.items.iter().enumerate() {
@@ -359,11 +377,13 @@ fn print_deployments(deplist: &DeploymentList) {
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
-    table.printstd();
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
+    }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_servicelist(servlist: &ServiceList, _show_labels: bool) {
+fn print_servicelist(servlist: &ServiceList, _show_labels: bool, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "ClusterIP", "External IPs", "Port(s)", "Age"]);
     for (i, service) in servlist.items.iter().enumerate() {
@@ -410,11 +430,13 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool) {
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
-    table.printstd();
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
+    }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_namespaces(nslist: &NamespaceList) {
+fn print_namespaces(nslist: &NamespaceList, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(row!["Name", "Status", "Age"]);
     for ns in nslist.items.iter() {
@@ -426,7 +448,9 @@ fn print_namespaces(nslist: &NamespaceList) {
         table.add_row(Row::new(row));
     }
     table.set_format(TBLFMT.clone());
-    table.printstd();
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
+    }
 }
 
 
@@ -446,7 +470,7 @@ command!(Quit,
          identity,
          |l| {l == "q" || l == "quit"},
          noop_complete,
-         |_,env| {env.quit = true;}
+         |_,env,_| {env.quit = true;}
 );
 
 command!(Context,
@@ -482,7 +506,7 @@ command!(Context,
                  (0, Vec::new())
              }
          },
-         |matches, env| {
+         |matches, env, _| {
              let context = matches.value_of("context");
              if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
                  if k.name == c { // no-op if we're already in the specified context
@@ -500,7 +524,7 @@ command!(Clear,
          identity,
          |l| { l == "clear" },
          noop_complete,
-         |_, env| {
+         |_, env, _| {
              env.clear_current();
          }
 );
@@ -547,7 +571,7 @@ command!(Namespace,
                  (0, Vec::new())
              }
          },
-         |matches, env| {
+         |matches, env, _| {
              let ns = matches.value_of("namespace");
              env.set_namespace(ns);
          }
@@ -580,7 +604,7 @@ command!(Pods,
          },
          |l| { l == "pods" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let mut urlstr = if let Some(ref ns) = env.namespace {
                  format!("/api/v1/namespaces/{}/pods", ns)
              } else {
@@ -617,14 +641,14 @@ command!(Pods,
                                  items: filtered
                              })
                          } else {
-                             println!("Invalid regex: {}", pattern);
+                             write!(stderr(), "Invalid regex: {}\n", pattern).unwrap_or(());
                              None
                          }
                      } else {
                          Some(l)
                      };
                  if let Some(ref l) = final_list {
-                     print_podlist(l, matches.is_present("showlabels"), matches.is_present("showannot"), env.namespace.is_none());
+                     print_podlist(l, matches.is_present("showlabels"), matches.is_present("showannot"), env.namespace.is_none(), writer);
                  }
                  env.set_podlist(final_list);
              }
@@ -647,7 +671,7 @@ command!(Logs,
          },
          |l| { l == "logs" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
              let follow = matches.is_present("follow");
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
@@ -666,7 +690,7 @@ command!(Logs,
                      while !env.ctrlcbool.load(Ordering::SeqCst) {
                          if let Ok(amt) = reader.read_line(&mut line) {
                              if amt > 0 {
-                                 print!("{}", line); // newlines already in line
+                                 clickwrite!(writer, "{}", line); // newlines already in line
                                  line.clear();
                              } else {
                                  break;
@@ -812,9 +836,9 @@ command!(Describe,
          },
          |l| { l == "describe" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              match env.current_object {
-                 ::KObj::None => println!("No active object to describe"),
+                 ::KObj::None => {clickwrite!(writer, "No active object to describe\n");},
                  ::KObj::Pod(ref pod) => {
                      if let Some(ref ns) = env.current_object_namespace {
                          // describe the active pod
@@ -824,13 +848,13 @@ command!(Describe,
                          });
                          if let Some(pval) = pod_value {
                              if matches.is_present("json") {
-                                 println!("{}", serde_json::to_string_pretty(&pval).unwrap());
+                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&pval).unwrap());
                              } else {
-                                 println!("{}", describe_format_pod(pval));
+                                 clickwrite!(writer, "{}\n", describe_format_pod(pval));
                              }
                          }
                      } else {
-                         println!("Don't know namespace for {}", pod);
+                         write!(stderr(),"Don't know namespace for {}", pod).unwrap_or(());
                      }
                  },
                  ::KObj::Node(ref node) => {
@@ -841,9 +865,9 @@ command!(Describe,
                      });
                      if let Some(nval) = node_value {
                          if matches.is_present("json") {
-                             println!("{}", serde_json::to_string_pretty(&nval).unwrap());
+                             clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&nval).unwrap());
                          } else {
-                             println!("{}", describe_format_node(nval));
+                             clickwrite!(writer, "{}\n", describe_format_node(nval));
                          }
                      }
                  },
@@ -855,9 +879,9 @@ command!(Describe,
                          });
                          if let Some(dval) = dep_value {
                              if matches.is_present("json") {
-                                 println!("{}", serde_json::to_string_pretty(&dval).unwrap());
+                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&dval).unwrap());
                              } else {
-                                 println!("Deployment not supported without -j yet");
+                                 clickwrite!(writer, "Deployment not supported without -j yet\n");
                              }
                          }
                      }
@@ -870,9 +894,9 @@ command!(Describe,
                          });
                          if let Some(sval) = service_value {
                              if matches.is_present("json") {
-                                 println!("{}", serde_json::to_string_pretty(&sval).unwrap());
+                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&sval).unwrap());
                              } else {
-                                 println!("Service not supported without -j yet");
+                                 clickwrite!(writer, "Service not supported without -j yet\n");
                              }
                          }
                      }
@@ -897,7 +921,7 @@ command!(Exec,
          },
          |l| { l == "exec" },
          noop_complete,
-         |matches, env| {
+         |matches, env, _writer| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
              if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.current_object_namespace.as_ref(), env.current_pod().as_ref()) {
                  let contargs =
@@ -919,10 +943,10 @@ command!(Exec,
                      .status()
                      .expect("failed to execute kubectl");
                  if !status.success() {
-                     println!("kubectl exited abnormally");
+                     write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
                  }
              } else {
-                 println!("No active kluster, or namespace, or pod");
+                 write!(stderr(), "No active kluster, or namespace, or pod").unwrap_or(());
              }
          }
 );
@@ -947,23 +971,23 @@ command!(Delete,
          },
          |l| { l == "delete" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace {
                  if let Some(mut url) = match env.current_object {
                      ::KObj::Pod(ref pod) => {
-                         print!("Delete pod {} [y/N]? ", pod);
+                         clickwrite!(writer, "Delete pod {} [y/N]? ", pod);
                          Some(format!("/api/v1/namespaces/{}/pods/{}", ns, pod))
                      },
                      ::KObj::Deployment(ref dep) => {
-                         print!("Delete deployment {} [y/N]? ", dep);
+                         clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
                          Some(format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, dep))
                      },
                      ::KObj::None => {
-                         println!("No active object");
+                         write!(stderr(), "No active object").unwrap_or(());
                          None
                      },
                      _ => {
-                         println!("Can only delete pods or deployments");
+                         write!(stderr(), "Can only delete pods or deployments").unwrap_or(());
                          None
                      },
                  } {
@@ -986,19 +1010,19 @@ command!(Delete,
                                  k.delete(url.as_str())
                              });
                              if let Some(_) = result {
-                                 println!("Deleted");
+                                 clickwrite!(writer, "Deleted\n");
                              } else {
-                                 println!("Failed to delete");
+                                 write!(stderr(), "Failed to delete").unwrap_or(());
                              }
                          } else {
-                             println!("Not deleting");
+                             clickwrite!(writer, "Not deleting\n");
                          }
                      } else {
-                         println!("Could not read response, not deleting.");
+                         write!(stderr(), "Could not read response, not deleting.").unwrap_or(());
                      }
                  }
              } else {
-                 println!("No active namespace"); // TODO: Can you delete without a namespace?
+                 write!(stderr(), "No active namespace").unwrap_or(()); // TODO: Can you delete without a namespace?
              }
          }
 );
@@ -1042,19 +1066,19 @@ command!(Containers,
          identity,
          |l| { l == "conts" || l == "containers" },
          noop_complete,
-         |_matches, env| {
+         |_matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
                  let pod_opt: Option<Pod> = env.run_on_kluster(|k| {
                      k.get(url.as_str())
                  });
                  if let Some(pod) = pod_opt {
-                     print!("{}", containers_string(&pod)); // extra newline in returned string
+                     clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
                  }
              } else {
-                 println!("No active pod");
+                 write!(stderr(), "No active pod").unwrap_or(());
              }} else {
-                 println!("No active namespace");
+                 write!(stderr(), "No active namespace").unwrap_or(());
              }
          }
 );
@@ -1074,7 +1098,7 @@ command!(Events,
          identity,
          |l| { l == "events" },
          noop_complete,
-         |_matches, env| {
+         |_matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
                                    ns,pod,ns);
@@ -1084,18 +1108,18 @@ command!(Events,
                  if let Some(el) = oel {
                      if el.items.len() > 0 {
                          for e in el.items.iter() {
-                             println!("{}",format_event(e));
+                             clickwrite!(writer, "{}\n",format_event(e));
                          }
                      } else {
-                         println!("No events");
+                         clickwrite!(writer, "No events\n");
                      }
                  } else {
-                     println!("Failed to fetch events");
+                     write!(stderr(), "Failed to fetch events").unwrap_or(());
                  }
              } else {
-                 println!("No active pod");
+                 write!(stderr(), "No active pod").unwrap_or(());
              }} else {
-                 println!("No active namespace");
+                 write!(stderr(), "No active namespace").unwrap_or(());
              }
          }
 );
@@ -1112,13 +1136,13 @@ command!(Nodes,
          },
          |l| { l == "nodes" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let url = "/api/v1/nodes";
              let nl: Option<NodeList> = env.run_on_kluster(|k| {
                  k.get(url)
              });
              if let Some(ref n) = nl {
-                 print_nodelist(&n, matches.is_present("labels"));
+                 print_nodelist(&n, matches.is_present("labels"), writer);
              }
              env.set_nodelist(nl);
          }
@@ -1136,7 +1160,7 @@ command!(Services,
          },
          |l| { l == "services" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let url =
                  if let Some(ref ns) = env.namespace {
                      format!("/api/v1/namespaces/{}/services", ns)
@@ -1147,9 +1171,9 @@ command!(Services,
                  k.get(url.as_str())
              });
              if let Some(ref s) = sl {
-                 print_servicelist(&s, matches.is_present("labels"));
+                 print_servicelist(&s, matches.is_present("labels"), writer);
              } else {
-                 println!("no services");
+                 clickwrite!(writer, "no services\n");
              }
              env.set_servicelist(sl);
          }
@@ -1162,8 +1186,8 @@ command!(EnvCmd,
          identity,
          |l| { l == "env" },
          noop_complete,
-         |_matches, env| {
-             println!("{}", env);
+         |_matches, env, writer| {
+             clickwrite!(writer, "{}\n", env);
          }
 );
 
@@ -1184,7 +1208,7 @@ command!(Deployments,
          },
          |l| { l == "deps" || l == "deployments" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let mut urlstr = if let Some(ref ns) = env.namespace {
                  format!("/apis/extensions/v1beta1/namespaces/{}/deployments", ns)
              } else {
@@ -1209,7 +1233,7 @@ command!(Deployments,
                                  items: filtered
                              })
                          } else {
-                             println!("Invalid regex: {}", pattern);
+                             write!(stderr(), "Invalid regex: {}", pattern).unwrap_or(());
                              None
                          }
                      } else {
@@ -1217,7 +1241,7 @@ command!(Deployments,
                      };
 
                  if let Some(ref d) = final_list {
-                     print_deployments(&d);
+                     print_deployments(&d, writer);
                  }
                  env.set_deplist(final_list);
              }
@@ -1236,7 +1260,7 @@ command!(Namespaces,
          },
          |l| { l == "namespaces" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let nl: Option<NamespaceList> = env.run_on_kluster(|k| {
                  k.get("/api/v1/namespaces")
              });
@@ -1250,7 +1274,7 @@ command!(Namespaces,
                                  items: filtered
                              })
                          } else {
-                             println!("Invalid regex: {}", pattern);
+                             write!(stderr(), "Invalid regex: {}", pattern).unwrap_or(());
                              None
                          }
                      } else {
@@ -1258,7 +1282,7 @@ command!(Namespaces,
                      };
 
                  if let Some(ref n) = final_list {
-                     print_namespaces(&n);
+                     print_namespaces(&n, writer);
                  }
              }
          }
@@ -1270,8 +1294,8 @@ command!(UtcCmd,
          identity,
          |l| { l == "utc" },
          noop_complete,
-         |_, _| {
-             println!("{}", UTC::now());
+         |_, _, writer| {
+             clickwrite!(writer, "{}\n", UTC::now());
          }
 );
 
@@ -1315,7 +1339,7 @@ Examples:
          },
          |l| { l == "pf" || l == "port-forward" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
 
              let pod =
@@ -1326,7 +1350,7 @@ Examples:
                          p.clone()
                      }
                      None => {
-                         println!("No active pod");
+                         write!(stderr(), "No active pod").unwrap_or(());
                          return;
                      }
                  }
@@ -1336,7 +1360,7 @@ Examples:
                  if let Some(ref ns) = env.current_object_namespace {
                      ns.clone()
                  } else {
-                     println!("No current namespace");
+                     write!(stderr(), "No current namespace").unwrap_or(());
                      return;
                  };
 
@@ -1344,7 +1368,7 @@ Examples:
                  if let Some(ref kluster) = env.kluster {
                      kluster.name.clone()
                  } else {
-                     println!("No active context");
+                     write!(stderr(), "No active context").unwrap_or(());
                      return;
                  };
 
@@ -1377,7 +1401,7 @@ Examples:
                                          }
                                      },
                                      Err(e) => {
-                                         println!("Error reading child output: {}", e.description());
+                                         write!(stderr(), "Error reading child output: {}", e.description()).unwrap_or(());
                                          break;
                                      }
                                  }
@@ -1385,7 +1409,7 @@ Examples:
                          });
 
                          let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
-                         println!("Forwarding port(s): {}", pvec.join(", "));
+                         clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
 
                          env.add_port_forward(::PortForward {
                              child: child,
@@ -1395,7 +1419,7 @@ Examples:
                          });
                      }
                      Err(e) => {
-                         println!("Couldn't execute kubectl, not forwarding.  Error is: {}", e.description());
+                         write!(stderr(), "Couldn't execute kubectl, not forwarding.  Error is: {}", e.description()).unwrap_or(());
                      }
                  }
          }
@@ -1452,7 +1476,7 @@ command!(PortForwards,
          },
          |l| { l == "pfs" || l == "port-forwards" },
          noop_complete,
-         |matches, env| {
+         |matches, env, writer| {
              let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
              let output = matches.is_present("action") && matches.value_of("action").unwrap() == "output";
              if let Some(index) = matches.value_of("index") {
@@ -1460,42 +1484,42 @@ command!(PortForwards,
                  match env.get_port_forward(i) {
                      Some(pf) => {
                          if stop {
-                             print!("Stop port-forward: ");
+                             clickwrite!(writer, "Stop port-forward: ");
                          }
-                         print!("Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
+                         clickwrite!(writer, "Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
 
                          if output {
-                             print!(" Output:\n{}", *pf.output.lock().unwrap());
+                             clickwrite!(writer, " Output:\n{}", *pf.output.lock().unwrap());
                          }
                      }
                      None => {
-                         println!("Invalid index (try without args to get a list)");
+                         write!(stderr(), "Invalid index (try without args to get a list)").unwrap_or(());
                          return;
                      }
                  }
 
                  if stop {
-                     print!("  [y/N]? ");
+                     clickwrite!(writer, "  [y/N]? ");
                      io::stdout().flush().ok().expect("Could not flush stdout");
                      let mut conf = String::new();
                      if let Ok(_) = io::stdin().read_line(&mut conf) {
                          if conf.trim() == "y" || conf.trim() == "yes" {
                              match env.stop_port_forward(i) {
                                  Ok(()) => {
-                                     println!("Stopped");
+                                     clickwrite!(writer, "Stopped\n");
                                  },
                                  Err(e) => {
-                                     println!("Failed to stop: {}", e.description());
+                                     write!(stderr(), "Failed to stop: {}", e.description()).unwrap_or(());
                                  }
                              }
                          } else {
-                             println!("Not stopping");
+                             clickwrite!(writer, "Not stopping\n");
                          }
                      } else {
-                         println!("Could not read response, not stopping.");
+                         write!(stderr(), "Could not read response, not stopping.").unwrap_or(());
                      }
                  } else {
-                     println!(); // just flush the above description
+                     clickwrite!(writer, "\n"); // just flush the above description
                  }
              } else {
                  print_pfs(env.get_port_forwards());

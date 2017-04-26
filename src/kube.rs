@@ -82,7 +82,7 @@ pub enum ContainerState {
         #[serde(rename="finishedAt")]
         finished_at: DateTime<UTC>,
         message: Option<String>,
-        reason: String,
+        reason: Option<String>,
         signal: Option<u32>,
         #[serde(rename="startedAt")]
         started_at: DateTime<UTC>
@@ -90,7 +90,7 @@ pub enum ContainerState {
     #[serde(rename="waiting")]
     Waiting {
         message: Option<String>,
-        reason: String
+        reason: Option<String>,
     },
 }
 
@@ -112,7 +112,7 @@ impl fmt::Display for ContainerState {
             &ContainerState::Waiting {
                 message: _,
                 ref reason,
-            } => write!(f, "{} ({})", Yellow.paint("waiting"), reason),
+            } => write!(f, "{} ({})", Yellow.paint("waiting"), reason.as_ref().unwrap_or(&"<no reason given>".to_owned())),
         }
     }
 }

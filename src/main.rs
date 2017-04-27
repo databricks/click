@@ -61,10 +61,9 @@ use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList};
 use output::ClickWriter;
 
 /// An object we can have as a "current" thing
-/// Includes pods and nodes at the moment
 enum KObj {
     None,
-    Pod(String),
+    Pod{name: String, containers: Vec<String>},
     Node(String),
     Deployment(String),
     Service(String),
@@ -136,7 +135,7 @@ impl Env {
                               },
                               match self.current_object {
                                   KObj::None => Yellow.paint("none"),
-                                  KObj::Pod(ref name) => Yellow.bold().paint(name.as_str()),
+                                  KObj::Pod{ref name, ..} => Yellow.bold().paint(name.as_str()),
                                   KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
                                   KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
                                   KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
@@ -221,7 +220,11 @@ impl Env {
             },
             LastList::PodList(ref pl) => {
                 if let Some(pod) = pl.items.get(num) {
-                    self.current_object = KObj::Pod(pod.metadata.name.clone());
+                    let containers = pod.spec.containers.iter().map(
+                        |cspec| cspec.name.clone()
+                    ).collect();
+                    self.current_object = KObj::Pod{name: pod.metadata.name.clone(),
+                                                    containers: containers};
                     self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
@@ -256,7 +259,7 @@ impl Env {
     }
 
     fn current_pod(&self) -> Option<&String> {
-        if let KObj::Pod(ref name) = self.current_object {
+        if let KObj::Pod{ref name, ..} = self.current_object {
             Some(name)
         } else {
             None

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
- //!  The commands one can run from the repl
+//!  The commands one can run from the repl
 
 use ::Env;
 use kube::{ContainerState, DeploymentList, Event, EventList,
@@ -168,6 +168,11 @@ fn identity<T>(t: T) -> T {
 /// A completer that does nothing, used for commands that don't do completion
 fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
     (0, Vec::new())
+}
+
+/// a clap validator for u32
+fn valid_u32(s: String) -> Result<(), String> {
+    s.parse::<u32>().map(|_| ()).map_err(|e| e.description().to_owned())
 }
 
 /// Check if a pod has a waiting container
@@ -484,24 +489,21 @@ command!(Context,
          },
          |l| {l == "ctx" || l == "context"},
          |args: Vec<&str>, env: &Env| {
-             if args.len() == 0 {
-                 // full command, but no args yet, so suggest everything
+             if args.len() <= 1 {
                  let mut v = Vec::new();
+                 let argstart = args.get(0);
                  for context in env.config.contexts.keys() {
-                     v.push(context.clone());
-                 }
-                 (0, v)
-             }
-             else if args.len() == 1 {
-                 // we only take one arg
-                 let mut v = Vec::new();
-                 let line = args.get(0).unwrap(); // we just checked
-                 for context in env.config.contexts.keys() {
-                     if context.starts_with(line) {
+                     if argstart.is_none() || context.starts_with(argstart.unwrap()) {
                          v.push(context.clone());
                      }
                  }
-                 (line.len(), v)
+                 (
+                     match argstart {
+                         Some(line) => line.len(),
+                         None => 0,
+                     },
+                     v
+                 )
              } else {
                  (0, Vec::new())
              }
@@ -540,34 +542,26 @@ command!(Namespace,
          },
          |l| {l == "ns" || l == "namespace"},
          |args: Vec<&str>, env: &Env| {
-             if args.len() == 0 {
+             if args.len() <= 1 {
                  // no args yet, suggest all namespaces
                  let v_opt = env.run_on_kluster(|k| {
                      k.namespaces_for_context()
                  });
                  if let Some(v) = v_opt {
-                     (0, v)
+                     match args.get(0) {
+                         Some(line) => {
+                             (
+                                 line.len(),
+                                 v.iter().filter(|ns| ns.starts_with(line)).
+                                          map(|ns| ns.clone()).collect()
+                             )
+                         },
+                         None => (0, v)
+                     }
                  } else {
                      (0, Vec::new())
                  }
-             }
-             else if args.len() == 1 {
-                 // only one arg
-                 let mut v = Vec::new();
-                 let line = args.get(0).unwrap(); // we just checked
-                 let v_opt = env.run_on_kluster(|k| {
-                     k.namespaces_for_context()
-                 });
-                 if let Some(nv) = v_opt {
-                     for ns in nv.iter() {
-                         if ns.starts_with(line) {
-                             v.push(ns.clone());
-                         }
-                     }
-                 }
-                 (line.len(), v)
-             }
-             else {
+             } else {
                  (0, Vec::new())
              }
          },
@@ -666,18 +660,50 @@ command!(Logs,
                  .arg(Arg::with_name("follow")
                       .short("f")
                       .long("follow")
-                      .help("Follow the logs as new records arrive (stop with ^D)")
+                      .help("Follow the logs as new records arrive (stop with ^C)")
                       .takes_value(false))
+                 .arg(Arg::with_name("tail")
+                      .short("t")
+                      .long("tail")
+                      .validator(valid_u32)
+                      .help("Number of lines from the end of the logs to show")
+                      .takes_value(true))
          },
          |l| { l == "logs" },
-         noop_complete,
+         |args: Vec<&str>, env: &Env| {
+             if args.len() <= 1 {
+                 let mut v = Vec::new();
+                 let argstart = args.get(0);
+                 match env.current_object {
+                     ::KObj::Pod{name:_, ref containers} => {
+                         for cont in containers.iter() {
+                             if argstart.is_none() || cont.starts_with(argstart.unwrap()) {
+                                 v.push(cont.clone());
+                             }
+                         }
+                     }
+                     _ => {}
+                 }
+                 (
+                     match argstart {
+                         Some(line) => line.len(),
+                         None => 0,
+                     },
+                     v
+                 )
+             } else {
+                 (0, Vec::new())
+             }
+         },
          |matches, env, writer| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
-             let follow = matches.is_present("follow");
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
                  let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                 if follow {
+                 if matches.is_present("follow") {
                      url.push_str("&follow=true");
+                 }
+                 if matches.is_present("tail") {
+                     url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
                  }
                  let logs_reader = env.run_on_kluster(|k| {
                      k.get_read(url.as_str(), Some(Duration::new(1, 0)))
@@ -839,10 +865,10 @@ command!(Describe,
          |matches, env, writer| {
              match env.current_object {
                  ::KObj::None => {clickwrite!(writer, "No active object to describe\n");},
-                 ::KObj::Pod(ref pod) => {
+                 ::KObj::Pod{ref name, ..} => {
                      if let Some(ref ns) = env.current_object_namespace {
                          // describe the active pod
-                         let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+                         let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
                          let pod_value = env.run_on_kluster(|k| {
                              k.get_value(url.as_str())
                          });
@@ -854,7 +880,7 @@ command!(Describe,
                              }
                          }
                      } else {
-                         write!(stderr(),"Don't know namespace for {}", pod).unwrap_or(());
+                         write!(stderr(),"Don't know namespace for {}", name).unwrap_or(());
                      }
                  },
                  ::KObj::Node(ref node) => {
@@ -959,9 +985,7 @@ command!(Delete,
                       .short("g")
                       .long("gracePeriod")
                       .help("The duration in seconds before the object should be deleted.")
-                      .validator(|s: String| {
-                          s.parse::<u32>().map(|_| ()).map_err(|e| e.description().to_owned())
-                      })
+                      .validator(valid_u32)
                       .takes_value(true))
                  .arg(Arg::with_name("orphan")
                       .short("o")
@@ -974,9 +998,9 @@ command!(Delete,
          |matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace {
                  if let Some(mut url) = match env.current_object {
-                     ::KObj::Pod(ref pod) => {
-                         clickwrite!(writer, "Delete pod {} [y/N]? ", pod);
-                         Some(format!("/api/v1/namespaces/{}/pods/{}", ns, pod))
+                     ::KObj::Pod{ref name, ..} => {
+                         clickwrite!(writer, "Delete pod {} [y/N]? ", name);
+                         Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
                      },
                      ::KObj::Deployment(ref dep) => {
                          clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);

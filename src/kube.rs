@@ -160,7 +160,7 @@ pub struct ContainerSpec {
 pub struct PodSpec {
     pub hostname: Option<String>,
     #[serde(rename="nodeName")]
-    pub node_name: String,
+    pub node_name: Option<String>,
     pub containers: Vec<ContainerSpec>,
 }
 

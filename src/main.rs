@@ -23,6 +23,7 @@ extern crate ansi_term;
 extern crate clap;
 extern crate chrono;
 extern crate ctrlc;
+extern crate humantime;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate regex;

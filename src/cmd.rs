@@ -23,8 +23,9 @@ use output::ClickWriter;
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
-use chrono::offset::utc::UTC;
 use chrono::offset::local::Local;
+use chrono::offset::utc::UTC;
+use humantime::parse_duration;
 use prettytable::{format, Table};
 use prettytable::cell::Cell;
 use prettytable::row::Row;
@@ -174,6 +175,17 @@ fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
 fn valid_u32(s: String) -> Result<(), String> {
     s.parse::<u32>().map(|_| ()).map_err(|e| e.description().to_owned())
 }
+
+/// a clap validator for duration
+fn valid_duration(s: String) -> Result<(), String> {
+    parse_duration(s.as_str()).map(|_| ()).map_err(|e| e.description().to_owned())
+}
+
+/// a clap validator for rfc3339 dates
+fn valid_date(s: String) -> Result<(), String> {
+    DateTime::parse_from_rfc3339(s.as_str()).map(|_| ()).map_err(|e| e.description().to_owned())
+}
+
 
 /// Check if a pod has a waiting container
 fn has_waiting(pod: &Pod) -> bool {
@@ -668,6 +680,18 @@ command!(Logs,
                       .validator(valid_u32)
                       .help("Number of lines from the end of the logs to show")
                       .takes_value(true))
+                 .arg(Arg::with_name("since")
+                      .long("since")
+                      .conflicts_with("sinceTime")
+                      .validator(valid_duration)
+                      .help("Only return logs newer than specified relative duration, e.g. 5s, 2m, 3m5s, 1h2min5sec")
+                      .takes_value(true))
+                 .arg(Arg::with_name("sinceTime")
+                      .long("since-time")
+                      .conflicts_with("since")
+                      .validator(valid_date)
+                      .help("Only return logs newer than specified RFC3339 date. Eg: 1996-12-19T16:39:57-08:00")
+                      .takes_value(true))
          },
          |l| { l == "logs" },
          |args: Vec<&str>, env: &Env| {
@@ -704,6 +728,15 @@ command!(Logs,
                  }
                  if matches.is_present("tail") {
                      url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
+                 }
+                 if matches.is_present("since") {
+                     let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
+                     url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
+                 }
+                 if matches.is_present("sinceTime") {
+                     let specified = DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
+                     let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
+                     url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
                  }
                  let logs_reader = env.run_on_kluster(|k| {
                      k.get_read(url.as_str(), Some(Duration::new(1, 0)))

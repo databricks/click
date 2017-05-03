@@ -49,6 +49,8 @@ struct ICluster {
 pub struct ClusterConf {
     #[serde(rename="certificate-authority", default="empty_str")]
     pub cert: String,
+    #[serde(rename="insecure-skip-tls-verify")]
+    pub skip_tls: Option<bool>,
     pub server: String,
 }
 
@@ -108,10 +110,10 @@ impl Config {
         // copy over clusters
         let mut cluster_map = HashMap::new();
         for cluster in iconf.clusters.iter() {
-            if cluster.conf.cert != "" {
+            if cluster.conf.cert != "" || cluster.conf.skip_tls.unwrap_or(false) {
                 cluster_map.insert(cluster.name.clone(), cluster.conf.clone());
             } else {
-                println!("Ignoring invalid cluster \"{}\": has no cert", cluster.name);
+                println!("Ignoring invalid cluster \"{}\": has no cert and tls verification not skipped", cluster.name);
             }
         }
 
@@ -139,12 +141,6 @@ impl Config {
         self.contexts.get(context).map(|ctx| {
             self.clusters.get(&ctx.cluster).map(|cluster| {
                 self.users.get(&ctx.user).map(|user| {
-                    let cert_path =
-                        if cluster.cert.chars().next().unwrap() == '/' {
-                            cluster.cert.clone()
-                        } else {
-                            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), cluster.cert)
-                        };
                     let auth =
                         if let Some(ref token) = user.token {
                             KlusterAuth::with_token(token.as_str())
@@ -157,7 +153,17 @@ impl Config {
                         } else {
                             panic!("Invalid kubeconfig!  Each user must have either a token or a client-certificate AND a client-key.");
                         };
-                    Kluster::new(context, cert_path.as_str(), cluster.server.as_str(), auth)
+                    let cert_opt =
+                        if cluster.cert == "" {
+                            None
+                        } else {
+                            if cluster.cert.chars().next().unwrap() == '/' {
+                                Some(cluster.cert.clone())
+                            } else {
+                                Some(format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), cluster.cert))
+                            }
+                        };
+                    Kluster::new(context, cert_opt, cluster.server.as_str(), auth)
                 }).ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
             }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
         }).ok_or(KubeError::Kube(KubeErrNo::InvalidContext)).

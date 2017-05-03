@@ -341,15 +341,15 @@ pub struct Kluster {
     pub name: String,
     endpoint: Url,
     auth: KlusterAuth,
-    cert_path: String,
+    cert_opt: Option<String>,
     client: Client,
 }
 
 impl Kluster {
 
-    fn make_tlsclient(cert_path: &str, auth: &KlusterAuth) -> TlsClient {
+    fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth) -> TlsClient {
         let mut tlsclient = TlsClient::new();
-        {
+        if let &Some(ref cert_path) = cert_opt {
             // add the cert to the root store
             let mut cfg = Arc::get_mut(&mut tlsclient.cfg).unwrap();
             let f = File::open(cert_path).unwrap();
@@ -366,13 +366,13 @@ impl Kluster {
         tlsclient
     }
 
-    pub fn new(name: &str, cert_path: &str, server: &str, auth: KlusterAuth) -> Result<Kluster, KubeError> {
-        let tlsclient = Kluster::make_tlsclient(cert_path, &auth);
+    pub fn new(name: &str, cert_opt: Option<String>, server: &str, auth: KlusterAuth) -> Result<Kluster, KubeError> {
+        let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
         Ok(Kluster {
             name: name.to_owned(),
             endpoint: try!(Url::parse(server)),
             auth: auth,
-            cert_path: cert_path.to_owned(),
+            cert_opt: cert_opt,
             client: Client::with_connector(HttpsConnector::new(tlsclient)),
         })
     }
@@ -419,7 +419,7 @@ impl Kluster {
             let mut req = try!(Request::with_connector(Method::Get,
                                                        url,
                                                        &HttpsConnector::new(
-                                                           Kluster::make_tlsclient(self.cert_path.as_str(), &self.auth)
+                                                           Kluster::make_tlsclient(&self.cert_opt, &self.auth)
                                                        )));
             { // scope for mutable borrow of req
                 let mut headers = req.headers_mut();

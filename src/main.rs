@@ -40,6 +40,7 @@ mod completer;
 mod config;
 mod error;
 mod kube;
+mod table;
 
 use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
 use clap::{Arg, App};

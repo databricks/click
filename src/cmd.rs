@@ -19,6 +19,7 @@ use kube::{ContainerState, DeploymentList, Event, EventList,
            Pod, PodList, NamespaceList, NodeList, NodeCondition,
            ServiceList};
 use output::ClickWriter;
+use table::CellSpec;
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -453,17 +454,33 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool, writer: &mut Cl
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_namespaces(nslist: &NamespaceList, writer: &mut ClickWriter) {
+fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(row!["Name", "Status", "Age"]);
-    for ns in nslist.items.iter() {
-        let mut row = Vec::new();
-        row.push(Cell::new(ns.metadata.name.as_str()));
+
+    let pod_specs = nslist.items.iter().map(|ns| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new(ns.metadata.name.as_str()));
         let ps = ns.status.phase.as_str();
-        row.push(Cell::new(ps).style_spec(phase_style(ps)));
-        row.push(Cell::new(format!("{}", time_since(ns.metadata.creation_timestamp.unwrap())).as_str()));
-        table.add_row(Row::new(row));
+        specs.push(CellSpec::with_style(ps,phase_style(ps)));
+        specs.push(CellSpec::new_owned(format!("{}", time_since(ns.metadata.creation_timestamp.unwrap()))));
+        (ns, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(pod_specs, r),
+        None => pod_specs.collect(),
+    };
+
+    for ns_spec in filtered.iter() {
+        let row_vec: Vec<Cell> = ns_spec.1.iter().map(|spec| spec.to_cell()).collect();
+        table.add_row(Row::new(row_vec));
     }
+
+    // let _final_nses = filtered.into_iter().map(|ns_spec| {
+    //     ns_spec.0
+    // });
+
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(());
@@ -1318,29 +1335,20 @@ command!(Namespaces,
          |l| { l == "namespaces" },
          noop_complete,
          |matches, env, writer| {
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
              let nl: Option<NamespaceList> = env.run_on_kluster(|k| {
                  k.get("/api/v1/namespaces")
              });
 
              if let Some(l) = nl {
-                 let final_list =
-                     if let Some(pattern) = matches.value_of("regex") {
-                         if let Ok(regex) = Regex::new(pattern) {
-                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
-                             Some(NamespaceList {
-                                 items: filtered
-                             })
-                         } else {
-                             write!(stderr(), "Invalid regex: {}", pattern).unwrap_or(());
-                             None
-                         }
-                     } else {
-                         Some(l)
-                     };
-
-                 if let Some(ref n) = final_list {
-                     print_namespaces(&n, writer);
-                 }
+                 print_namespaces(&l, regex, writer);
              }
          }
 );

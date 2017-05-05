@@ -204,18 +204,22 @@ fn has_waiting(pod: &Pod) -> bool {
 }
 
 // Figure out the right thing to print for the phase of the given pod
-fn phase_str(pod: &Pod) -> &str {
+fn phase_str(pod: &Pod) -> String {
     if let Some(_) = pod.metadata.deletion_timestamp {
         // Was deleted
-        "Terminating"
+        "Terminating".to_owned()
     } else if has_waiting(pod) {
-        "ContainerCreating"
+        "ContainerCreating".to_owned()
     } else {
-        pod.status.phase.as_str()
+        pod.status.phase.clone()
     }
 }
 
-fn phase_style(phase: &str) -> &str {
+fn phase_style(phase: &String) -> &'static str {
+    phase_style_str(phase.as_str())
+}
+
+fn phase_style_str(phase: &str) -> &'static str {
     match phase {
         "Pending" | "Running" | "Active" => "Fg",
         "Terminated" | "Terminating" => "Fr",
@@ -261,7 +265,10 @@ fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
 }
 
 /// Print out the specified list of pods in a pretty format
-fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_namespace: bool, writer: &mut ClickWriter) {
+fn print_podlist(podlist: PodList,
+                 show_labels: bool, show_annot: bool, show_namespace: bool,
+                 regex: Option<Regex>,
+                 writer: &mut ClickWriter) -> PodList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
     if show_labels {
@@ -275,16 +282,21 @@ fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_na
     }
     table.set_titles(title_row);
 
-    for (i,pod) in podlist.items.iter().enumerate() {
-        let mut row = Vec::new();
-        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
-        row.push(Cell::new(pod.metadata.name.as_str()));
-        let ps = phase_str(pod);
-        row.push(Cell::new(ps).style_spec(phase_style(ps)));
+    let pods_specs = podlist.items.into_iter().map(|pod| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(pod.metadata.name.clone()));
+
+        {
+            let ps = phase_str(&pod);
+            let ss = phase_style(&ps);
+            specs.push(CellSpec::with_style_owned(ps, ss));
+        }
+
         if let Some(ts) = pod.metadata.creation_timestamp {
-            row.push(Cell::new(time_since(ts).as_str()));
+            specs.push(CellSpec::new_owned(time_since(ts)));
         } else {
-            row.push(Cell::new("unknown"));
+            specs.push(CellSpec::new("unknown"));
         }
 
         let restarts = if let Some(ref stats) = pod.status.container_statuses {
@@ -292,24 +304,43 @@ fn print_podlist(podlist: &PodList, show_labels: bool, show_annot: bool, show_na
         } else {
             0
         };
-        row.push(Cell::new(format!("{}", restarts).as_str()));
+        specs.push(CellSpec::new_owned(format!("{}", restarts)));
 
         if show_labels {
-            row.push(Cell::new(keyval_string(&pod.metadata.labels).as_str()));
+            specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.labels)));
         }
 
         if show_annot {
-            row.push(Cell::new(keyval_string(&pod.metadata.annotations).as_str()));
+            specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.annotations)));
         }
 
         if show_namespace {
-            row.push(Cell::new(pod.metadata.namespace.as_ref().unwrap_or(&"[Unknown]".to_owned())));
+            specs.push(CellSpec::new_owned(
+                match pod.metadata.namespace {
+                    Some(ref ns) => ns.clone(),
+                    None => "[Unknown]".to_owned(),
+                }));
         }
-        table.add_row(Row::new(row));
-    }
+        (pod, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(pods_specs, r),
+        None => pods_specs.collect(),
+    };
+
+    ::table::add_to_table(&mut table, &filtered);
+
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(());
+    }
+
+    let final_pods = filtered.into_iter().map(|pod_spec| {
+        pod_spec.0
+    }).collect();
+    PodList {
+        items: final_pods,
     }
 }
 
@@ -401,16 +432,18 @@ fn print_deployments(deplist: &DeploymentList, writer: &mut ClickWriter) {
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_servicelist(servlist: &ServiceList, _show_labels: bool, writer: &mut ClickWriter) {
+fn print_servicelist(servlist: ServiceList, regex: Option<Regex>, _show_labels: bool, writer: &mut ClickWriter) -> ServiceList {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "ClusterIP", "External IPs", "Port(s)", "Age"]);
-    for (i, service) in servlist.items.iter().enumerate() {
-        let mut row = Vec::new();
-        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
-        row.push(Cell::new(service.metadata.name.as_str()));
-        row.push(Cell::new(format!("{}", service.spec.cluster_ip.as_ref().unwrap_or(&"<none>".to_owned())).as_str()));
+    let service_specs = servlist.items.into_iter().map(|service| {
+        let mut specs = Vec::new();
+
+        specs.push(CellSpec::new_index());
+
+        specs.push(CellSpec::new_owned(service.metadata.name.clone()));
+        specs.push(CellSpec::new_owned(format!("{}", service.spec.cluster_ip.as_ref().unwrap_or(&"<none>".to_owned()))));
         if let Some(ref eips) = service.spec.external_ips {
-            row.push(Cell::new(shorten_to(eips.join(", "), 18).as_str()));
+            specs.push(CellSpec::new_owned(shorten_to(eips.join(", "), 18)));
         } else {
             // look in the status for the elb name
             if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
@@ -423,14 +456,15 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool, writer: &mut Cl
                         }
                     }).collect();
                     let s = strs.join(", ");
-                    row.push(Cell::new(shorten_to(s,18).as_str()));
+                    specs.push(CellSpec::new_owned(shorten_to(s,18)));
                 } else {
-                    row.push(Cell::new("<none>"));
+                    specs.push(CellSpec::new("<none>"));
                 }
             } else {
-                row.push(Cell::new("<none>"));
+                specs.push(CellSpec::new("<none>"));
             }
         }
+
         let port_strs: Vec<String> =
             if let Some(ref ports) = service.spec.ports {
                 ports.iter().map(|p| {
@@ -443,13 +477,29 @@ fn print_servicelist(servlist: &ServiceList, _show_labels: bool, writer: &mut Cl
             } else {
                 vec!["<none>".to_owned()]
             };
-        row.push(Cell::new(port_strs.join(",").as_str()));
-        row.push(Cell::new(format!("{}", time_since(service.metadata.creation_timestamp.unwrap())).as_str()));
-        table.add_row(Row::new(row));
-    }
+        specs.push(CellSpec::new_owned(port_strs.join(",")));
+        specs.push(CellSpec::new_owned(format!("{}", time_since(service.metadata.creation_timestamp.unwrap()))));
+
+        (service, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(service_specs, r),
+        None => service_specs.collect(),
+    };
+
+    ::table::add_to_table(&mut table, &filtered);
+
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(());
+    }
+
+    let final_services = filtered.into_iter().map(|service_spec| {
+        service_spec.0
+    }).collect();
+    ServiceList {
+        items: final_services,
     }
 }
 
@@ -458,28 +508,21 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     let mut table = Table::new();
     table.set_titles(row!["Name", "Status", "Age"]);
 
-    let pod_specs = nslist.items.iter().map(|ns| {
+    let ns_specs = nslist.items.iter().map(|ns| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new(ns.metadata.name.as_str()));
         let ps = ns.status.phase.as_str();
-        specs.push(CellSpec::with_style(ps,phase_style(ps)));
+        specs.push(CellSpec::with_style(ps,phase_style_str(ps)));
         specs.push(CellSpec::new_owned(format!("{}", time_since(ns.metadata.creation_timestamp.unwrap()))));
         (ns, specs)
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(pod_specs, r),
-        None => pod_specs.collect(),
+        Some(r) => ::table::filter(ns_specs, r),
+        None => ns_specs.collect(),
     };
 
-    for ns_spec in filtered.iter() {
-        let row_vec: Vec<Cell> = ns_spec.1.iter().map(|spec| spec.to_cell()).collect();
-        table.add_row(Row::new(row_vec));
-    }
-
-    // let _final_nses = filtered.into_iter().map(|ns_spec| {
-    //     ns_spec.0
-    // });
+    ::table::add_to_table(&mut table, &filtered);
 
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
@@ -628,6 +671,15 @@ command!(Pods,
          |l| { l == "pods" },
          noop_complete,
          |matches, env, writer| {
+
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
              let mut urlstr = if let Some(ref ns) = env.namespace {
                  format!("/api/v1/namespaces/{}/pods", ns)
              } else {
@@ -655,25 +707,17 @@ command!(Pods,
                  k.get(urlstr.as_str())
              });
 
-             if let Some(l) = pl {
-                 let final_list =
-                     if let Some(pattern) = matches.value_of("regex") {
-                         if let Ok(regex) = Regex::new(pattern) {
-                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
-                             Some(PodList {
-                                 items: filtered
-                             })
-                         } else {
-                             write!(stderr(), "Invalid regex: {}\n", pattern).unwrap_or(());
-                             None
-                         }
-                     } else {
-                         Some(l)
-                     };
-                 if let Some(ref l) = final_list {
-                     print_podlist(l, matches.is_present("showlabels"), matches.is_present("showannot"), env.namespace.is_none(), writer);
-                 }
-                 env.set_podlist(final_list);
+             match pl {
+                 Some(l) => {
+                     let end_list = print_podlist(l,
+                                                  matches.is_present("showlabels"),
+                                                  matches.is_present("showannot"),
+                                                  env.namespace.is_none(),
+                                                  regex,
+                                                  writer);
+                     env.set_podlist(Some(end_list));
+                 },
+                 None => env.set_podlist(None),
              }
          }
 );
@@ -1231,10 +1275,25 @@ command!(Services,
                       .long("labels")
                       .help("include labels in output")
                       .takes_value(false))
+                 .arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter services by the specified regex")
+                      .takes_value(true))
+
          },
          |l| { l == "services" },
          noop_complete,
          |matches, env, writer| {
+
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
              let url =
                  if let Some(ref ns) = env.namespace {
                      format!("/api/v1/namespaces/{}/services", ns)
@@ -1244,12 +1303,13 @@ command!(Services,
              let sl: Option<ServiceList> = env.run_on_kluster(|k| {
                  k.get(url.as_str())
              });
-             if let Some(ref s) = sl {
-                 print_servicelist(&s, matches.is_present("labels"), writer);
+             if let Some(s) = sl {
+                 let filtered = print_servicelist(s, regex, matches.is_present("labels"), writer);
+                 env.set_servicelist(Some(filtered));
              } else {
                  clickwrite!(writer, "no services\n");
+                 env.set_servicelist(None);
              }
-             env.set_servicelist(sl);
          }
 );
 

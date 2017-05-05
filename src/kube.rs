@@ -404,7 +404,7 @@ impl Kluster {
 
     /// Get a resource and deserialize it as a T
     pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
-        where T: Deserialize {
+        where for<'de> T: Deserialize<'de> {
 
         let resp = try!(self.send_req(path));
         let resp = try!(self.check_resp(resp));

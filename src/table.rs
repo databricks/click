@@ -75,12 +75,28 @@ impl<'a> CellSpec<'a> {
         }
     }
 
+    pub fn with_align_owned(txt: String, align: format::Alignment) -> CellSpec<'a> {
+        CellSpec {
+            txt: CellSpecTxt::String(txt),
+            style: None,
+            align: Some(align),
+        }
+    }
+
     pub fn to_cell(&self, index: usize) -> Cell {
-        let cell = match self.txt {
-            CellSpecTxt::Index => Cell::new(format!("{}", index).as_str()),
+        let mut cell = match self.txt {
+            CellSpecTxt::Index => {
+                let mut c = Cell::new(format!("{}", index).as_str());
+                c.align(format::Alignment::RIGHT);
+                c
+            },
             CellSpecTxt::Str(ref s) => Cell::new(s),
             CellSpecTxt::String(ref s) => Cell::new(s.as_str()),
         };
+
+        if let Some(a) = self.align {
+            cell.align(a);
+        }
 
         if let Some(style) = self.style {
             cell.style_spec(style)

@@ -363,71 +363,108 @@ fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
 }
 
 /// Print out the specified list of nodes in a pretty format
-fn print_nodelist(nodelist: &NodeList, labels: bool, writer: &mut ClickWriter) {
+fn print_nodelist(nodelist: NodeList, labels: bool,
+                  regex: Option<Regex>,
+                  writer: &mut ClickWriter) -> NodeList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "State", "Age"];
     if labels {
         title_row.add_cell(Cell::new("Labels"));
     }
     table.set_titles(title_row);
-    for (i, node) in nodelist.items.iter().enumerate() {
-        let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
-        let (state, state_style) =
-            if let Some(cond) = readycond.get(0) {
-                if cond.status == "True" {
-                    ("Ready", "Fg")
+    let nodes_specs = nodelist.items.into_iter().map(|node| {
+        let mut specs = Vec::new();
+        { // scope borrows
+            let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
+            let (state, state_style) =
+                if let Some(cond) = readycond.get(0) {
+                    if cond.status == "True" {
+                        ("Ready", "Fg")
+                    } else {
+                        ("Not Ready", "Fr")
+                    }
                 } else {
-                    ("Not Ready", "Fr")
-                }
-            } else {
-                ("Unknown", "Fy")
-            };
+                    ("Unknown", "Fy")
+                };
 
-        let state =
-            if let Some(b) = node.spec.unschedulable {
-                if b {
-                    format!("{}\nSchedulingDisabled", state)
+            let state =
+                if let Some(b) = node.spec.unschedulable {
+                    if b {
+                        format!("{}\nSchedulingDisabled", state)
+                    } else {
+                        state.to_owned()
+                    }
                 } else {
                     state.to_owned()
-                }
-            } else {
-                state.to_owned()
-            };
+                };
 
-        let mut row = Vec::new();
-        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
-        row.push(Cell::new(node.metadata.name.as_str()));
-        row.push(Cell::new(state.as_str()).style_spec(state_style));
-        row.push(Cell::new(format!("{}", time_since(node.metadata.creation_timestamp.unwrap())).as_str()));
-        if labels {
-            row.push(Cell::new(keyval_string(&node.metadata.labels).as_str()));
+            specs.push(CellSpec::new_index());
+            specs.push(CellSpec::new_owned(node.metadata.name.clone()));
+            specs.push(CellSpec::with_style_owned(state, state_style));
+            specs.push(CellSpec::new_owned(format!("{}", time_since(node.metadata.creation_timestamp.unwrap()))));
+            if labels {
+                specs.push(CellSpec::new_owned(keyval_string(&node.metadata.labels)));
+            }
         }
-        table.add_row(Row::new(row));
-    }
+        (node, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(nodes_specs, r),
+        None => nodes_specs.collect(),
+    };
+
+    ::table::add_to_table(&mut table, &filtered);
+
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(());
+    }
+
+    let final_nodes = filtered.into_iter().map(|node_spec| {
+        node_spec.0
+    }).collect();
+    NodeList {
+        items: final_nodes,
     }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_deployments(deplist: &DeploymentList, writer: &mut ClickWriter) {
+fn print_deployments(deplist: DeploymentList,
+                     _show_labels: bool,
+                     regex: Option<Regex>,
+                     writer: &mut ClickWriter) -> DeploymentList {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "Desired", "Current", "Up To Date", "Available", "Age"]);
-    for (i, dep) in deplist.items.iter().enumerate() {
-        let mut row = Vec::new();
-        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
-        row.push(Cell::new(dep.metadata.name.as_str()));
-        row.push(Cell::new_align(format!("{}", dep.spec.replicas).as_str(), format::Alignment::CENTER));
-        row.push(Cell::new_align(format!("{}", dep.status.replicas).as_str(), format::Alignment::CENTER));
-        row.push(Cell::new_align(format!("{}", dep.status.updated).as_str(), format::Alignment::CENTER));
-        row.push(Cell::new_align(format!("{}", dep.status.available).as_str(), format::Alignment::CENTER));
-        row.push(Cell::new(format!("{}", time_since(dep.metadata.creation_timestamp.unwrap())).as_str()));
-        table.add_row(Row::new(row));
-    }
+    let deps_specs = deplist.items.into_iter().map(|dep| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(dep.metadata.name.clone()));
+        specs.push(CellSpec::with_align_owned(format!("{}", dep.spec.replicas), format::Alignment::CENTER));
+        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.replicas), format::Alignment::CENTER));
+        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.updated), format::Alignment::CENTER));
+        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.available), format::Alignment::CENTER));
+        specs.push(CellSpec::new_owned(format!("{}", time_since(dep.metadata.creation_timestamp.unwrap()))));
+        (dep, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(deps_specs, r),
+        None => deps_specs.collect(),
+    };
+
+    ::table::add_to_table(&mut table, &filtered);
+
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(());
+    }
+
+    let final_deps = filtered.into_iter().map(|dep_spec| {
+        dep_spec.0
+    }).collect();
+    DeploymentList {
+        items: final_deps,
     }
 }
 
@@ -1251,18 +1288,35 @@ command!(Nodes,
                       .long("labels")
                       .help("include labels in output")
                       .takes_value(false))
+                 .arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter pods by the specified regex")
+                      .takes_value(true))
+
          },
          |l| { l == "nodes" },
          noop_complete,
          |matches, env, writer| {
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
              let url = "/api/v1/nodes";
              let nl: Option<NodeList> = env.run_on_kluster(|k| {
                  k.get(url)
              });
-             if let Some(ref n) = nl {
-                 print_nodelist(&n, matches.is_present("labels"), writer);
+             match nl {
+                 Some(n) => {
+                     let final_list = print_nodelist(n, matches.is_present("labels"), regex, writer);
+                     env.set_nodelist(Some(final_list));
+                 },
+                 None => env.set_nodelist(None),
              }
-             env.set_nodelist(nl);
          }
 );
 
@@ -1343,6 +1397,14 @@ command!(Deployments,
          |l| { l == "deps" || l == "deployments" },
          noop_complete,
          |matches, env, writer| {
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
              let mut urlstr = if let Some(ref ns) = env.namespace {
                  format!("/apis/extensions/v1beta1/namespaces/{}/deployments", ns)
              } else {
@@ -1357,27 +1419,12 @@ command!(Deployments,
              let dl: Option<DeploymentList> = env.run_on_kluster(|k| {
                  k.get(urlstr.as_str())
              });
-
-             if let Some(l) = dl {
-                 let final_list =
-                     if let Some(pattern) = matches.value_of("regex") {
-                         if let Ok(regex) = Regex::new(pattern) {
-                             let filtered = l.items.into_iter().filter(|x| regex.is_match(x.metadata.name.as_str())).collect();
-                             Some(DeploymentList {
-                                 items: filtered
-                             })
-                         } else {
-                             write!(stderr(), "Invalid regex: {}", pattern).unwrap_or(());
-                             None
-                         }
-                     } else {
-                         Some(l)
-                     };
-
-                 if let Some(ref d) = final_list {
-                     print_deployments(&d, writer);
-                 }
-                 env.set_deplist(final_list);
+             match dl {
+                 Some(d) => {
+                     let final_list = print_deployments(d, matches.is_present("labels"), regex, writer);
+                     env.set_deplist(Some(final_list));
+                 },
+                 None => env.set_deplist(None),
              }
          }
 );

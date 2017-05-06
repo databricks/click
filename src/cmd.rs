@@ -30,7 +30,6 @@ use humantime::parse_duration;
 use prettytable::{format, Table};
 use prettytable::cell::Cell;
 use prettytable::row::Row;
-use term::terminfo::TerminfoTerminal;
 use serde_json;
 use serde_json::Value;
 use regex::Regex;
@@ -238,8 +237,10 @@ fn time_since(date: DateTime<UTC>) -> String {
         format!("{}d", diff.num_days())
     } else if diff.num_hours() > 0 {
         format!("{}h", diff.num_hours())
-    } else {
+    } else if diff.num_minutes() > 0 {
         format!("{}m", diff.num_minutes())
+    } else {
+        format!("{}s", diff.num_seconds())
     }
 }
 
@@ -249,18 +250,6 @@ fn shorten_to(s: String, max_len: usize) -> String {
         format!("{}...", &s[0..(max_len-3)])
     } else {
         s
-    }
-}
-
-fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
-    match TerminfoTerminal::new(writer) {
-        Some(ref mut term) => {
-            table.print_term(term).unwrap_or(());
-            true
-        },
-        None => {
-            false
-        },
     }
 }
 
@@ -329,12 +318,7 @@ fn print_podlist(podlist: PodList,
         None => pods_specs.collect(),
     };
 
-    ::table::add_to_table(&mut table, &filtered);
-
-    table.set_format(TBLFMT.clone());
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
-    }
+    ::table::print_table(&mut table, &filtered, writer);
 
     let final_pods = filtered.into_iter().map(|pod_spec| {
         pod_spec.0
@@ -414,12 +398,7 @@ fn print_nodelist(nodelist: NodeList, labels: bool,
         None => nodes_specs.collect(),
     };
 
-    ::table::add_to_table(&mut table, &filtered);
-
-    table.set_format(TBLFMT.clone());
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
-    }
+    ::table::print_table(&mut table, &filtered, writer);
 
     let final_nodes = filtered.into_iter().map(|node_spec| {
         node_spec.0
@@ -453,12 +432,7 @@ fn print_deployments(deplist: DeploymentList,
         None => deps_specs.collect(),
     };
 
-    ::table::add_to_table(&mut table, &filtered);
-
-    table.set_format(TBLFMT.clone());
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
-    }
+    ::table::print_table(&mut table, &filtered, writer);
 
     let final_deps = filtered.into_iter().map(|dep_spec| {
         dep_spec.0
@@ -525,12 +499,7 @@ fn print_servicelist(servlist: ServiceList, regex: Option<Regex>, _show_labels: 
         None => service_specs.collect(),
     };
 
-    ::table::add_to_table(&mut table, &filtered);
-
-    table.set_format(TBLFMT.clone());
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
-    }
+    ::table::print_table(&mut table, &filtered, writer);
 
     let final_services = filtered.into_iter().map(|service_spec| {
         service_spec.0
@@ -559,12 +528,7 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
         None => ns_specs.collect(),
     };
 
-    ::table::add_to_table(&mut table, &filtered);
-
-    table.set_format(TBLFMT.clone());
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
-    }
+    ::table::print_table(&mut table, &filtered, writer);
 }
 
 

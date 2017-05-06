@@ -15,11 +15,24 @@
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
 
+use output::ClickWriter;
+
 use clap::ArgMatches;
 use prettytable::cell::Cell;
 use prettytable::row::Row;
 use prettytable::{format, Table};
 use regex::Regex;
+use term::terminfo::TerminfoTerminal;
+
+lazy_static! {
+    static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
+        .separators(
+            &[format::LinePosition::Title, format::LinePosition::Bottom],
+						format::LineSeparator::new('-', '+', '+', '+')
+				)
+        .padding(1,1)
+        .build();
+}
 
 enum CellSpecTxt<'a> {
     Index,
@@ -145,9 +158,28 @@ pub fn filter<'a, T, I> (things: I, regex: Regex) -> Vec<(T, Vec<CellSpec<'a>>)>
     }).collect()
 }
 
-pub fn add_to_table<'a, T>(table: &mut Table, specs: &Vec<(T, Vec<CellSpec<'a>>)>) {
+fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
+    match TerminfoTerminal::new(writer) {
+        Some(ref mut term) => {
+            table.print_term(term).unwrap_or(());
+            true
+        },
+        None => {
+            false
+        },
+    }
+}
+
+
+pub fn print_table<'a, T>(table: &mut Table,
+                          specs: &Vec<(T, Vec<CellSpec<'a>>)>,
+                          writer: &mut ClickWriter) {
     for (index, t_spec) in specs.iter().enumerate() {
         let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
         table.add_row(Row::new(row_vec));
+    }
+    table.set_format(TBLFMT.clone());
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(());
     }
 }

@@ -154,8 +154,9 @@ impl Config {
                 },
                 (None, Some(cert_data)) => {
                     match ::base64::decode(cert_data.as_str()) {
-                        Ok(cert) => {
-                            cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(String::from_utf8(cert.into_iter().filter(|&i| {i != 0}).collect()).unwrap()), cluster.conf.server));
+                        Ok(mut cert) => {
+                            cert.retain(|&i| {i != 0});
+                            cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(String::from_utf8(cert).unwrap()), cluster.conf.server));
                         },
                         Err(e) => {
                             println!("Invalid certificate data, could not base64 decode: {}", e.description());
@@ -209,10 +210,12 @@ impl Config {
                                 None
                             }
                         } else if let (&Some(ref client_cert_data), &Some(ref key_data)) = (&user.client_cert_data, &user.client_key_data) {
-                            let cert_enc = try!(::base64::decode(client_cert_data.as_str()));
-                            let cert = get_cert_from_pem(String::from_utf8(cert_enc.into_iter().filter(|&i| {i != 0}).collect()).unwrap().as_str());
-                            let key_enc = try!(::base64::decode(key_data.as_str()));
-                            let key = get_key_from_rsa(String::from_utf8(key_enc.into_iter().filter(|&i| {i != 0}).collect()).unwrap().as_str());
+                            let mut cert_enc = try!(::base64::decode(client_cert_data.as_str()));
+                            cert_enc.retain(|&i| {i != 0});
+                            let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
+                            let mut key_enc = try!(::base64::decode(key_data.as_str()));
+                            key_enc.retain(|&i| {i != 0});
+                            let key = get_key_from_rsa(String::from_utf8(key_enc).unwrap().as_str());
                             match (cert, key) {
                                 (Some(c), Some(k)) => {
                                     Some(KlusterAuth::with_cert_and_key(c, k))

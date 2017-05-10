@@ -5,6 +5,7 @@ authors = ["Nick Lanham <nick@afternight.org>"]
 
 [dependencies]
 ansi_term = "0.9"
+base64 = "0.5"
 chrono = { version = "0.3", features = ["serde"] }
 clap = "2.22"
 ctrlc = "3.0"

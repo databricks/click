@@ -31,7 +31,6 @@ use serde_json::{Map,Value};
 use rustls::{Certificate, PrivateKey};
 
 use std::fmt;
-use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Duration;
@@ -349,18 +348,17 @@ impl Kluster {
 
     fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth) -> TlsClient {
         let mut tlsclient = TlsClient::new();
-        if let &Some(ref cert_path) = cert_opt {
+        if let &Some(ref cert_data) = cert_opt {
             // add the cert to the root store
             let mut cfg = Arc::get_mut(&mut tlsclient.cfg).unwrap();
-            let f = File::open(cert_path).unwrap();
-            let mut br = BufReader::new(f);
+            let mut br = BufReader::new(cert_data.as_bytes());
             let added = cfg.root_store.add_pem_file(&mut br).unwrap();
             if added.1 > 0 {
-                println!("[WARNING] Couldn't add some certs from {}", cert_path);
+                println!("[WARNING] Couldn't add your server cert, connection will probably fail");
             }
 
             if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
-                cfg.set_single_client_cert(cert.clone(),key.clone());
+                cfg.set_single_client_cert(cert.clone(), key.clone());
             }
         }
         tlsclient

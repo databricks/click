@@ -13,6 +13,7 @@
 // limitations under the License.
 
 
+use base64;
 use hyper;
 use serde_json;
 use serde_yaml;
@@ -23,6 +24,7 @@ use std::convert::From;
 #[derive(Debug)]
 pub enum KubeErrNo {
     InvalidContext,
+    InvalidContextName,
     InvalidCluster,
     InvalidUser,
     Unauthorized,
@@ -32,7 +34,8 @@ pub enum KubeErrNo {
 impl fmt::Display for KubeErrNo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &KubeErrNo::InvalidContext => write!(f, "Invalid Context Name"),
+            &KubeErrNo::InvalidContext => write!(f, "Invalid Context"),
+            &KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
             &KubeErrNo::Unauthorized => write!(f, "Not authorized to talk to cluster, check credentials in config"),
@@ -44,7 +47,8 @@ impl fmt::Display for KubeErrNo {
 impl error::Error for KubeErrNo {
     fn description(&self) -> &str {
         match self {
-            &KubeErrNo::InvalidContext => "Invalid Context Name",
+            &KubeErrNo::InvalidContext => "Invalid Context",
+            &KubeErrNo::InvalidContextName => "Invalid Context Name",
             &KubeErrNo::InvalidCluster => "Invalid Cluster Name",
             &KubeErrNo::InvalidUser => "Invalid User Name",
             &KubeErrNo::Unauthorized => "Not authorized to talk to cluster, check credentials in config",
@@ -62,6 +66,7 @@ pub enum KubeError {
     ParseErr(String),
     PipeErr(String),
     Kube(KubeErrNo),
+    DecodeError(base64::DecodeError),
     Io(io::Error),
     HyperParse(hyper::error::ParseError),
     HyperErr(hyper::error::Error),
@@ -76,6 +81,7 @@ impl fmt::Display for KubeError {
             KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
             KubeError::PipeErr(ref s) => write!(f, "Pipe Error: {}", s),
             KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
+            KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
             KubeError::HyperErr(ref err) => write!(f, "Hyper error: {}", err),
@@ -91,6 +97,7 @@ impl error::Error for KubeError {
             KubeError::ParseErr(ref s) => s,
             KubeError::PipeErr(ref s) => s,
             KubeError::Kube(ref err) => err.description(),
+            KubeError::DecodeError(ref err) => err.description(),
             KubeError::Io(ref err) => err.description(),
             KubeError::HyperParse(ref err) => err.description(),
             KubeError::HyperErr(ref err) => err.description(),
@@ -104,6 +111,7 @@ impl error::Error for KubeError {
             KubeError::ParseErr(_) => None,
             KubeError::PipeErr(_) => None,
             KubeError::Kube(ref err) => Some(err),
+            KubeError::DecodeError(ref err) => Some(err),
             KubeError::Io(ref err) => Some(err),
             KubeError::HyperParse(ref err) => Some(err),
             KubeError::HyperErr(ref err) => Some(err),
@@ -143,5 +151,11 @@ impl From<serde_json::Error> for KubeError {
 impl From<serde_yaml::Error> for KubeError {
     fn from(err: serde_yaml::Error) -> KubeError {
         KubeError::SerdeYaml(err)
+    }
+}
+
+impl From<base64::DecodeError> for KubeError {
+    fn from(err: base64::DecodeError) -> KubeError {
+        KubeError::DecodeError(err)
     }
 }

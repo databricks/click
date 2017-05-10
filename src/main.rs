@@ -20,6 +20,7 @@
 #[macro_use] mod output;
 
 extern crate ansi_term;
+extern crate base64;
 extern crate clap;
 extern crate chrono;
 extern crate ctrlc;
@@ -154,7 +155,7 @@ impl Env {
                         Some(k)
                     },
                     Err(e) => {
-                        println!("[Warning] Couldn't find context, no active context: {}", e);
+                        println!("[Warning] Couldn't find/load context {}, now no current context.  Error: {}", cname, e);
                         None
                     }
                 };

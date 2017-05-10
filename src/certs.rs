@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use regex::Regex;
 use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigner;
 
+use std::error::Error;
 use std::fs::{File, metadata};
 use std::io::{BufReader, Read};
 use std::path::Path;
@@ -65,6 +67,38 @@ pub fn get_cert(path: &str) -> Option<Certificate> {
     let mut cert_buf = Vec::new();
     cert_br.read_to_end(&mut cert_buf).unwrap();
     Some(Certificate(cert_buf))
+}
+
+fn get_body(s: &str) -> String {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(-----BEGIN .*-----\n)((?:(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)*\n)+)(-----END .*-----)").unwrap();
+    }
+    let remove_carriage = s.replace("\r", "");
+    let no_headers = RE.replace(remove_carriage.as_str(), "$2");
+    no_headers.replace("\n", "")
+}
+
+// Convert pem string to der cert
+pub fn get_cert_from_pem(pem: &str) -> Option<Certificate> {
+    match ::base64::decode(get_body(pem).as_str()) {
+        Ok(der_vec) => Some(Certificate(der_vec)),
+        Err(e) => {
+            println!("Failed to decode cert: {}", e.description());
+            None
+        },
+    }
+}
+
+// Convert rsa private string to der cert
+pub fn get_key_from_rsa(rsa: &str) -> Option<PrivateKey> {
+    let body = get_body(rsa);
+    match ::base64::decode(body.as_str()) {
+        Ok(der_vec) => Some(PrivateKey(der_vec)),
+        Err(e) => {
+            println!("Failed to decode private key: {:?}", e);
+            None
+        },
+    }
 }
 
 

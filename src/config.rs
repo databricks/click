@@ -25,7 +25,7 @@ use std::io::{BufReader, Read};
 use ::Env;
 use error::{KubeError,KubeErrNo};
 use kube::{Kluster, KlusterAuth};
-use certs::{get_cert, get_cert_from_pem, get_private_key, get_key_from_rsa};
+use certs::{get_cert, get_cert_from_pem, get_private_key, get_key_from_str};
 
 /// Kubernetes cluster config
 
@@ -215,7 +215,7 @@ impl Config {
                             let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
                             let mut key_enc = try!(::base64::decode(key_data.as_str()));
                             key_enc.retain(|&i| {i != 0});
-                            let key = get_key_from_rsa(String::from_utf8(key_enc).unwrap().as_str());
+                            let key = get_key_from_str(String::from_utf8(key_enc).unwrap().as_str());
                             match (cert, key) {
                                 (Some(c), Some(k)) => {
                                     Some(KlusterAuth::with_cert_and_key(c, k))

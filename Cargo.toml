@@ -9,6 +9,7 @@ base64 = "0.5"
 chrono = { version = "0.3", features = ["serde"] }
 clap = "2.22"
 ctrlc = "3.0"
+der-parser = "0.3"
 humantime = "1.0"
 hyper = "0.10"
 hyper-rustls = "0.3"

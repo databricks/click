@@ -24,6 +24,7 @@ extern crate base64;
 extern crate clap;
 extern crate chrono;
 extern crate ctrlc;
+extern crate der_parser;
 extern crate humantime;
 extern crate hyper;
 extern crate hyper_rustls;

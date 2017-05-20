@@ -1118,7 +1118,10 @@ command!(Delete,
                          clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
                          Some(format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, dep))
                      },
-                     // TODO: ADD ReplicaSet
+                     ::KObj::ReplicaSet(ref repset) => {
+                         clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
+                         Some(format!("/apis/extensions/v1beta1/namespaces/{}/replicasets/{}", ns, repset))
+                     },
                      ::KObj::None => {
                          write!(stderr(), "No active object").unwrap_or(());
                          None
@@ -1138,10 +1141,7 @@ command!(Delete,
                                  url.push_str(grace);
                              }
                              if matches.is_present("orphan") {
-                                 if matches.is_present("grace") {
-                                     url.push('&');
-                                 }
-                                 url.push_str("orphanDependents=true");
+                                 url.push_str("&orphanDependents=true");
                              }
                              let result = env.run_on_kluster(|k| {
                                  k.delete(url.as_str())

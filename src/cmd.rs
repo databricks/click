@@ -1137,11 +1137,16 @@ command!(Delete,
                          if conf.trim() == "y" || conf.trim() == "yes" {
                              if let Some(grace) = matches.value_of("grace") {
                                  // already validated that it's a legit number
-                                 url.push_str("&gracePeriodSeconds=");
+                                 url.push_str("?gracePeriodSeconds=");
                                  url.push_str(grace);
                              }
                              if matches.is_present("orphan") {
-                                 url.push_str("&orphanDependents=true");
+                                 if matches.is_present("grace") {
+                                     url.push('&');
+                                 } else {
+                                     url.push('?');
+                                 }
+                                 url.push_str("orphanDependents=true");
                              }
                              let result = env.run_on_kluster(|k| {
                                  k.delete(url.as_str())

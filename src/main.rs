@@ -43,6 +43,7 @@ mod config;
 mod error;
 mod kube;
 mod table;
+mod values;
 
 use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
 use clap::{Arg, App};
@@ -61,8 +62,9 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList};
+use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList, ReplicaSetList};
 use output::ClickWriter;
+use values::val_str_opt;
 
 /// An object we can have as a "current" thing
 enum KObj {
@@ -71,6 +73,7 @@ enum KObj {
     Node(String),
     Deployment(String),
     Service(String),
+    ReplicaSet(String),
 }
 
 enum LastList {
@@ -79,6 +82,7 @@ enum LastList {
     NodeList(NodeList),
     DeploymentList(DeploymentList),
     ServiceList(ServiceList),
+    ReplicaSetList(ReplicaSetList),
 }
 
 /// An ongoing port forward
@@ -143,6 +147,7 @@ impl Env {
                                   KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
                                   KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
                                   KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
+                                  KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
                               }
         );
 
@@ -212,6 +217,17 @@ impl Env {
         }
     }
 
+    fn set_replicasetlist(&mut self, replicasets: Option<ReplicaSetList>) {
+        match replicasets {
+            Some(list) => {
+                self.last_objs = LastList::ReplicaSetList(list);
+            },
+            None => {
+                self.last_objs = LastList::None;
+            },
+        }
+    }
+
     fn clear_current(&mut self) {
         self.current_object = KObj::None;
         self.set_prompt();
@@ -254,6 +270,23 @@ impl Env {
                 if let Some(service) = sl.items.get(num) {
                     self.current_object = KObj::Service(service.metadata.name.clone());
                     self.current_object_namespace = service.metadata.namespace.clone();
+                } else {
+                    self.current_object = KObj::None;
+                }
+            },
+            LastList::ReplicaSetList(ref rsl) => {
+                if let Some(ref replicaset) = rsl.items.get(num) {
+                    match val_str_opt("/metadata/name", replicaset) {
+                        Some(name) => {
+                            let namespace = val_str_opt("/metadata/namespace", replicaset);
+                            self.current_object = KObj::ReplicaSet(name);
+                            self.current_object_namespace = namespace;
+                        },
+                        None => {
+                            println!("ReplicaSet has no name in metadata");
+                            self.current_object = KObj::None;
+                        }
+                    }
                 } else {
                     self.current_object = KObj::None;
                 }
@@ -429,6 +462,7 @@ fn main() {
     commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Deployments::new()));
     commands.push(Box::new(cmd::Services::new()));
+    commands.push(Box::new(cmd::ReplicaSets::new()));
     commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));
     commands.push(Box::new(cmd::Describe::new()));

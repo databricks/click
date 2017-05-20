@@ -17,9 +17,10 @@
 use ::Env;
 use kube::{ContainerState, DeploymentList, Event, EventList,
            Pod, PodList, NamespaceList, NodeList, NodeCondition,
-           ServiceList};
+           ReplicaSetList, ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
+use values::{val_str, val_u64};
 
 use ansi_term::Colour::Green;
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -1007,6 +1008,21 @@ command!(Describe,
                          }
                      }
                  },
+                 ::KObj::ReplicaSet(ref replicaset) => {
+                     if let Some(ref ns) = env.current_object_namespace {
+                         let url = format!("/apis/extensions/v1beta1/namespaces/{}/replicasets/{}", ns, replicaset);
+                         let rs_value = env.run_on_kluster(|k| {
+                             k.get_value(url.as_str())
+                         });
+                         if let Some(rsval) = rs_value {
+                             if matches.is_present("json") {
+                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&rsval).unwrap());
+                             } else {
+                                 clickwrite!(writer, "ReplicaSet not supported without -j yet\n");
+                             }
+                         }
+                     }
+                 },
                  ::KObj::Service(ref service) => {
                      if let Some(ref ns) = env.current_object_namespace {
                          let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
@@ -1101,6 +1117,7 @@ command!(Delete,
                          clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
                          Some(format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, dep))
                      },
+                     // TODO: ADD ReplicaSet
                      ::KObj::None => {
                          write!(stderr(), "No active object").unwrap_or(());
                          None
@@ -1389,6 +1406,84 @@ command!(Deployments,
                      env.set_deplist(Some(final_list));
                  },
                  None => env.set_deplist(None),
+             }
+         }
+);
+
+fn print_replicasets(list: ReplicaSetList,
+                     regex: Option<Regex>,
+                     writer: &mut ClickWriter) -> ReplicaSetList {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "Desired", "Current", "Ready"]);
+    let rss_specs = list.items.into_iter().map(|rs| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(val_str("/metadata/name", &rs, "<none>")));
+        specs.push(CellSpec::new_owned(format!("{}", val_u64("/spec/replicas", &rs, 0))));
+        specs.push(CellSpec::new_owned(format!("{}", val_u64("/status/replicas", &rs, 0))));
+        specs.push(CellSpec::new_owned(format!("{}", val_u64("/status/readyReplicas", &rs, 0))));
+        (rs, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(rss_specs, r),
+        None => rss_specs.collect(),
+    };
+
+    ::table::print_table(&mut table, &filtered, writer);
+
+    let final_rss = filtered.into_iter().map(|rs_spec| {
+        rs_spec.0
+    }).collect();
+    ReplicaSetList {
+        items: final_rss,
+    }
+}
+
+command!(ReplicaSets,
+         "replicasets",
+         "Get replicasets (in current namespace if there is one)",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("show_label")
+                      .short("L")
+                      .long("show-labels")
+                      .help("Show replicaset labels")
+                      .takes_value(true))
+                 .arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter replicasets by the specified regex")
+                      .takes_value(true))
+         },
+         |l| { l == "rs" || l == "replicasets" },
+         noop_complete,
+         |matches, env, writer| {
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
+             let urlstr = if let Some(ref ns) = env.namespace {
+                 format!("/apis/extensions/v1beta1/namespaces/{}/replicasets", ns)
+             } else {
+                 "/apis/extensions/v1beta1/replicasets".to_owned()
+             };
+
+             let rsl: Option<ReplicaSetList> = env.run_on_kluster(|k| {
+                 k.get(urlstr.as_str())
+             });
+
+             match rsl {
+                 Some(l) => {
+                     let final_list = print_replicasets(l, regex, writer);
+                     env.set_replicasetlist(Some(final_list));
+                 },
+                 None => {
+                     env.set_replicasetlist(None);
+                 }
              }
          }
 );

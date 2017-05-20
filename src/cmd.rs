@@ -236,11 +236,11 @@ fn time_since(date: DateTime<UTC>) -> String {
     let now = UTC::now();
     let diff = now.signed_duration_since(date);
     if diff.num_days() > 0 {
-        format!("{}d", diff.num_days())
+        format!("{}d{}h", diff.num_days(), diff.num_hours())
     } else if diff.num_hours() > 0 {
-        format!("{}h", diff.num_hours())
+        format!("{}h{}m", diff.num_hours(), diff.num_minutes())
     } else if diff.num_minutes() > 0 {
-        format!("{}m", diff.num_minutes())
+        format!("{}m{}s", diff.num_minutes(), diff.num_seconds())
     } else {
         format!("{}s", diff.num_seconds())
     }

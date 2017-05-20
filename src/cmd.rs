@@ -662,7 +662,7 @@ command!(Pods,
                       .takes_value(true))
                  .arg(Arg::with_name("showlabels")
                       .short("L")
-                      .long("show-labels")
+                      .long("labels")
                       .help("Show pod labels as column in output")
                       .takes_value(false))
                  .arg(Arg::with_name("showannot")
@@ -1266,7 +1266,7 @@ command!(Nodes,
          "Get nodes in current context",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("labels")
-                      .short("l")
+                      .short("L")
                       .long("labels")
                       .help("include labels in output")
                       .takes_value(false))
@@ -1307,7 +1307,7 @@ command!(Services,
          "Get services in current context and namespace (if set)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("labels")
-                      .short("l")
+                      .short("L")
                       .long("labels")
                       .help("include labels in output")
                       .takes_value(false))
@@ -1447,7 +1447,7 @@ command!(ReplicaSets,
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("show_label")
                       .short("L")
-                      .long("show-labels")
+                      .long("labels")
                       .help("Show replicaset labels")
                       .takes_value(true))
                  .arg(Arg::with_name("regex")

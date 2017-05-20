@@ -185,47 +185,8 @@ impl Env {
         self.set_prompt();
     }
 
-    fn set_podlist(&mut self, pods: Option<PodList>) {
-        if let Some(list) = pods {
-            self.last_objs = LastList::PodList(list);
-        } else {
-            self.last_objs = LastList::None;
-        }
-    }
-
-    fn set_nodelist(&mut self, nodes: Option<NodeList>) {
-        if let Some(list) = nodes {
-            self.last_objs = LastList::NodeList(list);
-        } else {
-            self.last_objs = LastList::None;
-        }
-    }
-
-    fn set_deplist(&mut self, deployments: Option<DeploymentList>) {
-        if let Some(list) = deployments {
-            self.last_objs = LastList::DeploymentList(list);
-        } else {
-            self.last_objs = LastList::None;
-        }
-    }
-
-    fn set_servicelist(&mut self, services: Option<ServiceList>) {
-        if let Some(list) = services {
-            self.last_objs = LastList::ServiceList(list);
-        } else {
-            self.last_objs = LastList::None;
-        }
-    }
-
-    fn set_replicasetlist(&mut self, replicasets: Option<ReplicaSetList>) {
-        match replicasets {
-            Some(list) => {
-                self.last_objs = LastList::ReplicaSetList(list);
-            },
-            None => {
-                self.last_objs = LastList::None;
-            },
-        }
+    fn set_lastlist(&mut self, list: LastList) {
+        self.last_objs = list;
     }
 
     fn clear_current(&mut self) {

@@ -15,6 +15,7 @@
 //!  The commands one can run from the repl
 
 use ::Env;
+use ::LastList;
 use kube::{ContainerState, DeploymentList, Event, EventList,
            Pod, PodList, NamespaceList, NodeList, NodeCondition,
            ReplicaSetList, ServiceList};
@@ -717,9 +718,9 @@ command!(Pods,
                                                   env.namespace.is_none(),
                                                   regex,
                                                   writer);
-                     env.set_podlist(Some(end_list));
+                     env.set_lastlist(LastList::PodList(end_list));
                  },
-                 None => env.set_podlist(None),
+                 None => env.set_lastlist(LastList::None),
              }
          }
 );
@@ -1294,9 +1295,9 @@ command!(Nodes,
              match nl {
                  Some(n) => {
                      let final_list = print_nodelist(n, matches.is_present("labels"), regex, writer);
-                     env.set_nodelist(Some(final_list));
+                     env.set_lastlist(LastList::NodeList(final_list));
                  },
-                 None => env.set_nodelist(None),
+                 None => env.set_lastlist(LastList::None),
              }
          }
 );
@@ -1340,10 +1341,10 @@ command!(Services,
              });
              if let Some(s) = sl {
                  let filtered = print_servicelist(s, regex, matches.is_present("labels"), writer);
-                 env.set_servicelist(Some(filtered));
+                 env.set_lastlist(LastList::ServiceList(filtered));
              } else {
                  clickwrite!(writer, "no services\n");
-                 env.set_servicelist(None);
+                 env.set_lastlist(LastList::None);
              }
          }
 );
@@ -1403,9 +1404,9 @@ command!(Deployments,
              match dl {
                  Some(d) => {
                      let final_list = print_deployments(d, matches.is_present("labels"), regex, writer);
-                     env.set_deplist(Some(final_list));
+                     env.set_lastlist(LastList::DeploymentList(final_list));
                  },
-                 None => env.set_deplist(None),
+                 None => env.set_lastlist(LastList::None),
              }
          }
 );
@@ -1479,10 +1480,10 @@ command!(ReplicaSets,
              match rsl {
                  Some(l) => {
                      let final_list = print_replicasets(l, regex, writer);
-                     env.set_replicasetlist(Some(final_list));
+                     env.set_lastlist(LastList::ReplicaSetList(final_list));
                  },
                  None => {
-                     env.set_replicasetlist(None);
+                     env.set_lastlist(LastList::None);
                  }
              }
          }

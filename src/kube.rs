@@ -402,7 +402,12 @@ impl Kluster {
         } else if resp.status == StatusCode::Unauthorized {
             Err(KubeError::Kube(KubeErrNo::Unauthorized))
         } else {
-            Err(KubeError::Kube(KubeErrNo::Unknown))
+            // try and read an error message out
+            let val: Value = try!(serde_json::from_reader(resp));
+            match ::values::val_str_opt("/message", &val) {
+                Some(msg) => Err(KubeError::KubeServerError(msg)),
+                None => Err(KubeError::Kube(KubeErrNo::Unknown))
+            }
         }
     }
 

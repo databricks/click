@@ -744,6 +744,11 @@ command!(Logs,
                       .validator(valid_u32)
                       .help("Number of lines from the end of the logs to show")
                       .takes_value(true))
+                 .arg(Arg::with_name("previous")
+                      .short("p")
+                      .long("previous")
+                      .help("Return previous terminated container logs")
+                      .takes_value(false))
                  .arg(Arg::with_name("since")
                       .long("since")
                       .conflicts_with("sinceTime")
@@ -789,6 +794,9 @@ command!(Logs,
                  let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
                  if matches.is_present("follow") {
                      url.push_str("&follow=true");
+                 }
+                 if matches.is_present("previous") {
+                     url.push_str("&previous=true");
                  }
                  if matches.is_present("tail") {
                      url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());

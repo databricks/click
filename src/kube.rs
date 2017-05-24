@@ -372,12 +372,15 @@ impl Kluster {
 
     pub fn new(name: &str, cert_opt: Option<String>, server: &str, auth: KlusterAuth) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
+        let mut client = Client::with_connector(HttpsConnector::new(tlsclient));
+        client.set_read_timeout(Some(Duration::new(20,0)));
+        client.set_write_timeout(Some(Duration::new(20,0)));
         Ok(Kluster {
             name: name.to_owned(),
             endpoint: try!(Url::parse(server)),
             auth: auth,
             cert_opt: cert_opt,
-            client: Client::with_connector(HttpsConnector::new(tlsclient)),
+            client: client,
         })
     }
 

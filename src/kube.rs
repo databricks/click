@@ -356,15 +356,24 @@ impl Kluster {
         let mut tlsclient = TlsClient::new();
         if let &Some(ref cert_data) = cert_opt {
             // add the cert to the root store
-            let mut cfg = Arc::get_mut(&mut tlsclient.cfg).unwrap();
-            let mut br = BufReader::new(cert_data.as_bytes());
-            let added = cfg.root_store.add_pem_file(&mut br).unwrap();
-            if added.1 > 0 {
-                println!("[WARNING] Couldn't add your server cert, connection will probably fail");
-            }
+            if let Some(mut cfg) = Arc::get_mut(&mut tlsclient.cfg) {
+                let mut br = BufReader::new(cert_data.as_bytes());
+                match cfg.root_store.add_pem_file(&mut br) {
+                    Ok(added) => {
+                        if added.1 > 0 {
+                            println!("[WARNING] Couldn't add your server cert, connection will probably fail");
+                        }
+                    }
+                    Err(e) => {
+                        println!("[WARNING] Coudln't add your server cert, connection will probably fail. Error was: {:?}", e)
+                    }
+                }
 
-            if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
-                cfg.set_single_client_cert(cert.clone(), key.clone());
+                if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
+                    cfg.set_single_client_cert(cert.clone(), key.clone());
+                }
+            } else {
+                println!("[WARNING] Failed to configure tlsclient, connection will probably fail.  Please restart click");
             }
         }
         tlsclient

@@ -122,6 +122,62 @@ pub struct Config {
     pub users: HashMap<String, UserConf>,
 }
 
+// some utility functions
+fn auth_from_paths(client_cert_path: &String, key_path: &String, context: &str) -> Option<KlusterAuth> {
+    if client_cert_path.len() == 0 {
+        println!("Empty client certificate path for {}, can't continue", context);
+        return None;
+    }
+    if key_path.len() == 0 {
+        println!("Empty client key path for {}, can't continue", context);
+        return None;
+    }
+
+    let cert_full_path =
+        if client_cert_path.chars().next().unwrap() == '/' {  // unwrap is okay because we validated non-empty
+            client_cert_path.clone()
+        } else {
+            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), client_cert_path)
+        };
+    let key_full_path =
+        if key_path.chars().next().unwrap() == '/' {
+            key_path.clone()
+        } else {
+            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), key_path)
+        };
+    if let (Some(cert), Some(private_key)) = (get_cert(cert_full_path.as_str()), get_private_key(key_full_path.as_str())) {
+        Some(KlusterAuth::with_cert_and_key(cert, private_key))
+    } else {
+        println!("Can't read/convert cert or private key for {}", context);
+        None
+    }
+}
+
+fn auth_from_data(client_cert_data: &String, key_data: &String, context: &str) -> Result<Option<KlusterAuth>, KubeError> {
+     if client_cert_data.len() == 0 {
+        println!("Empty client certificate data for {}, can't continue", context);
+        return Ok(None);
+    }
+    if key_data.len() == 0 {
+        println!("Empty client key data for {}, can't continue", context);
+        return Ok(None);
+    }
+    let mut cert_enc = try!(::base64::decode(client_cert_data.as_str()));
+    cert_enc.retain(|&i| {i != 0});
+    let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
+    let mut key_enc = try!(::base64::decode(key_data.as_str()));
+    key_enc.retain(|&i| {i != 0});
+    let key = get_key_from_str(String::from_utf8(key_enc).unwrap().as_str());
+    match (cert, key) {
+        (Some(c), Some(k)) => {
+            Ok(Some(KlusterAuth::with_cert_and_key(c, k)))
+        },
+        _ => {
+            Ok(None)
+        }
+    }
+}
+
 impl Config {
     pub fn from_file(path: &str) -> Config {
         let iconf = IConfig::from_file(path);
@@ -203,27 +259,9 @@ impl Config {
                         if let Some(ref token) = user.token {
                             Some(KlusterAuth::with_token(token.as_str()))
                         } else if let (&Some(ref client_cert_path), &Some(ref key_path)) = (&user.client_cert, &user.client_key) {
-                            if let (Some(cert), Some(private_key)) = (get_cert(client_cert_path), get_private_key(key_path)) {
-                                Some(KlusterAuth::with_cert_and_key(cert, private_key))
-                            } else {
-                                println!("Can't read/convert cert or private key for {}", context);
-                                None
-                            }
+                            auth_from_paths(client_cert_path, key_path, context)
                         } else if let (&Some(ref client_cert_data), &Some(ref key_data)) = (&user.client_cert_data, &user.client_key_data) {
-                            let mut cert_enc = try!(::base64::decode(client_cert_data.as_str()));
-                            cert_enc.retain(|&i| {i != 0});
-                            let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
-                            let mut key_enc = try!(::base64::decode(key_data.as_str()));
-                            key_enc.retain(|&i| {i != 0});
-                            let key = get_key_from_str(String::from_utf8(key_enc).unwrap().as_str());
-                            match (cert, key) {
-                                (Some(c), Some(k)) => {
-                                    Some(KlusterAuth::with_cert_and_key(c, k))
-                                },
-                                _ => {
-                                    None
-                                }
-                            }
+                            try!(auth_from_data(client_cert_data, key_data, context))
                         } else {
                             println!("Invalid context {}.  Each user must have either a token or a client-certificate AND a client-key.", context);
                             None

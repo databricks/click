@@ -202,11 +202,17 @@ impl Config {
                         } else {
                             format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), cert_config_path)
                         };
-                    let f = File::open(cert_path).unwrap();
-                    let mut br = BufReader::new(f);
-                    let mut s = String::new();
-                    br.read_to_string(&mut s).expect("Couldn't read cert");
-                    cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(s),cluster.conf.server));
+                    match File::open(cert_path) {
+                        Ok(f) => {
+                            let mut br = BufReader::new(f);
+                            let mut s = String::new();
+                            br.read_to_string(&mut s).expect("Couldn't read cert");
+                            cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(s),cluster.conf.server));
+                        },
+                        Err(e) => {
+                            println!("Invalid server cert path for cluster {}, cannot continue: {}", cluster.name, e.description());
+                        }
+                    }
                 },
                 (None, Some(cert_data)) => {
                     match ::base64::decode(cert_data.as_str()) {

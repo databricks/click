@@ -979,7 +979,7 @@ command!(Describe,
                          });
                          if let Some(pval) = pod_value {
                              if matches.is_present("json") {
-                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&pval).unwrap());
+                                 writer.pretty_color_json(&pval).unwrap_or(());
                              } else {
                                  clickwrite!(writer, "{}\n", describe_format_pod(pval));
                              }
@@ -996,7 +996,7 @@ command!(Describe,
                      });
                      if let Some(nval) = node_value {
                          if matches.is_present("json") {
-                             clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&nval).unwrap());
+                             writer.pretty_color_json(&nval).unwrap_or(());
                          } else {
                              clickwrite!(writer, "{}\n", describe_format_node(nval));
                          }
@@ -1010,7 +1010,7 @@ command!(Describe,
                          });
                          if let Some(dval) = dep_value {
                              if matches.is_present("json") {
-                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&dval).unwrap());
+                                 writer.pretty_color_json(&dval).unwrap_or(());
                              } else {
                                  clickwrite!(writer, "Deployment not supported without -j yet\n");
                              }
@@ -1025,7 +1025,7 @@ command!(Describe,
                          });
                          if let Some(rsval) = rs_value {
                              if matches.is_present("json") {
-                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&rsval).unwrap());
+                                 writer.pretty_color_json(&rsval).unwrap_or(());
                              } else {
                                  clickwrite!(writer, "ReplicaSet not supported without -j yet\n");
                              }
@@ -1040,7 +1040,7 @@ command!(Describe,
                          });
                          if let Some(sval) = service_value {
                              if matches.is_present("json") {
-                                 clickwrite!(writer, "{}\n", serde_json::to_string_pretty(&sval).unwrap());
+                                 writer.pretty_color_json(&sval).unwrap_or(());
                              } else {
                                  clickwrite!(writer, "Service not supported without -j yet\n");
                              }

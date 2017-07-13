@@ -14,11 +14,12 @@ so it's not necessary to keep specifying what objects to target.
 You'll need rust and cargo.  See [here](http://doc.crates.io/) for
 instructions on how to do that.
 
-Checkout the code and run `cargo build --release`.
+Checkout the code and run `cargo build`.
 
 # Running
-Run `./target/release/click`.  It's not recommended to use `cargo run`
-as that messes with Ctrl-C handling.
+Run `./target/debug/click`.  It's not recommended to use `cargo run`
+as that messes with Ctrl-C handling. (see:
+https://github.com/rust-lang-nursery/rustup.rs/issues/806)
 
 Click looks in ~/.kube/config by default for you kubernetes
 configuration.  It also stores its own config in the .kube dir.  You

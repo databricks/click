@@ -548,7 +548,7 @@ command!(Quit,
          "quit",
          "Quit click",
          identity,
-         |l| {l == "q" || l == "quit"},
+         |l| {l == "q" || l == "quit" || l == "exit"},
          noop_complete,
          |_,env,_| {env.quit = true;}
 );

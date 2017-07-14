@@ -493,14 +493,42 @@ fn main() {
                                     if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
                                         cmd.print_help();
                                     } else {
-                                        println!("I don't know anything about {}, sorry", hcmd);
+                                        match hcmd { // match for meta topics
+                                            "pipes" => {
+                                                println!("You can pipe output of any command to a \
+                                                          shell command using the | character. \
+                                                          Only one pipe character supported for \
+                                                          the moment.\n\n\
+                                                          Examples:\n  \
+                                                          # grep logs for ERROR:\n  \
+                                                          logs my-cont | grep ERROR\n\n  \
+                                                          # pass output of describe -j to jq\n  \
+                                                          describe -j | jq .");
+                                            }
+                                            "redirection" => {
+                                                println!("You can redirect the output of any \
+                                                          command to a file using the > \
+                                                          character.  Only one > character \
+                                                          supported for the moment.\n\n\
+                                                          Examples:\n  \
+                                                          # Save logs to logs.txt:\n  \
+                                                          logs my-cont > /tmp/logs.txt");
+
+                                            }
+                                            _ => {
+                                                println!("I don't know anything about {}, sorry", hcmd);
+                                            }
+                                        }
                                     }
                                 } else {
-                                    println!("Available commands (type 'help command' for details):");
+                                    println!("Available commands (type 'help [COMMAND]' for details):");
                                     let spacer = "                  ";
                                     for c in commands.iter() {
                                         println!("  {}{}{}", c.get_name(), &spacer[0..(20-c.get_name().len())], c.about());
                                     }
+                                    println!("\nOther help topics (type 'help [TOPIC]' for details)");
+                                    println!("  pipes");
+                                    println!("  redirection");
                                 }
                             }
                             else {

@@ -17,6 +17,7 @@
 
 use ansi_term::Colour::{Blue, Green};
 use serde::ser::Serialize;
+use serde_json::to_writer;
 use serde_json::Error as JsonError;
 use serde_json::ser::{CharEscape, Formatter, PrettyFormatter, Serializer};
 
@@ -105,8 +106,13 @@ impl ClickWriter {
     where
         T: Serialize,
     {
-        let mut ser = Serializer::with_formatter(self, PrettyColorFormatter::new());
-        value.serialize(&mut ser)
+        if self.out_file.is_none() && self.pipe_proc.is_none() {
+            let mut ser = Serializer::with_formatter(self, PrettyColorFormatter::new());
+            value.serialize(&mut ser)
+        } else {
+            // don't do color if we're piping/redirecting
+            to_writer(self, value)
+        }
     }
 }
 

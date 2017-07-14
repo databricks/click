@@ -608,7 +608,7 @@ command!(Clear,
 
 command!(Namespace,
          "namespace",
-         "Set the current namespace (no arg for no namespace)",
+         "Set the current namespace (no argument to clear namespace)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("namespace")
                       .help("The namespace to use")
@@ -648,7 +648,7 @@ command!(Namespace,
 
 command!(Pods,
          "pods",
-         "Get pods in the current context",
+         "Get pods (in current namespace if set)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("label")
                       .short("l")
@@ -790,48 +790,52 @@ command!(Logs,
          },
          |matches, env, writer| {
              let cont = matches.value_of("container").unwrap(); // required so unwrap safe
-             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
-                 let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                 if matches.is_present("follow") {
-                     url.push_str("&follow=true");
-                 }
-                 if matches.is_present("previous") {
-                     url.push_str("&previous=true");
-                 }
-                 if matches.is_present("tail") {
-                     url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
-                 }
-                 if matches.is_present("since") {
-                     let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
-                     url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
-                 }
-                 if matches.is_present("sinceTime") {
-                     let specified = DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
-                     let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
-                     url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
-                 }
-                 let logs_reader = env.run_on_kluster(|k| {
-                     k.get_read(url.as_str(), Some(Duration::new(1, 0)))
-                 });
-                 if let Some(lreader) = logs_reader {
-                     let mut reader = BufReader::new(lreader);
-                     let mut line = String::new();
-
-                     env.ctrlcbool.store(false, Ordering::SeqCst);
-                     while !env.ctrlcbool.load(Ordering::SeqCst) {
-                         if let Ok(amt) = reader.read_line(&mut line) {
-                             if amt > 0 {
-                                 clickwrite!(writer, "{}", line); // newlines already in line
-                                 line.clear();
+             match (&env.current_object_namespace, env.current_pod()) {
+                 (&Some(ref ns), Some(ref pod)) => {
+                     let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
+                     if matches.is_present("follow") {
+                         url.push_str("&follow=true");
+                     }
+                     if matches.is_present("previous") {
+                         url.push_str("&previous=true");
+                     }
+                     if matches.is_present("tail") {
+                         url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
+                     }
+                     if matches.is_present("since") {
+                         let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
+                         url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
+                     }
+                     if matches.is_present("sinceTime") {
+                         let specified = DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
+                         let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
+                         url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
+                     }
+                     let logs_reader = env.run_on_kluster(|k| {
+                         k.get_read(url.as_str(), Some(Duration::new(1, 0)))
+                     });
+                     if let Some(lreader) = logs_reader {
+                         let mut reader = BufReader::new(lreader);
+                         let mut line = String::new();
+                         env.ctrlcbool.store(false, Ordering::SeqCst);
+                         while !env.ctrlcbool.load(Ordering::SeqCst) {
+                             if let Ok(amt) = reader.read_line(&mut line) {
+                                 if amt > 0 {
+                                     clickwrite!(writer, "{}", line); // newlines already in line
+                                     line.clear();
+                                 } else {
+                                     break;
+                                 }
                              } else {
                                  break;
                              }
-                         } else {
-                             break;
                          }
                      }
                  }
-             }}
+                 _ => {
+                     clickwrite!(writer, "Need an active pod to get logs.\n");
+                 }
+             }
          }
 );
 
@@ -957,7 +961,7 @@ ProviderId:\t{}",
 
 command!(Describe,
          "describe",
-         "Describe the active pod",
+         "Describe the active kubernetes object.",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("json")
                       .short("j")
@@ -1092,7 +1096,7 @@ command!(Exec,
                      write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
                  }
              } else {
-                 write!(stderr(), "No active kluster, or namespace, or pod").unwrap_or(());
+                 write!(stderr(), "Need an active pod in order to exec.").unwrap_or(());
              }
          }
 );
@@ -1212,7 +1216,7 @@ fn containers_string(pod: &Pod) -> String {
 
 command!(Containers,
          "containers",
-         "List containers on active pod",
+         "List containers on the active pod",
          identity,
          |l| { l == "conts" || l == "containers" },
          noop_complete,
@@ -1276,7 +1280,7 @@ command!(Events,
 
 command!(Nodes,
          "nodes",
-         "Get nodes in current context",
+         "Get nodes",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("labels")
                       .short("L")
@@ -1317,7 +1321,7 @@ command!(Nodes,
 
 command!(Services,
          "services",
-         "Get services in current context and namespace (if set)",
+         "Get services (in current namespace if set)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("labels")
                       .short("L")
@@ -1365,7 +1369,7 @@ command!(Services,
 
 command!(EnvCmd,
          "env",
-         "Print info about the current environment",
+         "Print information about the current environment",
          identity,
          |l| { l == "env" },
          noop_complete,
@@ -1376,7 +1380,7 @@ command!(EnvCmd,
 
 command!(Deployments,
          "deployments",
-         "Get deployments (in current namespace if there is one)",
+         "Get deployments (in current namespace if set)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("label")
                       .short("l")
@@ -1456,7 +1460,7 @@ fn print_replicasets(list: ReplicaSetList,
 
 command!(ReplicaSets,
          "replicasets",
-         "Get replicasets (in current namespace if there is one)",
+         "Get replicasets (in current namespace if set)",
          |clap: App<'static, 'static>| {
              clap.arg(Arg::with_name("show_label")
                       .short("L")

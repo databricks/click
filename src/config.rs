@@ -17,18 +17,17 @@
 use serde_yaml;
 
 use std::collections::HashMap;
-use std::env::{self};
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use ::Env;
-use error::{KubeError,KubeErrNo};
+use Env;
+use error::{KubeError, KubeErrNo};
 use kube::{Kluster, KlusterAuth};
 use certs::{get_cert, get_cert_from_pem, get_private_key, get_key_from_str};
 
 /// Kubernetes cluster config
-
 #[derive(Debug, Deserialize)]
 struct IConfig {
     clusters: Vec<ICluster>,
@@ -39,17 +38,17 @@ struct IConfig {
 #[derive(Debug, Deserialize)]
 struct ICluster {
     name: String,
-    #[serde(rename="cluster")]
+    #[serde(rename = "cluster")]
     conf: IClusterConf,
 }
 
 #[derive(Debug, Deserialize)]
 struct IClusterConf {
-    #[serde(rename="certificate-authority")]
+    #[serde(rename = "certificate-authority")]
     pub cert: Option<String>,
-    #[serde(rename="certificate-authority-data")]
+    #[serde(rename = "certificate-authority-data")]
     pub cert_data: Option<String>,
-    #[serde(rename="insecure-skip-tls-verify")]
+    #[serde(rename = "insecure-skip-tls-verify")]
     pub skip_tls: Option<bool>,
     pub server: String,
 }
@@ -72,7 +71,7 @@ impl ClusterConf {
 #[derive(Debug, Deserialize)]
 struct IContext {
     name: String,
-    #[serde(rename="context")]
+    #[serde(rename = "context")]
     conf: ContextConf,
 }
 
@@ -87,20 +86,20 @@ pub struct ContextConf {
 #[derive(Debug, Deserialize)]
 struct IUser {
     name: String,
-    #[serde(rename="user")]
+    #[serde(rename = "user")]
     conf: UserConf,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct UserConf {
     pub token: Option<String>,
-    #[serde(rename="client-certificate")]
+    #[serde(rename = "client-certificate")]
     pub client_cert: Option<String>,
-    #[serde(rename="client-key")]
+    #[serde(rename = "client-key")]
     pub client_key: Option<String>,
-    #[serde(rename="client-certificate-data")]
+    #[serde(rename = "client-certificate-data")]
     pub client_cert_data: Option<String>,
-    #[serde(rename="client-key-data")]
+    #[serde(rename = "client-key-data")]
     pub client_key_data: Option<String>,
 }
 
@@ -123,9 +122,16 @@ pub struct Config {
 }
 
 // some utility functions
-fn auth_from_paths(client_cert_path: &String, key_path: &String, context: &str) -> Option<KlusterAuth> {
+fn auth_from_paths(
+    client_cert_path: &String,
+    key_path: &String,
+    context: &str,
+) -> Option<KlusterAuth> {
     if client_cert_path.len() == 0 {
-        println!("Empty client certificate path for {}, can't continue", context);
+        println!(
+            "Empty client certificate path for {}, can't continue",
+            context
+        );
         return None;
     }
     if key_path.len() == 0 {
@@ -133,19 +139,29 @@ fn auth_from_paths(client_cert_path: &String, key_path: &String, context: &str) 
         return None;
     }
 
-    let cert_full_path =
-        if client_cert_path.chars().next().unwrap() == '/' {  // unwrap is okay because we validated non-empty
-            client_cert_path.clone()
-        } else {
-            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), client_cert_path)
-        };
-    let key_full_path =
-        if key_path.chars().next().unwrap() == '/' {
-            key_path.clone()
-        } else {
-            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), key_path)
-        };
-    if let (Some(cert), Some(private_key)) = (get_cert(cert_full_path.as_str()), get_private_key(key_full_path.as_str())) {
+    let cert_full_path = if client_cert_path.chars().next().unwrap() == '/' {
+        // unwrap is okay because we validated non-empty
+        client_cert_path.clone()
+    } else {
+        format!(
+            "{}/.kube/{}",
+            env::home_dir().unwrap().as_path().display(),
+            client_cert_path
+        )
+    };
+    let key_full_path = if key_path.chars().next().unwrap() == '/' {
+        key_path.clone()
+    } else {
+        format!(
+            "{}/.kube/{}",
+            env::home_dir().unwrap().as_path().display(),
+            key_path
+        )
+    };
+    if let (Some(cert), Some(private_key)) = (
+        get_cert(cert_full_path.as_str()),
+        get_private_key(key_full_path.as_str()),
+    ) {
         Some(KlusterAuth::with_cert_and_key(cert, private_key))
     } else {
         println!("Can't read/convert cert or private key for {}", context);
@@ -153,9 +169,16 @@ fn auth_from_paths(client_cert_path: &String, key_path: &String, context: &str) 
     }
 }
 
-fn auth_from_data(client_cert_data: &String, key_data: &String, context: &str) -> Result<Option<KlusterAuth>, KubeError> {
-     if client_cert_data.len() == 0 {
-        println!("Empty client certificate data for {}, can't continue", context);
+fn auth_from_data(
+    client_cert_data: &String,
+    key_data: &String,
+    context: &str,
+) -> Result<Option<KlusterAuth>, KubeError> {
+    if client_cert_data.len() == 0 {
+        println!(
+            "Empty client certificate data for {}, can't continue",
+            context
+        );
         return Ok(None);
     }
     if key_data.len() == 0 {
@@ -163,18 +186,14 @@ fn auth_from_data(client_cert_data: &String, key_data: &String, context: &str) -
         return Ok(None);
     }
     let mut cert_enc = try!(::base64::decode(client_cert_data.as_str()));
-    cert_enc.retain(|&i| {i != 0});
+    cert_enc.retain(|&i| i != 0);
     let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
     let mut key_enc = try!(::base64::decode(key_data.as_str()));
-    key_enc.retain(|&i| {i != 0});
+    key_enc.retain(|&i| i != 0);
     let key = get_key_from_str(String::from_utf8(key_enc).unwrap().as_str());
     match (cert, key) {
-        (Some(c), Some(k)) => {
-            Ok(Some(KlusterAuth::with_cert_and_key(c, k)))
-        },
-        _ => {
-            Ok(None)
-        }
+        (Some(c), Some(k)) => Ok(Some(KlusterAuth::with_cert_and_key(c, k))),
+        _ => Ok(None),
     }
 }
 
@@ -191,46 +210,73 @@ impl Config {
             //  - insecure-skip-tls-verify
             let has_cd = cluster.conf.cert_data.is_some();
             match (cluster.conf.cert, cluster.conf.cert_data) {
-                (Some(cert_config_path), _)=> {
+                (Some(cert_config_path), _) => {
                     if has_cd {
-                        println!("Cluster {} specifies a certificate path and certificate data, ignoring data and using the path",
-                                 cluster.name);
+                        println!(
+                            "Cluster {} specifies a certificate path and certificate data, ignoring data and using the path",
+                            cluster.name
+                        );
                     }
-                    let cert_path =
-                        if cert_config_path.chars().next().unwrap() == '/' {
+                    let cert_path = if cert_config_path.chars().next().unwrap() == '/' {
+                        cert_config_path
+                    } else {
+                        format!(
+                            "{}/.kube/{}",
+                            env::home_dir().unwrap().as_path().display(),
                             cert_config_path
-                        } else {
-                            format!("{}/.kube/{}", env::home_dir().unwrap().as_path().display(), cert_config_path)
-                        };
+                        )
+                    };
                     match File::open(cert_path) {
                         Ok(f) => {
                             let mut br = BufReader::new(f);
                             let mut s = String::new();
                             br.read_to_string(&mut s).expect("Couldn't read cert");
-                            cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(s),cluster.conf.server));
-                        },
+                            cluster_map.insert(
+                                cluster.name.clone(),
+                                ClusterConf::new(Some(s), cluster.conf.server),
+                            );
+                        }
                         Err(e) => {
-                            println!("Invalid server cert path for cluster {}, cannot continue: {}", cluster.name, e.description());
+                            println!(
+                                "Invalid server cert path for cluster {}, cannot continue: {}",
+                                cluster.name,
+                                e.description()
+                            );
                         }
                     }
-                },
+                }
                 (None, Some(cert_data)) => {
                     match ::base64::decode(cert_data.as_str()) {
                         Ok(mut cert) => {
-                            cert.retain(|&i| {i != 0});
-                            cluster_map.insert(cluster.name.clone(), ClusterConf::new(Some(String::from_utf8(cert).unwrap()), cluster.conf.server));
-                        },
+                            cert.retain(|&i| i != 0);
+                            cluster_map.insert(
+                                cluster.name.clone(),
+                                ClusterConf::new(
+                                    Some(String::from_utf8(cert).unwrap()),
+                                    cluster.conf.server,
+                                ),
+                            );
+                        }
                         Err(e) => {
-                            println!("Invalid certificate data, could not base64 decode: {}", e.description());
+                            println!(
+                                "Invalid certificate data, could not base64 decode: {}",
+                                e.description()
+                            );
                         }
                     }
                 }
                 (None, None) => {
                     if cluster.conf.skip_tls.unwrap_or(false) {
-                        println!("Can't do insecure-skip-tls-verify yet, ignoring cluster: {}", cluster.name);
-                        //cluster_map.insert(cluster.name.clone(), ClusterConf::new(None,cluster.conf.server));
+                        println!(
+                            "Can't do insecure-skip-tls-verify yet, ignoring cluster: {}",
+                            cluster.name
+                        );
+                    //cluster_map.insert(cluster.name.clone(), ClusterConf::new(None,cluster.conf.server));
                     } else {
-                        println!("Ignoring invalid cluster \"{}\": has no cert and tls verification not skipped", cluster.name);
+                        println!(
+                            "Ignoring invalid cluster \"{}\": has no cert and tls verification not skipped",
+                            cluster.name
+                        );
                     }
                 }
             }

@@ -14,11 +14,10 @@
 
 //!  The commands one can run from the repl
 
-use ::Env;
-use ::LastList;
-use kube::{ContainerState, DeploymentList, Event, EventList,
-           Pod, PodList, NamespaceList, NodeList, NodeCondition,
-           ReplicaSetList, ServiceList};
+use Env;
+use LastList;
+use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NamespaceList,
+           NodeList, NodeCondition, ReplicaSetList, ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
 use values::{val_str, val_u64};
@@ -60,7 +59,7 @@ lazy_static! {
 
 pub trait Cmd {
     // break if returns true
-    fn exec(&self, &mut Env, &mut Iterator<Item=&str>, &mut ClickWriter) -> bool;
+    fn exec(&self, &mut Env, &mut Iterator<Item = &str>, &mut ClickWriter) -> bool;
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>);
@@ -77,13 +76,21 @@ fn start_clap(name: &'static str, about: &'static str) -> App<'static, 'static> 
 }
 
 /// Run specified closure with the given matches, or print error.  Return true if execed, false on err
-fn exec_match<F>(clap: &RefCell<App<'static, 'static>>, env: &mut Env, args: &mut Iterator<Item=&str>, writer: &mut ClickWriter, func: F) -> bool
-    where F: FnOnce(ArgMatches,&mut Env, &mut ClickWriter) -> () {
+fn exec_match<F>(
+    clap: &RefCell<App<'static, 'static>>,
+    env: &mut Env,
+    args: &mut Iterator<Item = &str>,
+    writer: &mut ClickWriter,
+    func: F,
+) -> bool
+where
+    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> (),
+{
     match clap.borrow_mut().get_matches_from_safe_borrow(args) {
         Ok(matches) => {
             func(matches, env, writer);
             true
-        },
+        }
         Err(err) => {
             println!("{}", err.message);
             false
@@ -169,36 +176,42 @@ fn identity<T>(t: T) -> T {
 }
 
 /// A completer that does nothing, used for commands that don't do completion
-fn noop_complete(_: Vec<&str>, _:&Env) -> (usize, Vec<String>) {
+fn noop_complete(_: Vec<&str>, _: &Env) -> (usize, Vec<String>) {
     (0, Vec::new())
 }
 
 /// a clap validator for u32
 fn valid_u32(s: String) -> Result<(), String> {
-    s.parse::<u32>().map(|_| ()).map_err(|e| e.description().to_owned())
+    s.parse::<u32>()
+        .map(|_| ())
+        .map_err(|e| e.description().to_owned())
 }
 
 /// a clap validator for duration
 fn valid_duration(s: String) -> Result<(), String> {
-    parse_duration(s.as_str()).map(|_| ()).map_err(|e| e.description().to_owned())
+    parse_duration(s.as_str())
+        .map(|_| ())
+        .map_err(|e| e.description().to_owned())
 }
 
 /// a clap validator for rfc3339 dates
 fn valid_date(s: String) -> Result<(), String> {
-    DateTime::parse_from_rfc3339(s.as_str()).map(|_| ()).map_err(|e| e.description().to_owned())
+    DateTime::parse_from_rfc3339(s.as_str())
+        .map(|_| ())
+        .map_err(|e| e.description().to_owned())
 }
 
 
 /// Check if a pod has a waiting container
 fn has_waiting(pod: &Pod) -> bool {
     if let Some(ref stats) = pod.status.container_statuses {
-        stats.iter().any(|cs| {
-            if let ContainerState::Waiting { .. } = cs.state {
+        stats.iter().any(
+            |cs| if let ContainerState::Waiting { .. } = cs.state {
                 true
             } else {
                 false
-            }
-        })
+            },
+        )
     } else {
         false
     }
@@ -236,11 +249,23 @@ fn time_since(date: DateTime<UTC>) -> String {
     let now = UTC::now();
     let diff = now.signed_duration_since(date);
     if diff.num_days() > 0 {
-        format!("{}d {}h", diff.num_days(), (diff.num_hours() - (24 * diff.num_days())))
+        format!(
+            "{}d {}h",
+            diff.num_days(),
+            (diff.num_hours() - (24 * diff.num_days()))
+        )
     } else if diff.num_hours() > 0 {
-        format!("{}h {}m", diff.num_hours(), (diff.num_minutes() - (60 * diff.num_hours())))
+        format!(
+            "{}h {}m",
+            diff.num_hours(),
+            (diff.num_minutes() - (60 * diff.num_hours()))
+        )
     } else if diff.num_minutes() > 0 {
-        format!("{}m {}s", diff.num_minutes(), (diff.num_seconds() - (60 * diff.num_minutes())))
+        format!(
+            "{}m {}s",
+            diff.num_minutes(),
+            (diff.num_seconds() - (60 * diff.num_minutes()))
+        )
     } else {
         format!("{}s", diff.num_seconds())
     }
@@ -249,17 +274,21 @@ fn time_since(date: DateTime<UTC>) -> String {
 /// if s is longer than max_len it will be shorted and have ... added to be max_len
 fn shorten_to(s: String, max_len: usize) -> String {
     if s.len() > max_len {
-        format!("{}...", &s[0..(max_len-3)])
+        format!("{}...", &s[0..(max_len - 3)])
     } else {
         s
     }
 }
 
 /// Print out the specified list of pods in a pretty format
-fn print_podlist(podlist: PodList,
-                 show_labels: bool, show_annot: bool, show_namespace: bool,
-                 regex: Option<Regex>,
-                 writer: &mut ClickWriter) -> PodList {
+fn print_podlist(
+    podlist: PodList,
+    show_labels: bool,
+    show_annot: bool,
+    show_namespace: bool,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> PodList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
     if show_labels {
@@ -302,15 +331,16 @@ fn print_podlist(podlist: PodList,
         }
 
         if show_annot {
-            specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.annotations)));
+            specs.push(CellSpec::new_owned(
+                keyval_string(&pod.metadata.annotations),
+            ));
         }
 
         if show_namespace {
-            specs.push(CellSpec::new_owned(
-                match pod.metadata.namespace {
-                    Some(ref ns) => ns.clone(),
-                    None => "[Unknown]".to_owned(),
-                }));
+            specs.push(CellSpec::new_owned(match pod.metadata.namespace {
+                Some(ref ns) => ns.clone(),
+                None => "[Unknown]".to_owned(),
+            }));
         }
         (pod, specs)
     });
@@ -322,19 +352,15 @@ fn print_podlist(podlist: PodList,
 
     ::table::print_table(&mut table, &filtered, writer);
 
-    let final_pods = filtered.into_iter().map(|pod_spec| {
-        pod_spec.0
-    }).collect();
-    PodList {
-        items: final_pods,
-    }
+    let final_pods = filtered.into_iter().map(|pod_spec| pod_spec.0).collect();
+    PodList { items: final_pods }
 }
 
 /// Build a multi-line string of the specified keyvals
 fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
     let mut buf = String::new();
     if let &Some(ref lbs) = keyvals {
-        for (key,val) in lbs.iter() {
+        for (key, val) in lbs.iter() {
             buf.push_str(key);
             buf.push('=');
             if let Some(s) = val.as_str() {
@@ -349,9 +375,12 @@ fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
 }
 
 /// Print out the specified list of nodes in a pretty format
-fn print_nodelist(nodelist: NodeList, labels: bool,
-                  regex: Option<Regex>,
-                  writer: &mut ClickWriter) -> NodeList {
+fn print_nodelist(
+    nodelist: NodeList,
+    labels: bool,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> NodeList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "State", "Age"];
     if labels {
@@ -360,34 +389,40 @@ fn print_nodelist(nodelist: NodeList, labels: bool,
     table.set_titles(title_row);
     let nodes_specs = nodelist.items.into_iter().map(|node| {
         let mut specs = Vec::new();
-        { // scope borrows
-            let readycond: Vec<&NodeCondition> = node.status.conditions.iter().filter(|c| c.typ == "Ready").collect();
-            let (state, state_style) =
-                if let Some(cond) = readycond.get(0) {
-                    if cond.status == "True" {
-                        ("Ready", "Fg")
-                    } else {
-                        ("Not Ready", "Fr")
-                    }
+        {
+            // scope borrows
+            let readycond: Vec<&NodeCondition> = node.status
+                .conditions
+                .iter()
+                .filter(|c| c.typ == "Ready")
+                .collect();
+            let (state, state_style) = if let Some(cond) = readycond.get(0) {
+                if cond.status == "True" {
+                    ("Ready", "Fg")
                 } else {
-                    ("Unknown", "Fy")
-                };
+                    ("Not Ready", "Fr")
+                }
+            } else {
+                ("Unknown", "Fy")
+            };
 
-            let state =
-                if let Some(b) = node.spec.unschedulable {
-                    if b {
-                        format!("{}\nSchedulingDisabled", state)
-                    } else {
-                        state.to_owned()
-                    }
+            let state = if let Some(b) = node.spec.unschedulable {
+                if b {
+                    format!("{}\nSchedulingDisabled", state)
                 } else {
                     state.to_owned()
-                };
+                }
+            } else {
+                state.to_owned()
+            };
 
             specs.push(CellSpec::new_index());
             specs.push(CellSpec::new_owned(node.metadata.name.clone()));
             specs.push(CellSpec::with_style_owned(state, state_style));
-            specs.push(CellSpec::new_owned(format!("{}", time_since(node.metadata.creation_timestamp.unwrap()))));
+            specs.push(CellSpec::new_owned(format!(
+                "{}",
+                time_since(node.metadata.creation_timestamp.unwrap())
+            )));
             if labels {
                 specs.push(CellSpec::new_owned(keyval_string(&node.metadata.labels)));
             }
@@ -402,30 +437,51 @@ fn print_nodelist(nodelist: NodeList, labels: bool,
 
     ::table::print_table(&mut table, &filtered, writer);
 
-    let final_nodes = filtered.into_iter().map(|node_spec| {
-        node_spec.0
-    }).collect();
-    NodeList {
-        items: final_nodes,
-    }
+    let final_nodes = filtered.into_iter().map(|node_spec| node_spec.0).collect();
+    NodeList { items: final_nodes }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_deployments(deplist: DeploymentList,
-                     _show_labels: bool,
-                     regex: Option<Regex>,
-                     writer: &mut ClickWriter) -> DeploymentList {
+fn print_deployments(
+    deplist: DeploymentList,
+    _show_labels: bool,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> DeploymentList {
     let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Desired", "Current", "Up To Date", "Available", "Age"]);
+    table.set_titles(row![
+        "####",
+        "Name",
+        "Desired",
+        "Current",
+        "Up To Date",
+        "Available",
+        "Age"
+    ]);
     let deps_specs = deplist.items.into_iter().map(|dep| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
         specs.push(CellSpec::new_owned(dep.metadata.name.clone()));
-        specs.push(CellSpec::with_align_owned(format!("{}", dep.spec.replicas), format::Alignment::CENTER));
-        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.replicas), format::Alignment::CENTER));
-        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.updated), format::Alignment::CENTER));
-        specs.push(CellSpec::with_align_owned(format!("{}", dep.status.available), format::Alignment::CENTER));
-        specs.push(CellSpec::new_owned(format!("{}", time_since(dep.metadata.creation_timestamp.unwrap()))));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", dep.spec.replicas),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", dep.status.replicas),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", dep.status.updated),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", dep.status.available),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(dep.metadata.creation_timestamp.unwrap())
+        )));
         (dep, specs)
     });
 
@@ -436,40 +492,56 @@ fn print_deployments(deplist: DeploymentList,
 
     ::table::print_table(&mut table, &filtered, writer);
 
-    let final_deps = filtered.into_iter().map(|dep_spec| {
-        dep_spec.0
-    }).collect();
-    DeploymentList {
-        items: final_deps,
-    }
+    let final_deps = filtered.into_iter().map(|dep_spec| dep_spec.0).collect();
+    DeploymentList { items: final_deps }
 }
 
 /// Print out the specified list of deployments in a pretty format
-fn print_servicelist(servlist: ServiceList, regex: Option<Regex>, _show_labels: bool, writer: &mut ClickWriter) -> ServiceList {
+fn print_servicelist(
+    servlist: ServiceList,
+    regex: Option<Regex>,
+    _show_labels: bool,
+    writer: &mut ClickWriter,
+) -> ServiceList {
     let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "ClusterIP", "External IPs", "Port(s)", "Age"]);
+    table.set_titles(row![
+        "####",
+        "Name",
+        "ClusterIP",
+        "External IPs",
+        "Port(s)",
+        "Age"
+    ]);
     let service_specs = servlist.items.into_iter().map(|service| {
         let mut specs = Vec::new();
 
         specs.push(CellSpec::new_index());
 
         specs.push(CellSpec::new_owned(service.metadata.name.clone()));
-        specs.push(CellSpec::new_owned(format!("{}", service.spec.cluster_ip.as_ref().unwrap_or(&"<none>".to_owned()))));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            service
+                .spec
+                .cluster_ip
+                .as_ref()
+                .unwrap_or(&"<none>".to_owned())
+        )));
         if let Some(ref eips) = service.spec.external_ips {
             specs.push(CellSpec::new_owned(shorten_to(eips.join(", "), 18)));
         } else {
             // look in the status for the elb name
             if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
                 if let Some(ing_arry) = ing_val.as_array() {
-                    let strs: Vec<&str> = ing_arry.iter().map(|v| {
-                        if let Some(hv) = v.get("hostname") {
+                    let strs: Vec<&str> = ing_arry
+                        .iter()
+                        .map(|v| if let Some(hv) = v.get("hostname") {
                             hv.as_str().unwrap_or("")
                         } else {
                             ""
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     let s = strs.join(", ");
-                    specs.push(CellSpec::new_owned(shorten_to(s,18)));
+                    specs.push(CellSpec::new_owned(shorten_to(s, 18)));
                 } else {
                     specs.push(CellSpec::new("<none>"));
                 }
@@ -478,20 +550,23 @@ fn print_servicelist(servlist: ServiceList, regex: Option<Regex>, _show_labels: 
             }
         }
 
-        let port_strs: Vec<String> =
-            if let Some(ref ports) = service.spec.ports {
-                ports.iter().map(|p| {
-                    if let Some(np) = p.node_port {
-                        format!("{}:{}/{}", p.port, np, p.protocol)
-                    } else {
-                        format!("{}/{}", p.port, p.protocol)
-                    }
-                }).collect()
-            } else {
-                vec!["<none>".to_owned()]
-            };
+        let port_strs: Vec<String> = if let Some(ref ports) = service.spec.ports {
+            ports
+                .iter()
+                .map(|p| if let Some(np) = p.node_port {
+                    format!("{}:{}/{}", p.port, np, p.protocol)
+                } else {
+                    format!("{}/{}", p.port, p.protocol)
+                })
+                .collect()
+        } else {
+            vec!["<none>".to_owned()]
+        };
         specs.push(CellSpec::new_owned(port_strs.join(",")));
-        specs.push(CellSpec::new_owned(format!("{}", time_since(service.metadata.creation_timestamp.unwrap()))));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(service.metadata.creation_timestamp.unwrap())
+        )));
 
         (service, specs)
     });
@@ -503,9 +578,10 @@ fn print_servicelist(servlist: ServiceList, regex: Option<Regex>, _show_labels: 
 
     ::table::print_table(&mut table, &filtered, writer);
 
-    let final_services = filtered.into_iter().map(|service_spec| {
-        service_spec.0
-    }).collect();
+    let final_services = filtered
+        .into_iter()
+        .map(|service_spec| service_spec.0)
+        .collect();
     ServiceList {
         items: final_services,
     }
@@ -520,8 +596,11 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
         let mut specs = Vec::new();
         specs.push(CellSpec::new(ns.metadata.name.as_str()));
         let ps = ns.status.phase.as_str();
-        specs.push(CellSpec::with_style(ps,phase_style_str(ps)));
-        specs.push(CellSpec::new_owned(format!("{}", time_since(ns.metadata.creation_timestamp.unwrap()))));
+        specs.push(CellSpec::with_style(ps, phase_style_str(ps)));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(ns.metadata.creation_timestamp.unwrap())
+        )));
         (ns, specs)
     });
 
@@ -869,20 +948,32 @@ fn get_volume_str(v: &Value) -> String {
         for vol in vol_arry.iter() {
             buf.push_str(format!("  Name: {}\n", val_to_str(vol, "name")).as_str());
             if vol.get("emptyDir").is_some() {
-                buf.push_str("    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n")
+                buf.push_str(
+                    "    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n",
+                )
             }
             if let Some(conf_map) = vol.get("configMap") {
                 buf.push_str("    Type:\tConfigMap (a volume populated by a ConfigMap)\n");
-                buf.push_str(format!("    Name:\t{}\n", val_to_str(conf_map, "name")).as_str());
+                buf.push_str(
+                    format!("    Name:\t{}\n", val_to_str(conf_map, "name")).as_str(),
+                );
             }
             if let Some(secret) = vol.get("secret") {
                 buf.push_str("    Type:\tSecret (a volume populated by a Secret)\n");
-                buf.push_str(format!("    SecretName:\t{}\n", val_to_str(secret, "secretName")).as_str());
+                buf.push_str(
+                    format!("    SecretName:\t{}\n", val_to_str(secret, "secretName")).as_str(),
+                );
             }
             if let Some(aws) = vol.get("awsElasticBlockStore") {
-                buf.push_str("    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n");
-                buf.push_str(format!("    VolumeId:\t{}\n", val_to_str(aws, "volumeID")).as_str());
-                buf.push_str(format!("    FSType:\t{}\n", val_to_str(aws, "fsType")).as_str());
+                buf.push_str(
+                    "    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n",
+                );
+                buf.push_str(
+                    format!("    VolumeId:\t{}\n", val_to_str(aws, "volumeID")).as_str(),
+                );
+                buf.push_str(
+                    format!("    FSType:\t{}\n", val_to_str(aws, "fsType")).as_str(),
+                );
                 let mut pnum = 0;
                 if let Some(part) = aws.get("partition") {
                     if let Some(p) = part.as_u64() {
@@ -893,8 +984,7 @@ fn get_volume_str(v: &Value) -> String {
                 if let Some(read_only) = aws.get("readOnly") {
                     if read_only.as_bool().unwrap() {
                         buf.push_str("    Read-Only:\tTrue\n");
-                    }
-                    else {
+                    } else {
                         buf.push_str("    Read-Only:\tFalse\n");
                     }
                 } else {
@@ -911,17 +1001,18 @@ fn describe_format_pod(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
     let spec = v.get("spec").unwrap();
     let status = v.get("status").unwrap();
-    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
+    let created: DateTime<UTC> =
+        DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
 
     let volumes = spec.get("volumes");
-    let volstr =
-        if let Some(vols) = volumes {
-            get_volume_str(vols)
-        } else {
-            "No Volumes".to_owned()
-        };
+    let volstr = if let Some(vols) = volumes {
+        get_volume_str(vols)
+    } else {
+        "No Volumes".to_owned()
+    };
 
-    format!("Name:\t\t{}\n\
+    format!(
+        "Name:\t\t{}\n\
 Namespace:\t{}
 Node:\t\t{}
 IP:\t\t{}
@@ -930,15 +1021,16 @@ Status:\t\t{}
 {}
 {}
 {}", // TODO: Controllers
-            val_to_str(metadata, "name"),
-            val_to_str(metadata, "namespace"),
-            val_to_str(spec, "nodeName"),
-            val_to_str(status, "podIP"),
-            created, created.with_timezone(&Local),
-            Green.paint(val_to_str(status, "phase")),
-            get_keyval_str(metadata, "labels", "Labels:\t"),
-            get_keyval_str(metadata, "annotations", "Annotations:"),
-            volstr,
+        val_to_str(metadata, "name"),
+        val_to_str(metadata, "namespace"),
+        val_to_str(spec, "nodeName"),
+        val_to_str(status, "podIP"),
+        created,
+        created.with_timezone(&Local),
+        Green.paint(val_to_str(status, "phase")),
+        get_keyval_str(metadata, "labels", "Labels:\t"),
+        get_keyval_str(metadata, "annotations", "Annotations:"),
+        volstr,
     )
 }
 
@@ -946,16 +1038,19 @@ Status:\t\t{}
 fn describe_format_node(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
     let spec = v.get("spec").unwrap();
-    let created: DateTime<UTC> = DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
+    let created: DateTime<UTC> =
+        DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
 
-    format!("Name:\t\t{}
+    format!(
+        "Name:\t\t{}
 {}
 Created at:\t{} ({})
 ProviderId:\t{}",
-            val_to_str(metadata, "name"),
-            get_keyval_str(metadata, "labels", "Labels"),
-            created, created.with_timezone(&Local),
-            val_to_str(spec, "providerID"),
+        val_to_str(metadata, "name"),
+        get_keyval_str(metadata, "labels", "Labels"),
+        created,
+        created.with_timezone(&Local),
+        val_to_str(spec, "providerID"),
     )
 }
 
@@ -1190,17 +1285,23 @@ fn containers_string(pod: &Pod) -> String {
             buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
 
             // find the spec for this container
-            let mut spec_it = pod.spec.containers.iter().filter(|cs| {
-                cs.name == cont.name
-            });
+            let mut spec_it = pod.spec.containers.iter().filter(|cs| cs.name == cont.name);
             if let Some(spec) = spec_it.next() {
                 if let Some(ref vols) = spec.volume_mounts {
                     buf.push_str("  Volumes:\n");
                     for vol in vols.iter() {
                         buf.push_str(format!("   {}\n", vol.name).as_str());
                         buf.push_str(format!("    Path:\t{}\n", vol.mount_path).as_str());
-                        buf.push_str(format!("    Sub-Path:\t{}\n", vol.sub_path.as_ref().unwrap_or(&"".to_owned())).as_str());
-                        buf.push_str(format!("    Read-Only:\t{}\n", vol.read_only.unwrap_or(false)).as_str());
+                        buf.push_str(
+                            format!(
+                                "    Sub-Path:\t{}\n",
+                                vol.sub_path.as_ref().unwrap_or(&"".to_owned())
+                            ).as_str(),
+                        );
+                        buf.push_str(
+                            format!("    Read-Only:\t{}\n", vol.read_only.unwrap_or(false))
+                                .as_str(),
+                        );
                     }
                 } else {
                     buf.push_str("  No Volumes\n");
@@ -1239,11 +1340,13 @@ command!(Containers,
 
 
 fn format_event(event: &Event) -> String {
-    format!("{} - {}\n count: {}\n reason: {}\n",
-            event.last_timestamp.with_timezone(&Local),
-            event.message,
-            event.count,
-            event.reason)
+    format!(
+        "{} - {}\n count: {}\n reason: {}\n",
+        event.last_timestamp.with_timezone(&Local),
+        event.message,
+        event.count,
+        event.reason
+    )
 }
 
 command!(Events,
@@ -1428,18 +1531,28 @@ command!(Deployments,
          }
 );
 
-fn print_replicasets(list: ReplicaSetList,
-                     regex: Option<Regex>,
-                     writer: &mut ClickWriter) -> ReplicaSetList {
+fn print_replicasets(
+    list: ReplicaSetList,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> ReplicaSetList {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "Desired", "Current", "Ready"]);
     let rss_specs = list.items.into_iter().map(|rs| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(val_str("/metadata/name", &rs, "<none>")));
-        specs.push(CellSpec::new_owned(format!("{}", val_u64("/spec/replicas", &rs, 0))));
-        specs.push(CellSpec::new_owned(format!("{}", val_u64("/status/replicas", &rs, 0))));
-        specs.push(CellSpec::new_owned(format!("{}", val_u64("/status/readyReplicas", &rs, 0))));
+        specs.push(CellSpec::new_owned(
+            val_str("/metadata/name", &rs, "<none>"),
+        ));
+        specs.push(CellSpec::new_owned(
+            format!("{}", val_u64("/spec/replicas", &rs, 0)),
+        ));
+        specs.push(CellSpec::new_owned(
+            format!("{}", val_u64("/status/replicas", &rs, 0)),
+        ));
+        specs.push(CellSpec::new_owned(
+            format!("{}", val_u64("/status/readyReplicas", &rs, 0)),
+        ));
         (rs, specs)
     });
 
@@ -1450,12 +1563,8 @@ fn print_replicasets(list: ReplicaSetList,
 
     ::table::print_table(&mut table, &filtered, writer);
 
-    let final_rss = filtered.into_iter().map(|rs_spec| {
-        rs_spec.0
-    }).collect();
-    ReplicaSetList {
-        items: final_rss,
-    }
+    let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
+    ReplicaSetList { items: final_rss }
 }
 
 command!(ReplicaSets,
@@ -1680,7 +1789,10 @@ fn print_pfs(pfs: std::slice::Iter<::PortForward>) {
     table.set_titles(row!["####", "Pod", "Ports"]);
     for (i, pf) in pfs.enumerate() {
         let mut row = Vec::new();
-        row.push(Cell::new_align(format!("{}",i).as_str(), format::Alignment::RIGHT));
+        row.push(Cell::new_align(
+            format!("{}", i).as_str(),
+            format::Alignment::RIGHT,
+        ));
         row.push(Cell::new(pf.pod.as_str()));
         row.push(Cell::new(pf.ports.join(", ").as_str()));
 

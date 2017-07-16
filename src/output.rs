@@ -27,7 +27,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
 
-use ::error::KubeError;
+use error::KubeError;
 
 /// Ignore write errors (for now) TODO: What to do with them?
 macro_rules! clickwrite {
@@ -71,18 +71,14 @@ impl ClickWriter {
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn() {
-                        Ok(process) => {
-                            self.pipe_proc = Some(process);
-                            Ok(())
-                        }
-                        Err(e) => {
-                            Err(KubeError::from(e))
-                        }
+                    Ok(process) => {
+                        self.pipe_proc = Some(process);
+                        Ok(())
                     }
+                    Err(e) => Err(KubeError::from(e)),
+                }
             }
-            None => {
-                Err(KubeError::PipeErr("Empty pipe command".to_owned()))
-            }
+            None => Err(KubeError::PipeErr("Empty pipe command".to_owned())),
         }
     }
 
@@ -94,8 +90,7 @@ impl ClickWriter {
             let mut s = String::new();
             match child.stdout.as_mut().unwrap().read_to_string(&mut s) {
                 Ok(_) => print!("{}", s),
-                Err(why) => println!("Failed to read pipe output: {}",
-                                     why.description()),
+                Err(why) => println!("Failed to read pipe output: {}", why.description()),
             }
         }
         self.out_file = None;
@@ -120,8 +115,7 @@ impl Write for ClickWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         if let Some(ref mut file) = self.out_file {
             file.write(buf)
-        }
-        else if let Some(ref mut child) = self.pipe_proc {
+        } else if let Some(ref mut child) = self.pipe_proc {
             child.stdin.as_mut().unwrap().write(buf)
         } else {
             io::stdout().write(buf)
@@ -131,8 +125,7 @@ impl Write for ClickWriter {
     fn flush(&mut self) -> Result<(), io::Error> {
         if let Some(ref mut file) = self.out_file {
             file.flush()
-        }
-        else if let Some(ref mut child) = self.pipe_proc {
+        } else if let Some(ref mut child) = self.pipe_proc {
             child.stdin.as_mut().unwrap().flush()
         } else {
             io::stdout().flush()
@@ -160,7 +153,7 @@ impl<'a> PrettyColorFormatter<'a> {
 impl<'a> Formatter for PrettyColorFormatter<'a> {
     fn write_null<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write
+        W: Write,
     {
         self.pretty.write_null(writer)
     }
@@ -270,7 +263,11 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         self.pretty.write_string_fragment(writer, fragment)
     }
 
-    fn write_char_escape<W: ?Sized>(&mut self, writer: &mut W, char_escape: CharEscape) -> io::Result<()>
+    fn write_char_escape<W: ?Sized>(
+        &mut self,
+        writer: &mut W,
+        char_escape: CharEscape,
+    ) -> io::Result<()>
     where
         W: Write,
     {

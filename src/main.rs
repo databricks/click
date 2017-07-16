@@ -14,10 +14,14 @@
 
 //! The Command Line Interactive Contoller for Kubernetes
 
-#[macro_use] extern crate prettytable;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate lazy_static;
-#[macro_use] mod output;
+#[macro_use]
+extern crate prettytable;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+mod output;
 
 extern crate ansi_term;
 extern crate base64;
@@ -69,7 +73,10 @@ use values::val_str_opt;
 /// An object we can have as a "current" thing
 enum KObj {
     None,
-    Pod{name: String, containers: Vec<String>},
+    Pod {
+        name: String,
+        containers: Vec<String>,
+    },
     Node(String),
     Deployment(String),
     Service(String),
@@ -86,7 +93,7 @@ enum LastList {
 }
 
 /// An ongoing port forward
-struct PortForward{
+struct PortForward {
     child: Child,
     pod: String,
     ports: Vec<String>,
@@ -111,9 +118,8 @@ impl Env {
     fn new(config: Config) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
-        ctrlc::set_handler(move || {
-            r.store(true, Ordering::SeqCst);
-        }).expect("Error setting Ctrl-C handler");
+        ctrlc::set_handler(move || { r.store(true, Ordering::SeqCst); })
+            .expect("Error setting Ctrl-C handler");
         Env {
             config: config,
             quit: false,
@@ -124,31 +130,37 @@ impl Env {
             last_objs: LastList::None,
             ctrlcbool: cbool,
             port_forwards: Vec::new(),
-            prompt: format!("[{}] [{}] [{}] > ", Red.paint("none"), Green.paint("none"), Yellow.paint("none")),
+            prompt: format!(
+                "[{}] [{}] [{}] > ",
+                Red.paint("none"),
+                Green.paint("none"),
+                Yellow.paint("none")
+            ),
         }
     }
 
     // sets the prompt string based on current settings
     fn set_prompt(&mut self) {
-        self.prompt = format!("[{}] [{}] [{}] > ",
-                              if let Some(ref k) = self.kluster {
-                                  Red.bold().paint(k.name.as_str())
-                              } else {
-                                  Red.paint("none")
-                              },
-                              if let Some(ref n) = self.namespace {
-                                  Green.bold().paint(n.as_str())
-                              } else {
-                                  Green.paint("none")
-                              },
-                              match self.current_object {
-                                  KObj::None => Yellow.paint("none"),
-                                  KObj::Pod{ref name, ..} => Yellow.bold().paint(name.as_str()),
-                                  KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
-                                  KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
-                                  KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
-                                  KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
-                              }
+        self.prompt = format!(
+            "[{}] [{}] [{}] > ",
+            if let Some(ref k) = self.kluster {
+                Red.bold().paint(k.name.as_str())
+            } else {
+                Red.paint("none")
+            },
+            if let Some(ref n) = self.namespace {
+                Green.bold().paint(n.as_str())
+            } else {
+                Green.paint("none")
+            },
+            match self.current_object {
+                KObj::None => Yellow.paint("none"),
+                KObj::Pod { ref name, .. } => Yellow.bold().paint(name.as_str()),
+                KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
+                KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
+                KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
+                KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
+            }
         );
 
     }
@@ -157,16 +169,18 @@ impl Env {
         match ctx {
             Some(cname) => {
                 self.kluster = match self.config.cluster_for_context(cname) {
-                    Ok(k) => {
-                        Some(k)
-                    },
+                    Ok(k) => Some(k),
                     Err(e) => {
-                        println!("[Warning] Couldn't find/load context {}, now no current context.  Error: {}", cname, e);
+                        println!(
+                            "[Warning] Couldn't find/load context {}, now no current context.  Error: {}",
+                            cname,
+                            e
+                        );
                         None
                     }
                 };
                 self.set_prompt();
-            },
+            }
             None => {} // no-op
         }
     }
@@ -198,19 +212,23 @@ impl Env {
         match self.last_objs {
             LastList::None => {
                 println!("No active object list");
-            },
+            }
             LastList::PodList(ref pl) => {
                 if let Some(pod) = pl.items.get(num) {
-                    let containers = pod.spec.containers.iter().map(
-                        |cspec| cspec.name.clone()
-                    ).collect();
-                    self.current_object = KObj::Pod{name: pod.metadata.name.clone(),
-                                                    containers: containers};
+                    let containers = pod.spec
+                        .containers
+                        .iter()
+                        .map(|cspec| cspec.name.clone())
+                        .collect();
+                    self.current_object = KObj::Pod {
+                        name: pod.metadata.name.clone(),
+                        containers: containers,
+                    };
                     self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
             LastList::NodeList(ref nl) => {
                 if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
                     self.current_object = KObj::Node(name);
@@ -218,7 +236,7 @@ impl Env {
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
             LastList::DeploymentList(ref dl) => {
                 if let Some(dep) = dl.items.get(num) {
                     self.current_object = KObj::Deployment(dep.metadata.name.clone());
@@ -226,7 +244,7 @@ impl Env {
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
             LastList::ServiceList(ref sl) => {
                 if let Some(service) = sl.items.get(num) {
                     self.current_object = KObj::Service(service.metadata.name.clone());
@@ -234,7 +252,7 @@ impl Env {
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
             LastList::ReplicaSetList(ref rsl) => {
                 if let Some(ref replicaset) = rsl.items.get(num) {
                     match val_str_opt("/metadata/name", replicaset) {
@@ -242,7 +260,7 @@ impl Env {
                             let namespace = val_str_opt("/metadata/namespace", replicaset);
                             self.current_object = KObj::ReplicaSet(name);
                             self.current_object_namespace = namespace;
-                        },
+                        }
                         None => {
                             println!("ReplicaSet has no name in metadata");
                             self.current_object = KObj::None;
@@ -251,13 +269,13 @@ impl Env {
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
         }
         self.set_prompt();
     }
 
     fn current_pod(&self) -> Option<&String> {
-        if let KObj::Pod{ref name, ..} = self.current_object {
+        if let KObj::Pod { ref name, .. } = self.current_object {
             Some(name)
         } else {
             None
@@ -265,7 +283,9 @@ impl Env {
     }
 
     fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
-        where F: FnOnce(&Kluster) -> Result<R, KubeError> {
+    where
+        F: FnOnce(&Kluster) -> Result<R, KubeError>,
+    {
 
         match self.kluster {
             Some(ref k) => {
@@ -274,9 +294,9 @@ impl Env {
                     Err(e) => {
                         println!("{}", e);
                         None
-                    },
+                    }
                 }
-            },
+            }
             None => {
                 println!("Need to have an active context");
                 None
@@ -316,18 +336,20 @@ impl Env {
 
 impl fmt::Display for Env {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Env {{
+        write!(
+            f,
+            "Env {{
   Current Context: {}
   Availble Contexts: {:?}
   Kubernetes Config File: {}
 }}",
-               if let Some(ref k) = self.kluster {
-                   Red.bold().paint(k.name.as_str())
-               } else {
-                   Red.paint("none")
-               },
-               self.config.contexts.keys(),
-               self.config.source_file,
+            if let Some(ref k) = self.kluster {
+                Red.bold().paint(k.name.as_str())
+            } else {
+                Red.paint("none")
+            },
+            self.config.contexts.keys(),
+            self.config.source_file,
         )
     }
 }
@@ -344,10 +366,12 @@ enum RightExpr<'a> {
 fn parse_line<'a>(line: &'a String) -> Result<(&'a str, RightExpr<'a>), KubeError> {
     match (line.find('|'), line.find('>')) {
         (Some(_), Some(_)) => {
-            Err(KubeError::ParseErr("Input cannot contain | and >".to_owned()))
-        },
+            Err(KubeError::ParseErr(
+                "Input cannot contain | and >".to_owned(),
+            ))
+        }
         (Some(pipeidx), None) => {
-            let (left,right) = line.split_at(pipeidx);
+            let (left, right) = line.split_at(pipeidx);
             let rtrim = right[1..].trim(); // remove | char and whitespace
             if rtrim.is_empty() {
                 Err(KubeError::ParseErr("Pipe command is empty".to_owned()))
@@ -364,9 +388,7 @@ fn parse_line<'a>(line: &'a String) -> Result<(&'a str, RightExpr<'a>), KubeErro
                 Ok((left, RightExpr::Redir(rtrim)))
             }
         }
-        (None, None) => {
-            Ok((line, RightExpr::None))
-        }
+        (None, None) => Ok((line, RightExpr::None)),
     }
 }
 
@@ -376,29 +398,30 @@ fn main() {
         .version("0.1")
         .author("Nick Lanham <nick@databricks.com>")
         .about("Command Line Interactive Contoller for Kubernetes")
-        .arg(Arg::with_name("config_dir")
-             .short("c")
-             .long("config_dir")
-             .value_name("DIR")
-             .help("Specify the directory to find kubernetes and click configs")
-             .takes_value(true))
+        .arg(
+            Arg::with_name("config_dir")
+                .short("c")
+                .long("config_dir")
+                .value_name("DIR")
+                .help("Specify the directory to find kubernetes and click configs")
+                .takes_value(true),
+        )
         .get_matches();
 
-    let conf_dir =
-        if let Some(dir) = matches.value_of("config_dir") {
-            PathBuf::from(dir)
-        } else {
-            match std::env::home_dir() {
-                Some(mut path) => {
-                    path.push(".kube");
-                    path
-                },
-                None => {
-                    println!("Can't get your home dir, please specify --config_dir");
-                    std::process::exit(-2);
-                }
+    let conf_dir = if let Some(dir) = matches.value_of("config_dir") {
+        PathBuf::from(dir)
+    } else {
+        match std::env::home_dir() {
+            Some(mut path) => {
+                path.push(".kube");
+                path
             }
-        };
+            None => {
+                println!("Can't get your home dir, please specify --config_dir");
+                std::process::exit(-2);
+            }
+        }
+    };
 
     let mut click_path = conf_dir.clone();
     click_path.push("click.config");
@@ -452,18 +475,18 @@ fn main() {
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                match  parse_line(&line) {
+                match parse_line(&line) {
                     Ok((left, right)) => {
 
                         // set up output
                         match right {
-                            RightExpr::None => {}, // do nothing
+                            RightExpr::None => {} // do nothing
                             RightExpr::Pipe(cmd) => {
                                 if let Err(e) = writer.setup_pipe(cmd) {
                                     println!("{}", e.description());
                                     continue;
                                 }
-                            },
+                            }
                             RightExpr::Redir(filename) => {
                                 match File::create(filename) {
                                     Ok(out_file) => {
@@ -482,12 +505,10 @@ fn main() {
                             // There was something typed
                             if let Ok(num) = cmdstr.parse::<usize>() {
                                 env.set_current(num);
-                            }
-                            else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
+                            } else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
                                 // found a matching command
                                 cmd.exec(&mut env, &mut parts, &mut writer);
-                            }
-                            else if cmdstr == "help" {
+                            } else if cmdstr == "help" {
                                 // help isn't a command as it needs access to the commands vec
                                 if let Some(hcmd) = parts.next() {
                                     if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
@@ -495,63 +516,80 @@ fn main() {
                                     } else {
                                         match hcmd { // match for meta topics
                                             "pipes" => {
-                                                println!("You can pipe output of any command to a \
-                                                          shell command using the | character. \
-                                                          Only one pipe character supported for \
-                                                          the moment.\n\n\
-                                                          Examples:\n  \
-                                                          # grep logs for ERROR:\n  \
-                                                          logs my-cont | grep ERROR\n\n  \
-                                                          # pass output of describe -j to jq\n  \
-                                                          describe -j | jq .");
+                                                println!(
+                                                    "You can pipe output of any command to a \
+                                                     shell command using the | character. \
+                                                     Only one pipe character supported for \
+                                                     the moment.\n\n\
+                                                     Examples:\n  \
+                                                     # grep logs for ERROR:\n  \
+                                                     logs my-cont | grep ERROR\n\n  \
+                                                     # pass output of describe -j to jq\n  \
+                                                     describe -j | jq ."
+                                                );
                                             }
                                             "redirection" => {
-                                                println!("You can redirect the output of any \
-                                                          command to a file using the > \
-                                                          character.  Only one > character \
-                                                          supported for the moment.\n\n\
-                                                          Examples:\n  \
-                                                          # Save logs to logs.txt:\n  \
-                                                          logs my-cont > /tmp/logs.txt");
+                                                println!(
+                                                    "You can redirect the output of any \
+                                                     command to a file using the > \
+                                                     character.  Only one > character \
+                                                     supported for the moment.\n\n\
+                                                     Examples:\n  \
+                                                     # Save logs to logs.txt:\n  \
+                                                     logs my-cont > /tmp/logs.txt"
+                                                );
 
                                             }
                                             _ => {
-                                                println!("I don't know anything about {}, sorry", hcmd);
+                                                println!(
+                                                    "I don't know anything about {}, sorry",
+                                                    hcmd
+                                                );
                                             }
                                         }
                                     }
                                 } else {
-                                    println!("Available commands (type 'help [COMMAND]' for details):");
+                                    println!(
+                                        "Available commands (type 'help [COMMAND]' for details):"
+                                    );
                                     let spacer = "                  ";
                                     for c in commands.iter() {
-                                        println!("  {}{}{}", c.get_name(), &spacer[0..(20-c.get_name().len())], c.about());
+                                        println!(
+                                            "  {}{}{}",
+                                            c.get_name(),
+                                            &spacer[0..(20 - c.get_name().len())],
+                                            c.about()
+                                        );
                                     }
-                                    println!("\nOther help topics (type 'help [TOPIC]' for details)");
+                                    println!(
+                                        "\nOther help topics (type 'help [TOPIC]' for details)"
+                                    );
                                     println!("  pipes");
                                     println!("  redirection");
                                 }
-                            }
-                            else {
+                            } else {
                                 println!("Unknown command");
                             }
                         }
 
                         // reset output
                         writer.finish_output();
-                    },
+                    }
                     Err(err) => {
                         println!("{}", err);
-                    },
+                    }
                 }
             }
-            Err(ReadlineError::Interrupted) => { }, // don't exit on Ctrl-C
-            Err(_)   => {
+            Err(ReadlineError::Interrupted) => {} // don't exit on Ctrl-C
+            Err(_) => {
                 break;
             }
         }
     }
     click_conf.from_env(&env);
-    click_conf.save_to_file(click_path.as_path().to_str().unwrap()).unwrap();
+    click_conf
+        .save_to_file(click_path.as_path().to_str().unwrap())
+        .unwrap();
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);
     }

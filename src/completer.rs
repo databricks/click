@@ -32,7 +32,7 @@ impl<'a> ClickCompleter<'a> {
     pub fn new(commands: &'a Vec<Box<Cmd>>, env: *const ::Env) -> ClickCompleter<'a> {
         ClickCompleter {
             commands: commands,
-            env: unsafe{&*env},
+            env: unsafe { &*env },
         }
     }
 }
@@ -61,16 +61,16 @@ impl<'a> Completer for ClickCompleter<'a> {
 
             if let Some(linecmd) = split.next() {
                 // gather up any none switch type args
-                let rest:Vec<&str> = split.filter(|s| {!s.starts_with("-")}).collect();
+                let rest: Vec<&str> = split.filter(|s| !s.starts_with("-")).collect();
                 if let Some(cmd) = self.get_exact_command(linecmd) {
                     // first thing is a full command, do complete on it
                     let (offset, opts) = cmd.try_complete(rest, self.env);
                     if pos == linecmd.len() && opts.len() > 1 {
                         // user as pressed tab with no space after the command, and we have completions, so add a space in
-                        let space_opts = opts.iter().map(|o| {format!(" {}",o)}).collect();
+                        let space_opts = opts.iter().map(|o| format!(" {}", o)).collect();
                         return Ok((line.len(), space_opts));
                     } else {
-                        return Ok((line.len()-offset, opts));
+                        return Ok((line.len() - offset, opts));
                     }
                 } else {
                     for cmd in self.commands.iter() {

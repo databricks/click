@@ -18,29 +18,32 @@ use serde_json::value::Value;
 
 pub fn val_str(pointer: &str, value: &Value, default: &str) -> String {
     match value.pointer(pointer) {
-        Some(p) => match p.as_str() {
-            Some(s) => s.to_owned(),
-            None => default.to_owned()
-        },
-        None => default.to_owned()
+        Some(p) => {
+            match p.as_str() {
+                Some(s) => s.to_owned(),
+                None => default.to_owned(),
+            }
+        }
+        None => default.to_owned(),
     }
 }
 
 /// Get the specified path, or None if doesn't exist
 pub fn val_str_opt(pointer: &str, value: &Value) -> Option<String> {
-    value.pointer(pointer).map(|p| {
-        p.as_str().map(|s| {
-            s.to_owned()
-        })
-    }).and_then(|s| s)
+    value
+        .pointer(pointer)
+        .map(|p| p.as_str().map(|s| s.to_owned()))
+        .and_then(|s| s)
 }
 
 pub fn val_u64(pointer: &str, value: &Value, default: u64) -> u64 {
     match value.pointer(pointer) {
-        Some(p) => match p.as_u64() {
-            Some(i) => i,
-            None => default
-        },
-        None => default
+        Some(p) => {
+            match p.as_u64() {
+                Some(i) => i,
+                None => default,
+            }
+        }
+        None => default,
     }
 }

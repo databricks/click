@@ -17,7 +17,7 @@
 use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
-use hyper::{Client,Url};
+use hyper::{Client, Url};
 use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
@@ -27,7 +27,7 @@ use hyper::status::StatusCode;
 use hyper_rustls::TlsClient;
 use serde::Deserialize;
 use serde_json;
-use serde_json::{Map,Value};
+use serde_json::{Map, Value};
 use rustls::{Certificate, PrivateKey};
 
 use std::fmt;
@@ -53,13 +53,13 @@ pub struct OwnerReference {
 pub struct Metadata {
     pub name: String,
     pub namespace: Option<String>,
-    #[serde(rename="creationTimestamp")]
+    #[serde(rename = "creationTimestamp")]
     pub creation_timestamp: Option<DateTime<UTC>>,
-    #[serde(rename="deletionTimestamp")]
+    #[serde(rename = "deletionTimestamp")]
     pub deletion_timestamp: Option<DateTime<UTC>>,
     pub labels: Option<Map<String, Value>>,
     pub annotations: Option<Map<String, Value>>,
-    #[serde(rename="ownerReferences")]
+    #[serde(rename = "ownerReferences")]
     pub owner_refs: Option<Vec<OwnerReference>>,
 }
 
@@ -67,26 +67,26 @@ pub struct Metadata {
 
 #[derive(Debug, Deserialize)]
 pub enum ContainerState {
-    #[serde(rename="running")]
+    #[serde(rename = "running")]
     Running {
-        #[serde(rename="startedAt")]
-        started_at: DateTime<UTC>
+        #[serde(rename = "startedAt")]
+        started_at: DateTime<UTC>,
     },
-    #[serde(rename="terminated")]
+    #[serde(rename = "terminated")]
     Terminated {
-        #[serde(rename="containerId")]
+        #[serde(rename = "containerId")]
         container_id: Option<String>,
-        #[serde(rename="exitCode")]
+        #[serde(rename = "exitCode")]
         exit_code: u32,
-        #[serde(rename="finishedAt")]
+        #[serde(rename = "finishedAt")]
         finished_at: DateTime<UTC>,
         message: Option<String>,
         reason: Option<String>,
         signal: Option<u32>,
-        #[serde(rename="startedAt")]
-        started_at: DateTime<UTC>
+        #[serde(rename = "startedAt")]
+        started_at: DateTime<UTC>,
     },
-    #[serde(rename="waiting")]
+    #[serde(rename = "waiting")]
     Waiting {
         message: Option<String>,
         reason: Option<String>,
@@ -96,9 +96,9 @@ pub enum ContainerState {
 impl fmt::Display for ContainerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ContainerState::Running{ started_at } => {
+            &ContainerState::Running { started_at } => {
                 write!(f, "{} (started: {})", Green.paint("running"), started_at)
-            },
+            }
             &ContainerState::Terminated {
                 container_id: _,
                 ref exit_code,
@@ -107,11 +107,26 @@ impl fmt::Display for ContainerState {
                 reason: _,
                 signal: _,
                 started_at: _,
-            } => write!(f, "{} at {} (exit code: {})", Red.paint("terminated"), finished_at, exit_code),
+            } => {
+                write!(
+                    f,
+                    "{} at {} (exit code: {})",
+                    Red.paint("terminated"),
+                    finished_at,
+                    exit_code
+                )
+            }
             &ContainerState::Waiting {
                 message: _,
                 ref reason,
-            } => write!(f, "{} ({})", Yellow.paint("waiting"), reason.as_ref().unwrap_or(&"<no reason given>".to_owned())),
+            } => {
+                write!(
+                    f,
+                    "{} ({})",
+                    Yellow.paint("waiting"),
+                    reason.as_ref().unwrap_or(&"<no reason given>".to_owned())
+                )
+            }
         }
     }
 }
@@ -119,11 +134,11 @@ impl fmt::Display for ContainerState {
 
 #[derive(Debug, Deserialize)]
 pub struct ContainerStatus {
-    #[serde(rename="containerID")]
+    #[serde(rename = "containerID")]
     pub id: Option<String>,
     pub name: String,
     pub image: String,
-    #[serde(rename="restartCount")]
+    #[serde(rename = "restartCount")]
     pub restart_count: u32,
     pub state: ContainerState,
 }
@@ -131,18 +146,18 @@ pub struct ContainerStatus {
 #[derive(Debug, Deserialize)]
 pub struct PodStatus {
     pub phase: String,
-    #[serde(rename="containerStatuses")]
-    pub container_statuses: Option<Vec<ContainerStatus>>
+    #[serde(rename = "containerStatuses")]
+    pub container_statuses: Option<Vec<ContainerStatus>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct VolumeMount {
-    #[serde(rename="mountPath")]
+    #[serde(rename = "mountPath")]
     pub mount_path: String,
     pub name: String,
-    #[serde(rename="readOnly")]
+    #[serde(rename = "readOnly")]
     pub read_only: Option<bool>,
-    #[serde(rename="subPath")]
+    #[serde(rename = "subPath")]
     pub sub_path: Option<String>,
 }
 
@@ -151,14 +166,14 @@ pub struct ContainerSpec {
     pub name: String,
     pub args: Option<Vec<String>>,
     pub command: Option<Vec<String>>,
-    #[serde(rename="volumeMounts")]
+    #[serde(rename = "volumeMounts")]
     pub volume_mounts: Option<Vec<VolumeMount>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PodSpec {
     pub hostname: Option<String>,
-    #[serde(rename="nodeName")]
+    #[serde(rename = "nodeName")]
     pub node_name: Option<String>,
     pub containers: Vec<ContainerSpec>,
 }
@@ -181,7 +196,7 @@ pub struct Event {
     pub count: u32,
     pub message: String,
     pub reason: String,
-    #[serde(rename="lastTimestamp")]
+    #[serde(rename = "lastTimestamp")]
     pub last_timestamp: DateTime<UTC>,
 }
 
@@ -195,7 +210,7 @@ pub struct EventList {
 // Nodes
 #[derive(Debug, Deserialize)]
 pub struct NodeCondition {
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     pub typ: String,
     pub status: String,
 }
@@ -235,17 +250,17 @@ fn replicas_one() -> u32 {
 
 #[derive(Debug, Deserialize)]
 pub struct DeploymentSpec {
-    #[serde(default="replicas_one")]
+    #[serde(default = "replicas_one")]
     pub replicas: u32,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DeploymentStatus {
-    #[serde(default="replicas_none")]
+    #[serde(default = "replicas_none")]
     pub replicas: u32,
-    #[serde(default="replicas_none", rename="availableReplicas")]
+    #[serde(default = "replicas_none", rename = "availableReplicas")]
     pub available: u32,
-    #[serde(default="replicas_none", rename="updatedReplicas")]
+    #[serde(default = "replicas_none", rename = "updatedReplicas")]
     pub updated: u32,
 }
 
@@ -270,20 +285,20 @@ fn tcp_str() -> String {
 #[derive(Debug, Deserialize)]
 pub struct ServicePort {
     pub name: Option<String>,
-    #[serde(rename="nodePort")]
+    #[serde(rename = "nodePort")]
     pub node_port: Option<u32>,
     pub port: u32,
-    #[serde(default="tcp_str")]
+    #[serde(default = "tcp_str")]
     pub protocol: String,
-    #[serde(rename="targetPort")]
+    #[serde(rename = "targetPort")]
     pub target_pod: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ServiceSpec {
-    #[serde(rename="clusterIP")]
+    #[serde(rename = "clusterIP")]
     pub cluster_ip: Option<String>,
-    #[serde(rename="externalIPs")]
+    #[serde(rename = "externalIPs")]
     pub external_ips: Option<Vec<String>>,
     pub ports: Option<Vec<ServicePort>>,
 }
@@ -338,7 +353,7 @@ impl KlusterAuth {
     }
 
     pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> KlusterAuth {
-        KlusterAuth::CertKey(vec!(cert), private_key)
+        KlusterAuth::CertKey(vec![cert], private_key)
     }
 }
 
@@ -351,7 +366,6 @@ pub struct Kluster {
 }
 
 impl Kluster {
-
     fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth) -> TlsClient {
         let mut tlsclient = TlsClient::new();
         if let &Some(ref cert_data) = cert_opt {
@@ -361,11 +375,16 @@ impl Kluster {
                 match cfg.root_store.add_pem_file(&mut br) {
                     Ok(added) => {
                         if added.1 > 0 {
-                            println!("[WARNING] Couldn't add your server cert, connection will probably fail");
+                            println!(
+                                "[WARNING] Couldn't add your server cert, connection will probably fail"
+                            );
                         }
                     }
                     Err(e) => {
-                        println!("[WARNING] Coudln't add your server cert, connection will probably fail. Error was: {:?}", e)
+                        println!(
+                            "[WARNING] Coudln't add your server cert, connection will probably fail. Error was: {:?}",
+                            e
+                        )
                     }
                 }
 
@@ -373,17 +392,24 @@ impl Kluster {
                     cfg.set_single_client_cert(cert.clone(), key.clone());
                 }
             } else {
-                println!("[WARNING] Failed to configure tlsclient, connection will probably fail.  Please restart click");
+                println!(
+                    "[WARNING] Failed to configure tlsclient, connection will probably fail.  Please restart click"
+                );
             }
         }
         tlsclient
     }
 
-    pub fn new(name: &str, cert_opt: Option<String>, server: &str, auth: KlusterAuth) -> Result<Kluster, KubeError> {
+    pub fn new(
+        name: &str,
+        cert_opt: Option<String>,
+        server: &str,
+        auth: KlusterAuth,
+    ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
         let mut client = Client::with_connector(HttpsConnector::new(tlsclient));
-        client.set_read_timeout(Some(Duration::new(20,0)));
-        client.set_write_timeout(Some(Duration::new(20,0)));
+        client.set_read_timeout(Some(Duration::new(20, 0)));
+        client.set_write_timeout(Some(Duration::new(20, 0)));
         Ok(Kluster {
             name: name.to_owned(),
             endpoint: try!(Url::parse(server)),
@@ -396,15 +422,13 @@ impl Kluster {
     fn send_req(&self, path: &str) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
         let req = self.client.get(url);
-        let req =
-            if let KlusterAuth::Token(ref token) = self.auth {
-                req.header(Authorization(
-                    Bearer {
-                        token: token.clone()
-                    }))
-            } else {
-                req
-            };
+        let req = if let KlusterAuth::Token(ref token) = self.auth {
+            req.header(Authorization(Bearer {
+                token: token.clone(),
+            }))
+        } else {
+            req
+        };
         req.send().map_err(|he| KubeError::from(he))
     }
 
@@ -418,14 +442,16 @@ impl Kluster {
             let val: Value = try!(serde_json::from_reader(resp));
             match ::values::val_str_opt("/message", &val) {
                 Some(msg) => Err(KubeError::KubeServerError(msg)),
-                None => Err(KubeError::Kube(KubeErrNo::Unknown))
+                None => Err(KubeError::Kube(KubeErrNo::Unknown)),
             }
         }
     }
 
     /// Get a resource and deserialize it as a T
     pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
-        where for<'de> T: Deserialize<'de> {
+    where
+        for<'de> T: Deserialize<'de>,
+    {
 
         let resp = try!(self.send_req(path));
         let resp = try!(self.check_resp(resp));
@@ -437,19 +463,18 @@ impl Kluster {
     pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
         if timeout.is_some() {
             let url = try!(self.endpoint.join(path));
-            let mut req = try!(Request::with_connector(Method::Get,
-                                                       url,
-                                                       &HttpsConnector::new(
-                                                           Kluster::make_tlsclient(&self.cert_opt, &self.auth)
-                                                       )));
-            { // scope for mutable borrow of req
+            let mut req = try!(Request::with_connector(
+                Method::Get,
+                url,
+                &HttpsConnector::new(Kluster::make_tlsclient(&self.cert_opt, &self.auth))
+            ));
+            {
+                // scope for mutable borrow of req
                 let mut headers = req.headers_mut();
                 if let KlusterAuth::Token(ref token) = self.auth {
-                    headers.set(Authorization(
-                        Bearer {
-                            token: token.clone()
-                        }
-                    ));
+                    headers.set(Authorization(Bearer {
+                        token: token.clone(),
+                    }));
                 }
             }
             try!(req.set_read_timeout(timeout));
@@ -473,15 +498,13 @@ impl Kluster {
     pub fn delete(&self, path: &str) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
         let req = self.client.delete(url);
-        let req =
-            if let KlusterAuth::Token(ref token) = self.auth {
-                req.header(Authorization(
-                    Bearer {
-                        token: token.clone()
-                    }))
-            } else {
-                req
-            };
+        let req = if let KlusterAuth::Token(ref token) = self.auth {
+            req.header(Authorization(Bearer {
+                token: token.clone(),
+            }))
+        } else {
+            req
+        };
         req.send().map_err(|he| KubeError::from(he))
     }
 

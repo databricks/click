@@ -37,9 +37,7 @@ pub fn get_cert(path: &str) -> Option<Certificate> {
         let mut pem_br = BufReader::new(cert_file);
         let mut pem_buf = String::new();
         match pem_br.read_to_string(&mut pem_buf) {
-            Ok(_) => {
-                get_cert_from_pem(pem_buf.as_str())
-            },
+            Ok(_) => get_cert_from_pem(pem_buf.as_str()),
             Err(e) => {
                 println!("Error reading cert {}: {}", path, e);
                 None
@@ -62,9 +60,9 @@ pub fn get_private_key(path: &str) -> Option<PrivateKey> {
         Ok(_) => Some(key), // it worked, just return it
         Err(_) => {
             // failed, so try and convert
-            key_buf.retain(|&i| {i != 0});
+            key_buf.retain(|&i| i != 0);
             get_key_from_str(String::from_utf8(key_buf).unwrap().as_str())
-        },
+        }
     }
 }
 
@@ -81,7 +79,7 @@ fn get_body(s: &str) -> Option<String> {
                 let no_headers = m.as_str();
                 no_headers.replace("\n", "")
             })
-        },
+        }
         None => None,
     }
 }
@@ -114,10 +112,10 @@ pub fn get_cert_from_pem(pem: &str) -> Option<Certificate> {
                 Err(e) => {
                     println!("Failed to decode cert: {}", e.description());
                     None
-                },
+                }
             }
-        },
-        None => None
+        }
+        None => None,
     }
 }
 
@@ -141,7 +139,9 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                             (Some(alg), Some(bits)) => {
                                 match alg.ref_iter().next() {
                                     Some(oid) => {
-                                        if let der_parser::DerObjectContent::OID(ref v) = oid.content {
+                                        if let der_parser::DerObjectContent::OID(ref v) =
+                                            oid.content
+                                        {
                                             if v == &RSAOID {
                                                 if let der_parser::DerObjectContent::OctetString(ref v) = bits.content {
                                                     validate_private_key(PrivateKey(v.to_vec()))
@@ -150,20 +150,22 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                                                     None
                                                 }
                                             } else {
-                                                println!("Invalid OID in pkcs8 key, cannot continue");
+                                                println!(
+                                                    "Invalid OID in pkcs8 key, cannot continue"
+                                                );
                                                 None
                                             }
                                         } else {
                                             println!("Invalid OID in pkcs8 key, cannot continue");
                                             None
                                         }
-                                    },
+                                    }
                                     None => {
                                         println!("pkcs8 does not have an OID, cannot continue");
                                         None
                                     }
                                 }
-                            },
+                            }
                             _ => {
                                 println!("Invalid der data in pkcs8 private key, cannot continue");
                                 None
@@ -176,9 +178,9 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                 Err(e) => {
                     println!("Failed to decode private key: {:?}", e);
                     None
-                },
+                }
             }
-        },
+        }
         None => None,
     }
 }

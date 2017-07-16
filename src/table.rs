@@ -102,7 +102,7 @@ impl<'a> CellSpec<'a> {
                 let mut c = Cell::new(format!("{}", index).as_str());
                 c.align(format::Alignment::RIGHT);
                 c
-            },
+            }
             CellSpecTxt::Str(ref s) => Cell::new(s),
             CellSpecTxt::String(ref s) => Cell::new(s.as_str()),
         };
@@ -132,8 +132,7 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
         Some(pattern) => {
             if let Ok(regex) = Regex::new(pattern) {
                 Ok(Some(regex))
-            }
-            else {
+            } else {
                 Err(format!("Invalid regex: {}", pattern))
             }
         }
@@ -141,21 +140,25 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
     }
 }
 
-pub fn filter<'a, T, I> (things: I, regex: Regex) -> Vec<(T, Vec<CellSpec<'a>>)>
-    where I: Iterator<Item=(T,Vec<CellSpec<'a>>)> {
-    things.filter_map(|thing| {
-        let mut has_match = false;
-        for cell_spec in thing.1.iter() {
-            if !has_match {
-                has_match = cell_spec.matches(&regex);
+pub fn filter<'a, T, I>(things: I, regex: Regex) -> Vec<(T, Vec<CellSpec<'a>>)>
+where
+    I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
+{
+    things
+        .filter_map(|thing| {
+            let mut has_match = false;
+            for cell_spec in thing.1.iter() {
+                if !has_match {
+                    has_match = cell_spec.matches(&regex);
+                }
             }
-        }
-        if has_match {
-            Some(thing)
-        } else {
-            None
-        }
-    }).collect()
+            if has_match {
+                Some(thing)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
@@ -163,17 +166,17 @@ fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
         Some(ref mut term) => {
             table.print_term(term).unwrap_or(());
             true
-        },
-        None => {
-            false
-        },
+        }
+        None => false,
     }
 }
 
 
-pub fn print_table<'a, T>(table: &mut Table,
-                          specs: &Vec<(T, Vec<CellSpec<'a>>)>,
-                          writer: &mut ClickWriter) {
+pub fn print_table<'a, T>(
+    table: &mut Table,
+    specs: &Vec<(T, Vec<CellSpec<'a>>)>,
+    writer: &mut ClickWriter,
+) {
     for (index, t_spec) in specs.iter().enumerate() {
         let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
         table.add_row(Row::new(row_vec));

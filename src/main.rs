@@ -54,6 +54,7 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -163,6 +164,10 @@ impl Env {
             }
         );
 
+    }
+
+    fn get_contexts(&self) -> &HashMap<String, ::config::ContextConf> {
+        &self.config.contexts
     }
 
     fn set_context(&mut self, ctx: Option<&str>) {
@@ -442,6 +447,7 @@ fn main() {
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
     commands.push(Box::new(cmd::Context::new()));
+    commands.push(Box::new(cmd::Contexts::new()));
     commands.push(Box::new(cmd::Pods::new()));
     commands.push(Box::new(cmd::Nodes::new()));
     commands.push(Box::new(cmd::Deployments::new()));

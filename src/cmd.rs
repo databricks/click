@@ -674,6 +674,21 @@ command!(Context,
          }
 );
 
+command!(Contexts,
+         "contexts",
+         "List available contexts",
+         identity,
+         |l| { l == "contexts" || l == "ctxs" },
+         noop_complete,
+         |_,env,writer| {
+             let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
+             contexts.sort();
+             for context in contexts.iter() {
+                 clickwrite!(writer, "{}\n", context);
+             }
+         }
+);
+
 command!(Clear,
          "clear",
          "Clear the currently selected kubernetes object",

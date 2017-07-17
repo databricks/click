@@ -22,7 +22,7 @@ use output::ClickWriter;
 use table::CellSpec;
 use values::{val_str, val_u64};
 
-use ansi_term::Colour::Green;
+use ansi_term::Colour::{Yellow, Green};
 use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::local::Local;
@@ -68,11 +68,13 @@ pub trait Cmd {
 }
 
 /// Get the start of a clap object
-fn start_clap(name: &'static str, about: &'static str) -> App<'static, 'static> {
+fn start_clap(name: &'static str, about: &'static str, aliases: &'static str) -> App<'static, 'static> {
     App::new(name)
         .about(about)
+        .before_help(aliases)
         .setting(AppSettings::NoBinaryName)
         .setting(AppSettings::DisableVersion)
+        .setting(AppSettings::ColoredHelp)
 }
 
 /// Run specified closure with the given matches, or print error.  Return true if execed, false on err
@@ -105,7 +107,7 @@ where
 /// * name: the string name of the command
 /// * about: an about string describing the command
 /// * extra_args: a closure taking an App that addes any additional argument stuff and returns an App
-/// * is_expr: a closure taking a string arg that checks if the passed string is one that should call this command
+/// * aliases: a vector of strs that specify what a user can type to invoke this command
 /// * cmplt_expr: an expression to return possible compeltions for the command
 /// * cmd_expr: a closure taking matches, env, and writer that runs to execute the command
 ///
@@ -117,7 +119,7 @@ where
 ///         "quit",
 ///         "Quit click",
 ///         |clap| {clap},
-///         |l| {l == "q" || l == "quit"},
+///         vec!("q", "quit"),
 ///         |matches, env, writer| {env.quit = true;}
 /// );
 /// # }
@@ -131,7 +133,10 @@ macro_rules! command {
 
         impl $cmd_name {
             pub fn new() -> $cmd_name {
-                let clap = start_clap($name, $about);
+                lazy_static! {
+                    static ref ALIASES_STR:String = format!("{}:\n    {:?}", Yellow.paint("ALIASES"), $aliases);
+                }
+                let clap = start_clap($name, $about, &ALIASES_STR);
                 let extra = $extra_args(clap);
                 $cmd_name {
                     aliases: $aliases,

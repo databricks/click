@@ -123,8 +123,9 @@ where
 /// # }
 /// ```
 macro_rules! command {
-    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $is_expr:expr, $cmplt_expr: expr, $cmd_expr:expr) => {
+    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplt_expr: expr, $cmd_expr:expr) => {
         pub struct $cmd_name {
+            aliases: Vec<&'static str>,
             clap: RefCell<App<'static, 'static>>,
         }
 
@@ -133,6 +134,7 @@ macro_rules! command {
                 let clap = start_clap($name, $about);
                 let extra = $extra_args(clap);
                 $cmd_name {
+                    aliases: $aliases,
                     clap: RefCell::new(extra),
                 }
             }
@@ -144,7 +146,7 @@ macro_rules! command {
             }
 
             fn is(&self, l: &str) -> bool {
-                $is_expr(l)
+                self.aliases.contains(&l)
             }
 
             fn get_name(&self) -> &'static str {
@@ -627,7 +629,7 @@ command!(Quit,
          "quit",
          "Quit click",
          identity,
-         |l| {l == "q" || l == "quit" || l == "exit"},
+         vec!("q", "quit", "exit"),
          noop_complete,
          |_,env,_| {env.quit = true;}
 );
@@ -641,7 +643,7 @@ command!(Context,
                       .required(true)
                       .index(1))
          },
-         |l| {l == "ctx" || l == "context"},
+         vec!("ctx", "context"),
          |args: Vec<&str>, env: &Env| {
              if args.len() <= 1 {
                  let mut v = Vec::new();
@@ -678,7 +680,7 @@ command!(Contexts,
          "contexts",
          "List available contexts",
          identity,
-         |l| { l == "contexts" || l == "ctxs" },
+         vec!("contexts","ctxs"),
          noop_complete,
          |_,env,writer| {
              let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
@@ -693,7 +695,7 @@ command!(Clear,
          "clear",
          "Clear the currently selected kubernetes object",
          identity,
-         |l| { l == "clear" },
+         vec!("clear"),
          noop_complete,
          |_, env, _| {
              env.clear_current();
@@ -709,7 +711,7 @@ command!(Namespace,
                       .required(false)
                       .index(1))
          },
-         |l| {l == "ns" || l == "namespace"},
+         vec!("ns","namespace"),
          |args: Vec<&str>, env: &Env| {
              if args.len() <= 1 {
                  // no args yet, suggest all namespaces
@@ -765,7 +767,7 @@ command!(Pods,
                       .help("Show pod annotations as column in output")
                       .takes_value(false))
          },
-         |l| { l == "pods" },
+         vec!("pods"),
          noop_complete,
          |matches, env, writer| {
 
@@ -856,7 +858,7 @@ command!(Logs,
                       .help("Only return logs newer than specified RFC3339 date. Eg: 1996-12-19T16:39:57-08:00")
                       .takes_value(true))
          },
-         |l| { l == "logs" },
+         vec!("logs"),
          |args: Vec<&str>, env: &Env| {
              if args.len() <= 1 {
                  let mut v = Vec::new();
@@ -1079,7 +1081,7 @@ command!(Describe,
                       .help("output full json")
                       .takes_value(false))
          },
-         |l| { l == "describe" },
+         vec!("describe"),
          noop_complete,
          |matches, env, writer| {
              match env.current_object {
@@ -1179,7 +1181,7 @@ command!(Exec,
                       .help("Exec in the specified container")
                       .takes_value(true))
          },
-         |l| { l == "exec" },
+         vec!("exec"),
          noop_complete,
          |matches, env, _writer| {
              let cmd = matches.value_of("command").unwrap(); // safe as required
@@ -1227,7 +1229,7 @@ command!(Delete,
                       .help("If specified, dependent objects are orphaned.")
                       .takes_value(false))
          },
-         |l| { l == "delete" },
+         vec!("delete"),
          noop_complete,
          |matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace {
@@ -1334,7 +1336,7 @@ command!(Containers,
          "containers",
          "List containers on the active pod",
          identity,
-         |l| { l == "conts" || l == "containers" },
+         vec!("conts","containers"),
          noop_complete,
          |_matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
@@ -1368,7 +1370,7 @@ command!(Events,
          "events",
          "Get events for the active pod",
          identity,
-         |l| { l == "events" },
+         vec!("events"),
          noop_complete,
          |_matches, env, writer| {
              if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
@@ -1412,7 +1414,7 @@ command!(Nodes,
                       .takes_value(true))
 
          },
-         |l| { l == "nodes" },
+         vec!("nodes"),
          noop_complete,
          |matches, env, writer| {
              let regex = match ::table::get_regex(&matches) {
@@ -1453,7 +1455,7 @@ command!(Services,
                       .takes_value(true))
 
          },
-         |l| { l == "services" },
+         vec!("services"),
          noop_complete,
          |matches, env, writer| {
 
@@ -1489,7 +1491,7 @@ command!(EnvCmd,
          "env",
          "Print information about the current environment",
          identity,
-         |l| { l == "env" },
+         vec!("env"),
          noop_complete,
          |_matches, env, writer| {
              clickwrite!(writer, "{}\n", env);
@@ -1511,7 +1513,7 @@ command!(Deployments,
                       .help("Filter deployments by the specified regex")
                       .takes_value(true))
          },
-         |l| { l == "deps" || l == "deployments" },
+         vec!("deps","deployments"),
          noop_complete,
          |matches, env, writer| {
              let regex = match ::table::get_regex(&matches) {
@@ -1597,7 +1599,7 @@ command!(ReplicaSets,
                       .help("Filter replicasets by the specified regex")
                       .takes_value(true))
          },
-         |l| { l == "rs" || l == "replicasets" },
+         vec!("rs","replicasets"),
          noop_complete,
          |matches, env, writer| {
              let regex = match ::table::get_regex(&matches) {
@@ -1640,7 +1642,7 @@ command!(Namespaces,
                       .help("Filter namespaces by the specified regex")
                       .takes_value(true))
          },
-         |l| { l == "namespaces" },
+         vec!("namespaces"),
          noop_complete,
          |matches, env, writer| {
              let regex = match ::table::get_regex(&matches) {
@@ -1665,7 +1667,7 @@ command!(UtcCmd,
          "utc",
          "Print current time in UTC",
          identity,
-         |l| { l == "utc" },
+         vec!("utc"),
          noop_complete,
          |_, _, writer| {
              clickwrite!(writer, "{}\n", UTC::now());
@@ -1710,7 +1712,7 @@ Examples:
   # Forwards a random port locally to port 3456 on the pod
   port-forward :3456")
          },
-         |l| { l == "pf" || l == "port-forward" },
+         vec!("pf","port-forward"),
          noop_complete,
          |matches, env, writer| {
              let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
@@ -1850,7 +1852,7 @@ command!(PortForwards,
   # Stop item number 3 in list from above command
   pfs stop 3")
          },
-         |l| { l == "pfs" || l == "port-forwards" },
+         vec!("pfs","port-forwards"),
          noop_complete,
          |matches, env, writer| {
              let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";

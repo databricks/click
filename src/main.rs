@@ -44,6 +44,7 @@ mod certs;
 mod cmd;
 mod completer;
 mod config;
+mod describe;
 mod error;
 mod kube;
 mod table;

@@ -16,13 +16,14 @@
 
 use Env;
 use LastList;
+use describe;
 use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NamespaceList,
            NodeList, NodeCondition, ReplicaSetList, ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
 use values::{val_str, val_u64};
 
-use ansi_term::Colour::{Yellow, Green};
+use ansi_term::Colour::{Yellow};
 use clap::{Arg, ArgMatches, App, AppSettings};
 use chrono::DateTime;
 use chrono::offset::local::Local;
@@ -41,7 +42,6 @@ use std::error::Error;
 use std::iter::Iterator;
 use std::io::{self, BufRead, BufReader, Read, Write, stderr};
 use std::process::{Command, Stdio};
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::Ordering;
 use std::thread;
@@ -619,15 +619,6 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     ::table::print_table(&mut table, &filtered, writer);
 }
 
-
-fn val_to_str<'a>(v: &'a Value, key: &str) -> &'a str {
-    if let Some(v) = v.get(key) {
-        v.as_str().unwrap_or("unknown")
-    } else {
-        "unknown"
-    }
-}
-
 // Command defintions below.  See documentation for the command! macro for an explanation of arguments passed here
 
 command!(Quit,
@@ -940,142 +931,6 @@ command!(Logs,
          }
 );
 
-
-/// get key/vals out of metadata
-fn get_keyval_str(v: &Value, parent: &str, title: &str) -> String {
-    let mut outstr = title.to_owned();
-    if let Some(keyvals) = v.get(parent).unwrap().as_object() {
-        let mut first = true;
-        for key in keyvals.keys() {
-            if !first {
-                outstr.push('\n');
-                outstr.push('\t');
-            }
-            first = false;
-            outstr.push('\t');
-            outstr.push_str(key);
-            outstr.push('=');
-            outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
-        }
-    }
-    outstr
-}
-
-
-/// Get volume info out of volume array
-fn get_volume_str(v: &Value) -> String {
-    let mut buf = String::new();
-    buf.push_str("Volumes:\n");
-    if let Some(vol_arry) = v.as_array() {
-        for vol in vol_arry.iter() {
-            buf.push_str(format!("  Name: {}\n", val_to_str(vol, "name")).as_str());
-            if vol.get("emptyDir").is_some() {
-                buf.push_str(
-                    "    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n",
-                )
-            }
-            if let Some(conf_map) = vol.get("configMap") {
-                buf.push_str("    Type:\tConfigMap (a volume populated by a ConfigMap)\n");
-                buf.push_str(
-                    format!("    Name:\t{}\n", val_to_str(conf_map, "name")).as_str(),
-                );
-            }
-            if let Some(secret) = vol.get("secret") {
-                buf.push_str("    Type:\tSecret (a volume populated by a Secret)\n");
-                buf.push_str(
-                    format!("    SecretName:\t{}\n", val_to_str(secret, "secretName")).as_str(),
-                );
-            }
-            if let Some(aws) = vol.get("awsElasticBlockStore") {
-                buf.push_str(
-                    "    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n",
-                );
-                buf.push_str(
-                    format!("    VolumeId:\t{}\n", val_to_str(aws, "volumeID")).as_str(),
-                );
-                buf.push_str(
-                    format!("    FSType:\t{}\n", val_to_str(aws, "fsType")).as_str(),
-                );
-                let mut pnum = 0;
-                if let Some(part) = aws.get("partition") {
-                    if let Some(p) = part.as_u64() {
-                        pnum = p;
-                    }
-                }
-                buf.push_str(format!("    Partition#:\t{}\n", pnum).as_str());
-                if let Some(read_only) = aws.get("readOnly") {
-                    if read_only.as_bool().unwrap() {
-                        buf.push_str("    Read-Only:\tTrue\n");
-                    } else {
-                        buf.push_str("    Read-Only:\tFalse\n");
-                    }
-                } else {
-                    buf.push_str("    Read-Only:\tFalse\n");
-                }
-            }
-        }
-    }
-    buf
-}
-
-/// Utility function for describe to print out value
-fn describe_format_pod(v: Value) -> String {
-    let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let status = v.get("status").unwrap();
-    let created: DateTime<UTC> =
-        DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
-
-    let volumes = spec.get("volumes");
-    let volstr = if let Some(vols) = volumes {
-        get_volume_str(vols)
-    } else {
-        "No Volumes".to_owned()
-    };
-
-    format!(
-        "Name:\t\t{}\n\
-Namespace:\t{}
-Node:\t\t{}
-IP:\t\t{}
-Created at:\t{} ({})
-Status:\t\t{}
-{}
-{}
-{}", // TODO: Controllers
-        val_to_str(metadata, "name"),
-        val_to_str(metadata, "namespace"),
-        val_to_str(spec, "nodeName"),
-        val_to_str(status, "podIP"),
-        created,
-        created.with_timezone(&Local),
-        Green.paint(val_to_str(status, "phase")),
-        get_keyval_str(metadata, "labels", "Labels:\t"),
-        get_keyval_str(metadata, "annotations", "Annotations:"),
-        volstr,
-    )
-}
-
-/// Utility function for describe to print out value
-fn describe_format_node(v: Value) -> String {
-    let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let created: DateTime<UTC> =
-        DateTime::from_str(val_to_str(metadata, "creationTimestamp")).unwrap();
-
-    format!(
-        "Name:\t\t{}
-{}
-Created at:\t{} ({})
-ProviderId:\t{}",
-        val_to_str(metadata, "name"),
-        get_keyval_str(metadata, "labels", "Labels"),
-        created,
-        created.with_timezone(&Local),
-        val_to_str(spec, "providerID"),
-    )
-}
-
 command!(Describe,
          "describe",
          "Describe the active kubernetes object.",
@@ -1102,7 +957,7 @@ command!(Describe,
                              if matches.is_present("json") {
                                  writer.pretty_color_json(&pval).unwrap_or(());
                              } else {
-                                 clickwrite!(writer, "{}\n", describe_format_pod(pval));
+                                 clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
                              }
                          }
                      } else {
@@ -1119,7 +974,7 @@ command!(Describe,
                          if matches.is_present("json") {
                              writer.pretty_color_json(&nval).unwrap_or(());
                          } else {
-                             clickwrite!(writer, "{}\n", describe_format_node(nval));
+                             clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
                          }
                      }
                  },
@@ -1163,7 +1018,11 @@ command!(Describe,
                              if matches.is_present("json") {
                                  writer.pretty_color_json(&sval).unwrap_or(());
                              } else {
-                                 clickwrite!(writer, "Service not supported without -j yet\n");
+                                 let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
+                                 let endpoint_val = env.run_on_kluster(|k| {
+                                     k.get_value(url.as_str())
+                                 });
+                                 clickwrite!(writer, "{}\n", describe::describe_format_service(sval, endpoint_val));
                              }
                          }
                      }

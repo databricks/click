@@ -236,6 +236,24 @@ fn phase_str(pod: &Pod) -> String {
     }
 }
 
+// get the number of ready containers and total containers
+fn ready_str(pod: &Pod) -> String {
+    match pod.status.container_statuses {
+        Some(ref statuses) => {
+            let mut count = 0;
+            let mut ready = 0;
+            for ref stat in statuses.iter() {
+                count += 1;
+                if stat.ready {
+                    ready += 1;
+                }
+            }
+            format!("{}/{}",ready,count)
+        }
+        None => "unknown".to_owned()
+    }
+}
+
 fn phase_style(phase: &String) -> &'static str {
     phase_style_str(phase.as_str())
 }
@@ -297,7 +315,7 @@ fn print_podlist(
     writer: &mut ClickWriter,
 ) -> PodList {
     let mut table = Table::new();
-    let mut title_row = row!["####", "Name", "Phase", "Age", "Restarts"];
+    let mut title_row = row!["####", "Name", "Ready", "Phase", "Age", "Restarts"];
     if show_labels {
         title_row.add_cell(Cell::new("Labels"));
     }
@@ -313,6 +331,8 @@ fn print_podlist(
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
         specs.push(CellSpec::new_owned(pod.metadata.name.clone()));
+
+        specs.push(CellSpec::new_owned(ready_str(&pod)));
 
         {
             let ps = phase_str(&pod);
@@ -1164,6 +1184,7 @@ fn containers_string(pod: &Pod) -> String {
             buf.push_str(format!("Name:\t{}\n", cont.name).as_str());
             buf.push_str(format!("  Image:\t{}\n", cont.image).as_str());
             buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
+            buf.push_str(format!("  Ready:\t{}\n", cont.ready).as_str());
 
             // find the spec for this container
             let mut spec_it = pod.spec.containers.iter().filter(|cs| cs.name == cont.name);

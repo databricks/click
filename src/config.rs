@@ -331,7 +331,7 @@ impl Config {
 
 
 /// Click config
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
@@ -339,12 +339,16 @@ pub struct ClickConfig {
 
 impl ClickConfig {
     pub fn from_file(path: &str) -> ClickConfig {
-        if let Ok(f) = File::open(path) {
-            serde_yaml::from_reader(f).unwrap()
-        } else {
-            ClickConfig {
-                namespace: None,
-                context: None,
+        match File::open(path) {
+            Ok(f) => {
+                serde_yaml::from_reader(f).unwrap_or({
+                    println!("Could not read config file, using default values");
+                    ClickConfig::default()
+                })
+            }
+            Err(e) => {
+                println!("Could not open config file at {}: {}. Using default values", path, e);
+                ClickConfig::default()
             }
         }
     }

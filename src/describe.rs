@@ -15,7 +15,7 @@
 //!  Utility functions for the Describe command, used to output
 //!  information for supported kubernetes object types
 
-use values::{val_str, val_u64};
+use values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour::{Green};
 use chrono::DateTime;
@@ -23,6 +23,7 @@ use chrono::offset::local::Local;
 use chrono::offset::utc::UTC;
 use serde_json::Value;
 
+use std::borrow::Cow;
 use std::str::FromStr;
 
 /// Utility function for describe to print out value
@@ -69,6 +70,37 @@ Status:\t\t{}
 pub fn describe_format_node(v: Value) -> String {
     let metadata = v.get("metadata").unwrap();
     let spec = v.get("spec").unwrap();
+    let provider_opt = val_str_opt("/providerID", spec);
+    let access_url: Cow<str> = match provider_opt.as_ref() {
+        Some(ref provider) => {
+            if provider.starts_with("aws://") {
+                let ip_opt = v.pointer("/status/addresses").and_then(|addr| {
+                    addr.as_array().and_then(|addr_vec| {
+                        addr_vec.into_iter().find(|&aval| {
+                            aval.as_object().map_or(false, |addr| {
+                                addr["type"].as_str().map_or(false, |t| t == "ExternalIP")
+                            })
+                        }).and_then(|v| {
+                            v.pointer("/address").and_then(|a| a.as_str())
+                        })
+                    })
+                });
+                ip_opt.map_or("Not Found".into(), |ip| {
+                    let octs: Vec<&str> = ip.split(".").collect();
+                    if octs.len() < 4 {
+                        format!("Unexpected ip format: {}", ip).into()
+                    } else {
+                        format!("ec2-{}-{}-{}-{}.us-west-2.compute.amazonaws.com ({})",
+                                octs[0], octs[1], octs[2], octs[3],
+                                ip).into()
+                    }
+                })
+            } else {
+                "<N/A>".into()
+            }
+        },
+        None => "<N/A>".into()
+    };
     let created: DateTime<UTC> =
         DateTime::from_str(
             val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
@@ -78,12 +110,14 @@ pub fn describe_format_node(v: Value) -> String {
         "Name:\t\t{}
 {}
 Created at:\t{} ({})
-ProviderId:\t{}",
+ProviderId:\t{}
+ExternalURL:\t{}",
         val_str("/name", metadata, "<No Name>"),
         get_keyval_str(metadata, "labels", "Labels"),
         created,
         created.with_timezone(&Local),
-        val_str("/providerID", spec, "<No ProviderID>"),
+        provider_opt.unwrap_or("<No ProviderID>".to_owned()),
+        access_url,
     )
 }
 

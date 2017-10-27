@@ -68,7 +68,7 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{Kluster, NodeList, PodList, DeploymentList, ServiceList, ReplicaSetList};
+use kube::{Kluster, NodeList, PodList, DeploymentList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use values::val_str_opt;
 
@@ -83,6 +83,7 @@ enum KObj {
     Deployment(String),
     Service(String),
     ReplicaSet(String),
+    Secret(String),
 }
 
 enum LastList {
@@ -92,6 +93,7 @@ enum LastList {
     DeploymentList(DeploymentList),
     ServiceList(ServiceList),
     ReplicaSetList(ReplicaSetList),
+    SecretList(SecretList),
 }
 
 /// An ongoing port forward
@@ -162,6 +164,7 @@ impl Env {
                 KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
                 KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
                 KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
+                KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
             }
         );
 
@@ -269,6 +272,23 @@ impl Env {
                         }
                         None => {
                             println!("ReplicaSet has no name in metadata");
+                            self.current_object = KObj::None;
+                        }
+                    }
+                } else {
+                    self.current_object = KObj::None;
+                }
+            }
+            LastList::SecretList(ref sl) => {
+                if let Some(ref secret) = sl.items.get(num) {
+                    match val_str_opt("/metadata/name", secret) {
+                        Some(name) => {
+                            let namespace = val_str_opt("/metadata/namespace", secret);
+                            self.current_object = KObj::Secret(name);
+                            self.current_object_namespace = namespace;
+                        }
+                        None => {
+                            println!("Secret has no name in metadata");
                             self.current_object = KObj::None;
                         }
                     }
@@ -465,6 +485,7 @@ fn main() {
     commands.push(Box::new(cmd::Delete::new()));
     commands.push(Box::new(cmd::UtcCmd::new()));
     commands.push(Box::new(cmd::Namespaces::new()));
+    commands.push(Box::new(cmd::Secrets::new()));
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
 

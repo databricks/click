@@ -340,6 +340,12 @@ pub struct ReplicaSetList {
     pub items: Vec<Value>,
 }
 
+// Secrets
+#[derive(Debug, Deserialize)]
+pub struct SecretList {
+    pub items: Vec<Value>,
+}
+
 // Kubernetes authentication data
 
 // Auth is either a token or a cert and key

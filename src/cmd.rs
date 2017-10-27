@@ -18,10 +18,10 @@ use Env;
 use LastList;
 use describe;
 use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NamespaceList,
-           NodeList, NodeCondition, ReplicaSetList, ServiceList};
+           NodeList, NodeCondition, ReplicaSetList, SecretList, ServiceList, Metadata};
 use output::ClickWriter;
 use table::CellSpec;
-use values::{val_str, val_u64};
+use values::{val_str, val_u64, val_item_count, get_val_as};
 
 use ansi_term::Colour::{Yellow};
 use clap::{Arg, ArgMatches, App, AppSettings};
@@ -1028,6 +1028,21 @@ command!(Describe,
                          }
                      }
                  },
+                 ::KObj::Secret(ref secret) => {
+                     if let Some(ref ns) = env.current_object_namespace {
+                         let url = format!("/api//v1/namespaces/{}/secrets/{}", ns, secret);
+                         let s_value = env.run_on_kluster(|k| {
+                             k.get_value(url.as_str())
+                         });
+                         if let Some(sval) = s_value {
+                             if matches.is_present("json") {
+                                 writer.pretty_color_json(&sval).unwrap_or(());
+                             } else {
+                                 clickwrite!(writer, "Secret not supported without -j yet\n");
+                             }
+                         }
+                     }
+                 },
                  ::KObj::Service(ref service) => {
                      if let Some(ref ns) = env.current_object_namespace {
                          let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
@@ -1516,6 +1531,96 @@ command!(ReplicaSets,
              }
          }
 );
+
+fn print_secrets(
+    list: SecretList,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> SecretList {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "Type", "Data", "Age"]);
+    let rss_specs = list.items.into_iter().map(|rs| {
+        let mut specs = Vec::new();
+
+        let metadata: Metadata = get_val_as("/metadata", &rs).unwrap();
+
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(
+            metadata.name
+        ));
+        specs.push(CellSpec::new_owned(
+            val_str("/type", &rs, "<none>")
+        ));
+        specs.push(CellSpec::new_owned(
+            format!("{}", val_item_count("/data", &rs))
+        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(metadata.creation_timestamp.unwrap())
+        )));
+        (rs, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(rss_specs, r),
+        None => rss_specs.collect(),
+    };
+
+    ::table::print_table(&mut table, &filtered, writer);
+
+    let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
+    SecretList { items: final_rss }
+}
+
+
+command!(Secrets,
+         "secrets",
+         "Get secrets (in current namespace if set)",
+         |clap: App<'static, 'static>| {
+             clap.arg(Arg::with_name("show_label")
+                      .short("L")
+                      .long("labels")
+                      .help("Show secret labels")
+                      .takes_value(true))
+                 .arg(Arg::with_name("regex")
+                      .short("r")
+                      .long("regex")
+                      .help("Filter secrets by the specified regex")
+                      .takes_value(true))
+         },
+         vec!("secrets"),
+         noop_complete,
+         |matches, env, writer| {
+             let regex = match ::table::get_regex(&matches) {
+                 Ok(r) => r,
+                 Err(s) => {
+                     write!(stderr(), "{}\n", s).unwrap_or(());
+                     return;
+                 }
+             };
+
+             let urlstr = if let Some(ref ns) = env.namespace {
+                 format!("/api/v1/namespaces/{}/secrets", ns)
+             } else {
+                 "/api/v1/secrets".to_owned()
+             };
+
+             let sl: Option<SecretList> = env.run_on_kluster(|k| {
+                 k.get(urlstr.as_str())
+             });
+
+             match sl {
+                 Some(l) => {
+                     let final_list = print_secrets(l, regex, writer);
+                     env.set_lastlist(LastList::SecretList(final_list));
+                 },
+                 None => {
+                     env.set_lastlist(LastList::None);
+                 }
+             }
+         }
+);
+
 
 command!(Namespaces,
          "namespaces",

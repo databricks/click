@@ -14,7 +14,10 @@
 
 /// Helper functions to deal with Values
 
+use serde;
 use serde_json::value::Value;
+
+use error::{KubeError};
 
 pub fn val_str(pointer: &str, value: &Value, default: &str) -> String {
     match value.pointer(pointer) {
@@ -45,5 +48,33 @@ pub fn val_u64(pointer: &str, value: &Value, default: u64) -> u64 {
             }
         }
         None => default,
+    }
+}
+
+/// Return the count of the number of items in the item at the
+/// specified path.  Returns 0 if the the item there isn't an Array or Object
+pub fn val_item_count(pointer: &str, value: &Value) -> usize {
+    match value.pointer(pointer) {
+        Some(p) => {
+            if p.is_array() {
+                p.as_array().unwrap().len() // safe, just checked
+            }
+            else if p.is_object() {
+                p.as_object().unwrap().len() // safe, just checked
+            } else {
+                0
+            }
+        }
+        None => 0
+    }
+}
+
+pub fn get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
+    where
+    for<'de> T: serde::Deserialize<'de>,
+{
+    match value.pointer(pointer) {
+        Some(p) => serde::Deserialize::deserialize(p).map_err(|je| KubeError::from(je)),
+        None => Err(KubeError::ParseErr("Can't deserialize".to_owned())),
     }
 }

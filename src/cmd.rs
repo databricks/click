@@ -563,6 +563,8 @@ fn print_servicelist(
                         .iter()
                         .map(|v| if let Some(hv) = v.get("hostname") {
                             hv.as_str().unwrap_or("")
+                        } else if let Some(ipv) = v.get("ip") {
+                            ipv.as_str().unwrap_or("")
                         } else {
                             ""
                         })

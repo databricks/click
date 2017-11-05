@@ -341,10 +341,13 @@ impl ClickConfig {
     pub fn from_file(path: &str) -> ClickConfig {
         match File::open(path) {
             Ok(f) => {
-                serde_yaml::from_reader(f).unwrap_or({
-                    println!("Could not read config file, using default values");
-                    ClickConfig::default()
-                })
+                match serde_yaml::from_reader(f) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        println!("Could not read config file {:?}, using default values", e);
+                        ClickConfig::default()
+                    }
+                }
             }
             Err(e) => {
                 println!("Could not open config file at {}: {}. Using default values", path, e);

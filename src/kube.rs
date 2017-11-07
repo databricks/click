@@ -70,7 +70,7 @@ pub enum ContainerState {
     #[serde(rename = "running")]
     Running {
         #[serde(rename = "startedAt")]
-        started_at: DateTime<UTC>,
+        started_at: Option<DateTime<UTC>>,
     },
     #[serde(rename = "terminated")]
     Terminated {
@@ -79,12 +79,12 @@ pub enum ContainerState {
         #[serde(rename = "exitCode")]
         exit_code: u32,
         #[serde(rename = "finishedAt")]
-        finished_at: DateTime<UTC>,
+        finished_at: Option<DateTime<UTC>>,
         message: Option<String>,
         reason: Option<String>,
         signal: Option<u32>,
         #[serde(rename = "startedAt")]
-        started_at: DateTime<UTC>,
+        started_at: Option<DateTime<UTC>>,
     },
     #[serde(rename = "waiting")]
     Waiting {
@@ -97,7 +97,10 @@ impl fmt::Display for ContainerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &ContainerState::Running { started_at } => {
-                write!(f, "{} (started: {})", Green.paint("running"), started_at)
+                match started_at {
+                    Some(sa) => write!(f, "{} (started: {})", Green.paint("running"), sa),
+                    None => write!(f, "{} (unknown start time)", Green.paint("running")),
+                }
             }
             &ContainerState::Terminated {
                 container_id: _,
@@ -108,13 +111,23 @@ impl fmt::Display for ContainerState {
                 signal: _,
                 started_at: _,
             } => {
-                write!(
-                    f,
-                    "{} at {} (exit code: {})",
-                    Red.paint("terminated"),
-                    finished_at,
-                    exit_code
-                )
+                match finished_at {
+                    &Some(fa) =>
+                        write!(
+                            f,
+                            "{} at {} (exit code: {})",
+                            Red.paint("terminated"),
+                            fa,
+                            exit_code
+                        ),
+                    &None =>
+                        write!(
+                            f,
+                            "{} (time unknown) (exit code: {})",
+                            Red.paint("terminated"),
+                            exit_code
+                        ),
+                }
             }
             &ContainerState::Waiting {
                 message: _,

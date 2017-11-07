@@ -2,6 +2,9 @@
 name = "click"
 version = "0.2.0"
 authors = ["Nick Lanham <nick@afternight.org>"]
+homepage = "https://github.com/databricks/click/wiki"
+repository = "https://github.com/databricks/click"
+license = "Apache-2.0"
 
 [dependencies]
 ansi_term = "0.9"

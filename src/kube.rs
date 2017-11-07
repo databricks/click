@@ -390,7 +390,7 @@ impl Kluster {
         let mut tlsclient = TlsClient::new();
         if let &Some(ref cert_data) = cert_opt {
             // add the cert to the root store
-            if let Some(mut cfg) = Arc::get_mut(&mut tlsclient.cfg) {
+            if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
                 let mut br = BufReader::new(cert_data.as_bytes());
                 match cfg.root_store.add_pem_file(&mut br) {
                     Ok(added) => {
@@ -490,7 +490,7 @@ impl Kluster {
             ));
             {
                 // scope for mutable borrow of req
-                let mut headers = req.headers_mut();
+                let headers = req.headers_mut();
                 if let KlusterAuth::Token(ref token) = self.auth {
                     headers.set(Authorization(Bearer {
                         token: token.clone(),

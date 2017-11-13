@@ -47,20 +47,23 @@ mod config;
 mod describe;
 mod error;
 mod kube;
+mod parser;
 mod table;
 mod values;
 
 use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
 use clap::{Arg, App};
+use parser::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
 use std::process::Child;
+use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -387,35 +390,54 @@ enum RightExpr<'a> {
     Pipe(&'a str),
     /// redir to file
     Redir(&'a str),
+    /// redir and append to
+    Append(&'a str),
 }
 
-fn parse_line<'a>(line: &'a String) -> Result<(&'a str, RightExpr<'a>), KubeError> {
-    match (line.find('|'), line.find('>')) {
-        (Some(_), Some(_)) => {
-            Err(KubeError::ParseErr(
-                "Input cannot contain | and >".to_owned(),
-            ))
-        }
-        (Some(pipeidx), None) => {
-            let (left, right) = line.split_at(pipeidx);
-            let rtrim = right[1..].trim(); // remove | char and whitespace
-            if rtrim.is_empty() {
-                Err(KubeError::ParseErr("Pipe command is empty".to_owned()))
-            } else {
-                Ok((left, RightExpr::Pipe(rtrim)))
-            }
-        }
-        (None, Some(rediridx)) => {
-            let (left, right) = line.split_at(rediridx);
-            let rtrim = right[1..].trim(); // remove > char and whitespace
-            if rtrim.is_empty() {
-                Err(KubeError::ParseErr("Filename is empty".to_owned()))
-            } else {
-                Ok((left, RightExpr::Redir(rtrim)))
-            }
-        }
-        (None, None) => Ok((line, RightExpr::None)),
+fn build_parser_expr<'a>(line: &'a str, range: Range<usize>) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+    let (click_cmd, rest) = line.split_at(range.start);
+
+    let rbytes = rest.as_bytes();
+    let sep = rbytes[0];
+    let mut sepcnt = 0;
+
+    while rbytes[sepcnt] == sep {
+        sepcnt+=1;
     }
+
+    if sep == b'|' && sepcnt > 1 {
+        Err(KubeError::ParseErr(format!("Parse error at {}: unexpected ||", range.start)))
+    } else if sep == b'>' && sepcnt > 2 {
+        Err(KubeError::ParseErr(format!("Parse error at {}: unexpected >>", range.start)))
+    } else {
+        let right =
+            match sep {
+                b'|' => RightExpr::Pipe(&rest[sepcnt..]),
+                b'>' => {
+                    if sepcnt == 1 {
+                        RightExpr::Redir(&rest[sepcnt..])
+                    } else {
+                        RightExpr::Append(&rest[sepcnt..])
+                    }
+                },
+                _ => return Err(KubeError::ParseErr(
+                    format!("Parse error at {}: unexpected separator", range.start)))
+            };
+        Ok((click_cmd, right))
+    }
+}
+
+fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+    let parser = Parser::new(line);
+    for (range, sep, _) in parser {
+        match sep {
+            '|' | '>' => {
+                return build_parser_expr(line, range)
+            }
+            _ => {}
+        }
+    }
+    Ok((line, RightExpr::None))
 }
 
 fn main() {
@@ -517,6 +539,17 @@ fn main() {
                             }
                             RightExpr::Redir(filename) => {
                                 match File::create(filename) {
+                                    Ok(out_file) => {
+                                        writer.out_file = Some(out_file);
+                                    }
+                                    Err(ref e) => {
+                                        println!("Can't open output file: {}", e);
+                                        continue;
+                                    }
+                                }
+                            }
+                            RightExpr::Append(filename) => {
+                                match OpenOptions::new().append(true).create(true).open(filename) {
                                     Ok(out_file) => {
                                         writer.out_file = Some(out_file);
                                     }

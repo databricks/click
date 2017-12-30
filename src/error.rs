@@ -70,7 +70,6 @@ impl error::Error for KubeErrNo {
 #[derive(Debug)]
 pub enum KubeError {
     ParseErr(String),
-    PipeErr(String),
     Kube(KubeErrNo),
     KubeServerError(String),
     DecodeError(base64::DecodeError),
@@ -86,7 +85,6 @@ impl fmt::Display for KubeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
-            KubeError::PipeErr(ref s) => write!(f, "Pipe Error: {}", s),
             KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
             KubeError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
             KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
@@ -103,7 +101,6 @@ impl error::Error for KubeError {
     fn description(&self) -> &str {
         match *self {
             KubeError::ParseErr(ref s) => s,
-            KubeError::PipeErr(ref s) => s,
             KubeError::Kube(ref err) => err.description(),
             KubeError::KubeServerError(ref s) => s,
             KubeError::DecodeError(ref err) => err.description(),
@@ -118,7 +115,6 @@ impl error::Error for KubeError {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             KubeError::ParseErr(_) => None,
-            KubeError::PipeErr(_) => None,
             KubeError::Kube(ref err) => Some(err),
             KubeError::KubeServerError(_) => None,
             KubeError::DecodeError(ref err) => Some(err),

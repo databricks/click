@@ -29,6 +29,9 @@ extern crate clap;
 extern crate chrono;
 extern crate ctrlc;
 extern crate der_parser;
+extern crate duct;
+extern crate duct_sh;
+extern crate fd;
 extern crate humantime;
 extern crate hyper;
 extern crate hyper_rustls;
@@ -518,9 +521,8 @@ fn main() {
     let raw_env: *const Env = &env;
     rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
 
-    let mut writer = ClickWriter::new();
-
     while !env.quit {
+        let mut writer = ClickWriter::new();
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {

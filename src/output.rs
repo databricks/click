@@ -16,16 +16,17 @@
 /// to files etc
 
 use ansi_term::Colour::{Blue, Green};
+use duct_sh::sh_dangerous;
+use duct::Handle;
+use fd;
 use serde::ser::Serialize;
 use serde_json::to_writer;
 use serde_json::Error as JsonError;
 use serde_json::ser::{CharEscape, Formatter, PrettyFormatter, Serializer};
 
-use std::error::Error;
 use std::fs::File;
 use std::io;
-use std::io::{Read, Write};
-use std::process::{Child, Command, Stdio};
+use std::io::Write;
 
 use error::KubeError;
 
@@ -49,9 +50,32 @@ macro_rules! clickwrite {
     };
 }
 
+struct PipeProc {
+    pipe: File,
+    expr: Handle,
+}
+
+impl PipeProc {
+    fn finish(self) -> io::Result<String> {
+        drop(self.pipe);
+        let output = try!(self.expr.output());
+        String::from_utf8(output.stdout).map_err(|e| {
+            io::Error::new(io::ErrorKind::Other, e)
+        })
+    }
+
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.pipe.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.pipe.flush()
+    }
+}
+
 pub struct ClickWriter {
     pub out_file: Option<File>,
-    pub pipe_proc: Option<Child>,
+    pipe_proc: Option<PipeProc>,
 }
 
 impl ClickWriter {
@@ -63,34 +87,25 @@ impl ClickWriter {
     }
 
     pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), KubeError> {
-        let mut parts = cmd.split_whitespace();
-        match parts.next() {
-            Some(cmdstr) => {
-                match Command::new(cmdstr)
-                    .args(parts)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn() {
-                    Ok(process) => {
-                        self.pipe_proc = Some(process);
-                        Ok(())
-                    }
-                    Err(e) => Err(KubeError::from(e)),
-                }
-            }
-            None => Err(KubeError::PipeErr("Empty pipe command".to_owned())),
-        }
+        let expr = sh_dangerous(cmd);
+        let pipe = try!(fd::Pipe::new());
+        let handle = try!(expr.stdin_handle(pipe.reader).start());
+        self.pipe_proc = Some(PipeProc{
+            pipe: pipe.writer,
+            expr: handle,
+        });
+        Ok(())
     }
 
-    pub fn finish_output(&mut self) {
-        if let Some(ref mut child) = self.pipe_proc {
-            {
-                child.stdin.take(); // force the drop
-            }
-            let mut s = String::new();
-            match child.stdout.as_mut().unwrap().read_to_string(&mut s) {
-                Ok(_) => print!("{}", s),
-                Err(why) => println!("Failed to read pipe output: {}", why.description()),
+    pub fn finish_output(mut self) {
+        if let Some(pipe_proc) = self.pipe_proc {
+            match pipe_proc.finish() {
+                Ok(out) => {
+                    print!("{}", out);
+                },
+                Err(e) => {
+                    eprint!("Failed to execute command: {}", e);
+                }
             }
         }
         self.out_file = None;
@@ -115,8 +130,8 @@ impl Write for ClickWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         if let Some(ref mut file) = self.out_file {
             file.write(buf)
-        } else if let Some(ref mut child) = self.pipe_proc {
-            child.stdin.as_mut().unwrap().write(buf)
+        } else if let Some(ref mut pipe_proc) = self.pipe_proc {
+            pipe_proc.write(buf)
         } else {
             io::stdout().write(buf)
         }
@@ -125,8 +140,8 @@ impl Write for ClickWriter {
     fn flush(&mut self) -> Result<(), io::Error> {
         if let Some(ref mut file) = self.out_file {
             file.flush()
-        } else if let Some(ref mut child) = self.pipe_proc {
-            child.stdin.as_mut().unwrap().flush()
+        } else if let Some(ref mut pipe_proc) = self.pipe_proc {
+            pipe_proc.flush()
         } else {
             io::stdout().flush()
         }

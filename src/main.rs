@@ -443,6 +443,18 @@ fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> 
     Ok((line, RightExpr::None))
 }
 
+static SHELLP: &'static str = "Shell syntax can be used to redirect or pipe the output of click \
+commands to files or other commands (like grep).\n
+Examples:\n\
+ # grep logs for ERROR:\n\
+ logs my-cont | grep ERROR\n\n\
+ # pass output of describe -j to jq, then grep for foo \n\
+ describe -j | jq . | grep foo\n\n\
+ # Save logs to logs.txt:\n\
+ logs my-cont > /tmp/logs.txt\n\n\
+ # Append log lines that contain \"foo bar\" to logs.txt\n\
+ logs the-cont | grep \"foo bar\" >> /tmp/logs.txt";
+
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")
@@ -578,30 +590,8 @@ fn main() {
                                         cmd.print_help();
                                     } else {
                                         match hcmd { // match for meta topics
-                                            "pipes" => {
-                                                println!(
-                                                    "You can pipe output of any command to a \
-                                                     shell command using the | character. \
-                                                     Only one pipe character supported for \
-                                                     the moment.\n\n\
-                                                     Examples:\n  \
-                                                     # grep logs for ERROR:\n  \
-                                                     logs my-cont | grep ERROR\n\n  \
-                                                     # pass output of describe -j to jq\n  \
-                                                     describe -j | jq ."
-                                                );
-                                            }
-                                            "redirection" => {
-                                                println!(
-                                                    "You can redirect the output of any \
-                                                     command to a file using the > \
-                                                     character.  Only one > character \
-                                                     supported for the moment.\n\n\
-                                                     Examples:\n  \
-                                                     # Save logs to logs.txt:\n  \
-                                                     logs my-cont > /tmp/logs.txt"
-                                                );
-
+                                            "pipes" | "redirection" | "shell" => {
+                                                println!("{}", SHELLP);
                                             }
                                             _ => {
                                                 println!(
@@ -627,8 +617,8 @@ fn main() {
                                     println!(
                                         "\nOther help topics (type 'help [TOPIC]' for details)"
                                     );
-                                    println!("  pipes");
-                                    println!("  redirection");
+                                    println!("  shell               Redirecting and piping click \
+                                              output to shell commands");
                                 }
                             } else {
                                 println!("Unknown command");

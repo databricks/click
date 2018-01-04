@@ -1032,7 +1032,7 @@ command!(Describe,
                  },
                  ::KObj::Secret(ref secret) => {
                      if let Some(ref ns) = env.current_object_namespace {
-                         let url = format!("/api//v1/namespaces/{}/secrets/{}", ns, secret);
+                         let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
                          let s_value = env.run_on_kluster(|k| {
                              k.get_value(url.as_str())
                          });
@@ -1040,7 +1040,7 @@ command!(Describe,
                              if matches.is_present("json") {
                                  writer.pretty_color_json(&sval).unwrap_or(());
                              } else {
-                                 clickwrite!(writer, "Secret not supported without -j yet\n");
+                                 clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
                              }
                          }
                      }
@@ -1461,7 +1461,7 @@ fn print_replicasets(
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
         specs.push(CellSpec::new_owned(
-            val_str("/metadata/name", &rs, "<none>"),
+            val_str("/metadata/name", &rs, "<none>").into_owned(),
         ));
         specs.push(CellSpec::new_owned(
             format!("{}", val_u64("/spec/replicas", &rs, 0)),
@@ -1551,7 +1551,7 @@ fn print_secrets(
             metadata.name
         ));
         specs.push(CellSpec::new_owned(
-            val_str("/type", &rs, "<none>")
+            val_str("/type", &rs, "<none>").into_owned()
         ));
         specs.push(CellSpec::new_owned(
             format!("{}", val_item_count("/data", &rs))

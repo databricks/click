@@ -34,6 +34,7 @@ pub enum DescItem<'a> {
     },
     KeyValStr {
         parent: &'a str,
+        secret_vals: bool,
     },
     MetadataValStr {
         path: &'a str,
@@ -42,7 +43,7 @@ pub enum DescItem<'a> {
     ObjectCreated,
     CustomFunc {
         path: Option<&'a str>,
-        func: &'a (Fn(&Value)->String),
+        func: &'a (Fn(&Value)->Cow<str>),
         default: &'a str,
     },
 }
@@ -58,8 +59,8 @@ pub fn describe_object<'a, I>(v: Value, fields: I) -> String
             DescItem::ValStr{ref path, ref default} => {
                 val_str(path, &v, default)
             },
-            DescItem::KeyValStr{ref parent} => {
-                keyval_str(&v, parent)
+            DescItem::KeyValStr{ref parent, secret_vals} => {
+                keyval_str(&v, parent, secret_vals)
             },
             DescItem::MetadataValStr{ref path, ref default} => {
                 val_str(path, metadata, default)
@@ -67,9 +68,9 @@ pub fn describe_object<'a, I>(v: Value, fields: I) -> String
             DescItem::ObjectCreated => {
                 let created: DateTime<UTC> =
                     DateTime::from_str(
-                        val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
+                        &val_str("/creationTimestamp", metadata, "<No CreationTime>")
                     ).unwrap();
-                format!("{} ({})", created, created.with_timezone(&Local))
+                format!("{} ({})", created, created.with_timezone(&Local)).into()
             },
             DescItem::CustomFunc{ref path, ref func, default} => {
                 let value = match path {
@@ -78,7 +79,7 @@ pub fn describe_object<'a, I>(v: Value, fields: I) -> String
                 };
                 match value {
                     Some(v) => func(v),
-                    None => default.to_owned(),
+                    None => default.into(),
                 }
             },
         };
@@ -114,9 +115,11 @@ pub fn describe_format_pod(v: Value) -> String {
         }),
         ("Labels:\t", DescItem::KeyValStr {
             parent: "/metadata/labels",
+            secret_vals: false,
         }),
         ("Annotations:", DescItem::KeyValStr {
             parent: "/metadata/annotations",
+            secret_vals: false,
         }),
         ("Volumes:\n", DescItem::CustomFunc {
             path: Some("/spec/volumes"),
@@ -164,7 +167,7 @@ pub fn describe_format_node(v: Value) -> String {
     };
     let created: DateTime<UTC> =
         DateTime::from_str(
-            val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
+            &val_str("/creationTimestamp", metadata, "<No CreationTime>")
         ).unwrap();
 
     format!(
@@ -215,6 +218,36 @@ LoadBalIngress:\t{}
     }
 }
 
+/// Utility function to describe a secret
+pub fn describe_format_secret(v: Value) -> String {
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Namespace:\t", DescItem::MetadataValStr{
+            path: "/namespace",
+            default: "<No Name>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+            secret_vals: false,
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+            secret_vals: false,
+        }),
+        ("\nType:\t\t", DescItem::ValStr {
+            path: "/type",
+            default: "<No Type>",
+        }),
+        ("\nData:\n", DescItem::KeyValStr {
+            parent: "/data",
+            secret_vals: true,
+        }),
+    ];
+    describe_object(v, fields.into_iter())
+}
 
 /// small wrapper to make v.pointer calls as args to get_keyval_str easier
 fn get_keyval_str_opt(v: Option<&Value>, parent: &str, title: &str) -> String {
@@ -252,7 +285,8 @@ fn get_keyval_str(v: &Value, parent: &str, title: &str) -> String {
 }
 
 /// get key/vals out of a value
-fn keyval_str(v: &Value, parent: &str) -> String {
+/// If secret_vals is true, the actual vals are hidden and we show only the size of the value
+fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str> {
     let mut outstr = String::new();
     match v.pointer(parent) {
         Some(p) => {
@@ -261,13 +295,23 @@ fn keyval_str(v: &Value, parent: &str) -> String {
                 for key in keyvals.keys() {
                     if !first {
                         outstr.push('\n');
-                        outstr.push('\t');
+                        if !secret_vals {
+                            outstr.push('\t');
+                        }
                     }
                     first = false;
                     outstr.push('\t');
                     outstr.push_str(key);
-                    outstr.push('=');
-                    outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
+                    if secret_vals {
+                        outstr.push_str(":\t");
+                        match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
+                            Ok(dec) => outstr.push_str(format!("{} bytes", dec.len()).as_str()),
+                            Err(_) => outstr.push_str("Could not decode secret"),
+                        }
+                    } else {
+                        outstr.push('=');
+                        outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
+                    }
                 }
             }
         },
@@ -275,7 +319,7 @@ fn keyval_str(v: &Value, parent: &str) -> String {
             outstr.push_str("\t<none>");
         }
     }
-    outstr
+    outstr.into()
 }
 
 
@@ -362,7 +406,7 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> String {
 }
 
 /// Get volume info out of volume array
-fn get_volume_str(v: &Value) -> String {
+fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
     let mut buf = String::new();
     if let Some(vol_arry) = v.as_array() {
         for vol in vol_arry.iter() {
@@ -414,18 +458,18 @@ fn get_volume_str(v: &Value) -> String {
             }
         }
     }
-    buf
+    buf.into()
 }
 
-fn pod_phase(v: &Value) -> String {
+fn pod_phase<'a>(v: &Value) -> Cow<str> {
     let phase_str = val_str("/status/phase", v, "<No Phase>");
     let colour =
-        match phase_str.as_str() {
+        match &*phase_str {
             "Pending" | "Unknown" => Colour::Yellow,
             "Running" | "Succeeded" => Colour::Green,
             "Failed" => Colour::Red,
             _ => Colour::Yellow,
         };
-    colour.paint(phase_str).to_string()
+    colour.paint(phase_str).to_string().into()
 }
 

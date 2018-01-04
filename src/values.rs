@@ -19,15 +19,17 @@ use serde_json::value::Value;
 
 use error::{KubeError};
 
-pub fn val_str(pointer: &str, value: &Value, default: &str) -> String {
+use std::borrow::Cow;
+
+pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a, str> {
     match value.pointer(pointer) {
         Some(p) => {
             match p.as_str() {
-                Some(s) => s.to_owned(),
-                None => default.to_owned(),
+                Some(s) => s.into(),
+                None => default.into(),
             }
         }
-        None => default.to_owned(),
+        None => default.into(),
     }
 }
 

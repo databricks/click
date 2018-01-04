@@ -17,53 +17,114 @@
 
 use values::{val_str, val_str_opt, val_u64};
 
-use ansi_term::Colour::{Green};
+use ansi_term::Colour;
 use chrono::DateTime;
 use chrono::offset::local::Local;
 use chrono::offset::utc::UTC;
 use serde_json::Value;
 
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::str::FromStr;
+
+pub enum DescItem<'a> {
+    ValStr {
+        path: &'a str,
+        default: &'a str,
+    },
+    KeyValStr {
+        parent: &'a str,
+    },
+    MetadataValStr {
+        path: &'a str,
+        default: &'a str,
+    },
+    ObjectCreated,
+    CustomFunc {
+        path: Option<&'a str>,
+        func: &'a (Fn(&Value)->String),
+        default: &'a str,
+    },
+}
+
+/// Generic describe function
+/// TODO: Document
+pub fn describe_object<'a, I>(v: Value, fields: I) -> String
+    where I: Iterator<Item = (&'a str, DescItem<'a>)> {
+    let mut res = String::new();
+    let metadata = v.get("metadata").unwrap();
+    for (title, item) in fields {
+        let val = match item {
+            DescItem::ValStr{ref path, ref default} => {
+                val_str(path, &v, default)
+            },
+            DescItem::KeyValStr{ref parent} => {
+                keyval_str(&v, parent)
+            },
+            DescItem::MetadataValStr{ref path, ref default} => {
+                val_str(path, metadata, default)
+            },
+            DescItem::ObjectCreated => {
+                let created: DateTime<UTC> =
+                    DateTime::from_str(
+                        val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
+                    ).unwrap();
+                format!("{} ({})", created, created.with_timezone(&Local))
+            },
+            DescItem::CustomFunc{ref path, ref func, default} => {
+                let value = match path {
+                    &Some(p) => v.pointer(p),
+                    &None => Some(&v),
+                };
+                match value {
+                    Some(v) => func(v),
+                    None => default.to_owned(),
+                }
+            },
+        };
+        write!(&mut res, "{}{}\n", title, val).unwrap();
+    }
+    res
+}
 
 /// Utility function for describe to print out value
 pub fn describe_format_pod(v: Value) -> String {
-    let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let status = v.get("status").unwrap();
-    let created: DateTime<UTC> =
-        DateTime::from_str(
-            val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
-        ).unwrap();
-
-    let volumes = spec.get("volumes");
-    let volstr = if let Some(vols) = volumes {
-        get_volume_str(vols)
-    } else {
-        "No Volumes".to_owned()
-    };
-
-    format!(
-        "Name:\t\t{}\n\
-Namespace:\t{}
-Node:\t\t{}
-IP:\t\t{}
-Created at:\t{} ({})
-Status:\t\t{}
-{}
-{}
-{}", // TODO: Controllers
-        val_str("/name", metadata, "<No Name>"),
-        val_str("/namespace", metadata, "<No Namespace>"),
-        val_str("/nodeName", spec, "<No NodeName"),
-        val_str("/podIP", status, "<No PodIP>"),
-        created,
-        created.with_timezone(&Local),
-        Green.paint(val_str("/phase", status, "<No Phase>")),
-        get_keyval_str(metadata, "labels", "Labels:\t"),
-        get_keyval_str(metadata, "annotations", "Annotations:"),
-        volstr,
-    )
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Namespace:\t", DescItem::MetadataValStr{
+            path: "/namespace",
+            default: "<No Name>",
+        }),
+        ("Node:\t\t", DescItem::ValStr{
+            path: "/spec/nodeName",
+            default: "<No NodeName>",
+        }),
+        ("IP:\t\t", DescItem::ValStr{
+            path: "/status/podIP",
+            default: "<No PodIP>",
+        }),
+        ("Created at:\t", DescItem::ObjectCreated),
+        ("Status:\t\t", DescItem::CustomFunc {
+            path: None,
+            func: &pod_phase,
+            default: "<No Phase>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+        }),
+        ("Volumes:\n", DescItem::CustomFunc {
+            path: Some("/spec/volumes"),
+            func: &get_volume_str,
+            default: "<No Volumes>",
+        }),
+    ];
+    describe_object(v, fields.into_iter())
 }
 
 /// Utility function for describe to print out value
@@ -190,6 +251,34 @@ fn get_keyval_str(v: &Value, parent: &str, title: &str) -> String {
     outstr
 }
 
+/// get key/vals out of a value
+fn keyval_str(v: &Value, parent: &str) -> String {
+    let mut outstr = String::new();
+    match v.pointer(parent) {
+        Some(p) => {
+            if let Some(keyvals) = p.as_object() {
+                let mut first = true;
+                for key in keyvals.keys() {
+                    if !first {
+                        outstr.push('\n');
+                        outstr.push('\t');
+                    }
+                    first = false;
+                    outstr.push('\t');
+                    outstr.push_str(key);
+                    outstr.push('=');
+                    outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
+                }
+            }
+        },
+        None => {
+            outstr.push_str("\t<none>");
+        }
+    }
+    outstr
+}
+
+
 /// Get ports info out of ports array
 fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> String {
     if v.is_none() {
@@ -275,7 +364,6 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> String {
 /// Get volume info out of volume array
 fn get_volume_str(v: &Value) -> String {
     let mut buf = String::new();
-    buf.push_str("Volumes:\n");
     if let Some(vol_arry) = v.as_array() {
         for vol in vol_arry.iter() {
             buf.push_str(format!("  Name: {}\n", val_str("/name", vol, "<No Name>")).as_str());
@@ -328,3 +416,16 @@ fn get_volume_str(v: &Value) -> String {
     }
     buf
 }
+
+fn pod_phase(v: &Value) -> String {
+    let phase_str = val_str("/status/phase", v, "<No Phase>");
+    let colour =
+        match phase_str.as_str() {
+            "Pending" | "Unknown" => Colour::Yellow,
+            "Running" | "Succeeded" => Colour::Green,
+            "Failed" => Colour::Red,
+            _ => Colour::Yellow,
+        };
+    colour.paint(phase_str).to_string()
+}
+

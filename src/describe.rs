@@ -17,62 +17,266 @@
 
 use values::{val_str, val_str_opt, val_u64};
 
-use ansi_term::Colour::{Green};
+use ansi_term::Colour;
 use chrono::DateTime;
 use chrono::offset::local::Local;
 use chrono::offset::utc::UTC;
 use serde_json::Value;
 
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::str::FromStr;
 
-/// Utility function for describe to print out value
-pub fn describe_format_pod(v: Value) -> String {
+pub enum DescItem<'a> {
+    ValStr {
+        path: &'a str,
+        default: &'a str,
+    },
+    KeyValStr {
+        parent: &'a str,
+        secret_vals: bool,
+    },
+    MetadataValStr {
+        path: &'a str,
+        default: &'a str,
+    },
+    ObjectCreated,
+    CustomFunc {
+        path: Option<&'a str>,
+        func: &'a (Fn(&Value)->Cow<str>),
+        default: &'a str,
+    },
+    StaticStr(Cow<'a, str>),
+}
+
+
+/// get key/vals out of a value
+/// If secret_vals is true, the actual vals are hidden and we show only the size of the value
+fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str> {
+    let mut outstr = String::new();
+    match v.pointer(parent) {
+        Some(p) => {
+            if let Some(keyvals) = p.as_object() {
+                let mut first = true;
+                for key in keyvals.keys() {
+                    if !first {
+                        outstr.push('\n');
+                        if !secret_vals {
+                            outstr.push('\t');
+                        }
+                    }
+                    first = false;
+                    outstr.push('\t');
+                    outstr.push_str(key);
+                    if secret_vals {
+                        outstr.push_str(":\t");
+                        match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
+                            Ok(dec) => outstr.push_str(format!("{} bytes", dec.len()).as_str()),
+                            Err(_) => outstr.push_str("Could not decode secret"),
+                        }
+                    } else {
+                        outstr.push('=');
+                        outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
+                    }
+                }
+            }
+        },
+        None => {
+            outstr.push_str("\t<none>");
+        }
+    }
+    outstr.into()
+}
+
+/// Generic describe function
+/// TODO: Document
+pub fn describe_object<'a, I>(v: &Value, fields: I) -> String
+    where I: Iterator<Item = (&'a str, DescItem<'a>)> {
+    let mut res = String::new();
     let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let status = v.get("status").unwrap();
-    let created: DateTime<UTC> =
-        DateTime::from_str(
-            val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
-        ).unwrap();
-
-    let volumes = spec.get("volumes");
-    let volstr = if let Some(vols) = volumes {
-        get_volume_str(vols)
-    } else {
-        "No Volumes".to_owned()
-    };
-
-    format!(
-        "Name:\t\t{}\n\
-Namespace:\t{}
-Node:\t\t{}
-IP:\t\t{}
-Created at:\t{} ({})
-Status:\t\t{}
-{}
-{}
-{}", // TODO: Controllers
-        val_str("/name", metadata, "<No Name>"),
-        val_str("/namespace", metadata, "<No Namespace>"),
-        val_str("/nodeName", spec, "<No NodeName"),
-        val_str("/podIP", status, "<No PodIP>"),
-        created,
-        created.with_timezone(&Local),
-        Green.paint(val_str("/phase", status, "<No Phase>")),
-        get_keyval_str(metadata, "labels", "Labels:\t"),
-        get_keyval_str(metadata, "annotations", "Annotations:"),
-        volstr,
-    )
+    for (title, item) in fields {
+        let val = match item {
+            DescItem::ValStr{ref path, ref default} => {
+                val_str(path, v, default)
+            },
+            DescItem::KeyValStr{ref parent, secret_vals} => {
+                keyval_str(v, parent, secret_vals)
+            },
+            DescItem::MetadataValStr{ref path, ref default} => {
+                val_str(path, metadata, default)
+            },
+            DescItem::ObjectCreated => {
+                let created: DateTime<UTC> =
+                    DateTime::from_str(
+                        &val_str("/creationTimestamp", metadata, "<No CreationTime>")
+                    ).unwrap();
+                format!("{} ({})", created, created.with_timezone(&Local)).into()
+            },
+            DescItem::CustomFunc{ref path, ref func, default} => {
+                let value = match path {
+                    &Some(p) => v.pointer(p),
+                    &None => Some(v),
+                };
+                match value {
+                    Some(v) => func(v),
+                    None => default.into(),
+                }
+            },
+            DescItem::StaticStr(s) => s
+        };
+        write!(&mut res, "{}{}\n", title, val).unwrap();
+    }
+    res
 }
 
 /// Utility function for describe to print out value
+pub fn describe_format_pod(v: Value) -> String {
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Namespace:\t", DescItem::MetadataValStr{
+            path: "/namespace",
+            default: "<No Name>",
+        }),
+        ("Node:\t\t", DescItem::ValStr{
+            path: "/spec/nodeName",
+            default: "<No NodeName>",
+        }),
+        ("IP:\t\t", DescItem::ValStr{
+            path: "/status/podIP",
+            default: "<No PodIP>",
+        }),
+        ("Created at:\t", DescItem::ObjectCreated),
+        ("Status:\t\t", DescItem::CustomFunc {
+            path: None,
+            func: &pod_phase,
+            default: "<No Phase>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+            secret_vals: false,
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+            secret_vals: false,
+        }),
+        ("Volumes:\n", DescItem::CustomFunc {
+            path: Some("/spec/volumes"),
+            func: &get_volume_str,
+            default: "<No Volumes>",
+        }),
+    ];
+    describe_object(&v, fields.into_iter())
+}
+
+
+/// Get volume info out of volume array
+fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
+    let mut buf = String::new();
+    if let Some(vol_arry) = v.as_array() {
+        for vol in vol_arry.iter() {
+            buf.push_str(format!("  Name: {}\n", val_str("/name", vol, "<No Name>")).as_str());
+            if vol.get("emptyDir").is_some() {
+                buf.push_str(
+                    "    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n",
+                )
+            }
+            if let Some(conf_map) = vol.get("configMap") {
+                buf.push_str("    Type:\tConfigMap (a volume populated by a ConfigMap)\n");
+                buf.push_str(
+                    format!("    Name:\t{}\n", val_str("/name", conf_map, "<No Name>")).as_str(),
+                );
+            }
+            if let Some(secret) = vol.get("secret") {
+                buf.push_str("    Type:\tSecret (a volume populated by a Secret)\n");
+                buf.push_str(
+                    format!("    SecretName:\t{}\n",
+                            val_str("/secretName", secret, "<No SecretName>")).as_str(),
+                );
+            }
+            if let Some(aws) = vol.get("awsElasticBlockStore") {
+                buf.push_str(
+                    "    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n",
+                );
+                buf.push_str(
+                    format!("    VolumeId:\t{}\n", val_str("/volumeID", aws, "<No VolumeID>")).as_str(),
+                );
+                buf.push_str(
+                    format!("    FSType:\t{}\n", val_str("/fsType", aws, "<No FsType>")).as_str(),
+                );
+                let mut pnum = 0;
+                if let Some(part) = aws.get("partition") {
+                    if let Some(p) = part.as_u64() {
+                        pnum = p;
+                    }
+                }
+                buf.push_str(format!("    Partition#:\t{}\n", pnum).as_str());
+                if let Some(read_only) = aws.get("readOnly") {
+                    if read_only.as_bool().unwrap() {
+                        buf.push_str("    Read-Only:\tTrue\n");
+                    } else {
+                        buf.push_str("    Read-Only:\tFalse\n");
+                    }
+                } else {
+                    buf.push_str("    Read-Only:\tFalse\n");
+                }
+            }
+        }
+    }
+    buf.into()
+}
+
+fn pod_phase<'a>(v: &Value) -> Cow<str> {
+    let phase_str = val_str("/status/phase", v, "<No Phase>");
+    let colour =
+        match &*phase_str {
+            "Pending" | "Unknown" => Colour::Yellow,
+            "Running" | "Succeeded" => Colour::Green,
+            "Failed" => Colour::Red,
+            _ => Colour::Yellow,
+        };
+    colour.paint(phase_str).to_string().into()
+}
+
+
+/// Utility function for describe to print out value
 pub fn describe_format_node(v: Value) -> String {
-    let metadata = v.get("metadata").unwrap();
-    let spec = v.get("spec").unwrap();
-    let provider_opt = val_str_opt("/providerID", spec);
-    let access_url: Cow<str> = match provider_opt.as_ref() {
-        Some(ref provider) => {
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+            secret_vals: false,
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+            secret_vals: false,
+        }),
+        ("Created at:\t", DescItem::ObjectCreated),
+        ("Provider Id:\t", DescItem::ValStr{
+            path: "/spec/providerID",
+            default: "<No Provider Id>",
+        }),
+        ("External URL:\t", DescItem::CustomFunc {
+            path: None,
+            func: &node_access_url,
+            default: "N/A>",
+        }),
+        ("\nSystem Info:", DescItem::KeyValStr {
+            parent: "/status/nodeInfo",
+            secret_vals: false,
+        }),
+    ];
+    describe_object(&v, fields.into_iter())
+}
+
+fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
+    match val_str_opt("/spec/providerID", v) {
+        Some(provider) => {
             if provider.starts_with("aws://") {
                 let ip_opt = v.pointer("/status/addresses").and_then(|addr| {
                     addr.as_array().and_then(|addr_vec| {
@@ -96,107 +300,61 @@ pub fn describe_format_node(v: Value) -> String {
                     }
                 })
             } else {
-                "<N/A>".into()
+                "N/A".into()
             }
         },
-        None => "<N/A>".into()
-    };
-    let created: DateTime<UTC> =
-        DateTime::from_str(
-            val_str("/creationTimestamp", metadata, "<No CreationTime>").as_str()
-        ).unwrap();
-
-    format!(
-        "Name:\t\t{}
-{}
-Created at:\t{} ({})
-ProviderId:\t{}
-ExternalURL:\t{}",
-        val_str("/name", metadata, "<No Name>"),
-        get_keyval_str(metadata, "labels", "Labels"),
-        created,
-        created.with_timezone(&Local),
-        provider_opt.unwrap_or("<No ProviderID>".to_owned()),
-        access_url,
-    )
+        None => "N/A".into()
+    }
 }
 
 /// Utility function for describe to print service info
 pub fn describe_format_service(v: Value, endpoint_val: Option<Value>) -> String {
-    match v.get("metadata") {
-        Some(metadata) => {
-            format!(
-                "Name:\t\t{}
-Namespace:\t{}
-{}
-{}
-{}
-Type:\t\t{}
-IP:\t\t{}
-LoadBalIngress:\t{}
-{}SessionAffnity:\t{}",  // no newline after ports as it ends up with an extra newline
-
-                val_str("/name", metadata, "<No Name>"),
-                val_str("/namespace", metadata, "<No Namespace>"),
-                get_keyval_str(metadata, "labels", "Labels:\t"),
-                get_keyval_str(metadata, "annotations", "Annotations:"),
-                get_keyval_str_opt(v.pointer("/spec"), "selector", "Selector:"),
-                val_str("/spec/type", &v, "<No Type>"),
-                val_str("/spec/clusterIP", &v, "<No IP>"),
-                val_str("/status/loadBalancer/ingress/0/hostname", &v, "<No Ingress>"),
-                get_ports_str(v.pointer("/spec/ports"), endpoint_val),
-                val_str("/spec/sessionAffinity", &v, "<none>"),
-            )
-        },
-        None => {
-            "Response contains no metadata element, cannot describe (try -j)".to_owned()
-        }
-    }
-}
-
-
-/// small wrapper to make v.pointer calls as args to get_keyval_str easier
-fn get_keyval_str_opt(v: Option<&Value>, parent: &str, title: &str) -> String {
-    match v {
-        Some(val) => get_keyval_str(val, parent, title),
-        None => "<Unknown>".to_owned(),
-    }
-}
-
-/// get key/vals out of metadata
-fn get_keyval_str(v: &Value, parent: &str, title: &str) -> String {
-    let mut outstr = title.to_owned();
-    match v.get(parent) {
-        Some(p) => {
-            if let Some(keyvals) = p.as_object() {
-                let mut first = true;
-                for key in keyvals.keys() {
-                    if !first {
-                        outstr.push('\n');
-                        outstr.push('\t');
-                    }
-                    first = false;
-                    outstr.push('\t');
-                    outstr.push_str(key);
-                    outstr.push('=');
-                    outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
-                }
-            }
-        },
-        None => {
-            outstr.push_str("\t<none>");
-        }
-    }
-    outstr
+    let port_str = get_ports_str(v.pointer("/spec/ports"), endpoint_val);
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+            secret_vals: false,
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+            secret_vals: false,
+        }),
+        ("Created at:\t", DescItem::ObjectCreated),
+        ("Selector:", DescItem::KeyValStr{
+            parent: "/spec/selector",
+            secret_vals: false,
+        }),
+        ("Type:\t\t", DescItem::ValStr{
+            path: "/spec/type",
+            default: "<No Type>",
+        }),
+        ("IP:\t\t", DescItem::ValStr{
+            path: "/spec/clusterIP",
+            default: "<No Type>",
+        }),
+        ("LoadBalIngress:\t", DescItem::ValStr{
+            path: "/status/loadBalancer/ingress/0/hostname",
+            default: "<No Ingress>",
+        }),
+        ("Ports:\n", DescItem::StaticStr(port_str)),
+        ("SessionAffnity:\t", DescItem::ValStr{
+            path: "/spec/sessionAffnity",
+            default: "<none>",
+        }),
+    ];
+    describe_object(&v, fields.into_iter())
 }
 
 /// Get ports info out of ports array
-fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> String {
+fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'a, str> {
     if v.is_none() {
-        return "Ports:\t<none>".to_owned();
+        return "<none>".into();
     }
     let mut buf = String::new();
-    buf.push_str("Ports:\n");
     match v.unwrap().as_array() { // safe unwrap, checked above
         Some(port_array) => {
             for port in port_array.iter() {
@@ -269,62 +427,37 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> String {
             buf.push_str("<none>")
         }
     }
-    buf
+    buf.into()
 }
 
-/// Get volume info out of volume array
-fn get_volume_str(v: &Value) -> String {
-    let mut buf = String::new();
-    buf.push_str("Volumes:\n");
-    if let Some(vol_arry) = v.as_array() {
-        for vol in vol_arry.iter() {
-            buf.push_str(format!("  Name: {}\n", val_str("/name", vol, "<No Name>")).as_str());
-            if vol.get("emptyDir").is_some() {
-                buf.push_str(
-                    "    Type:\tEmptyDir (a temporary directory that shares a pod's lifetime)\n",
-                )
-            }
-            if let Some(conf_map) = vol.get("configMap") {
-                buf.push_str("    Type:\tConfigMap (a volume populated by a ConfigMap)\n");
-                buf.push_str(
-                    format!("    Name:\t{}\n", val_str("/name", conf_map, "<No Name>")).as_str(),
-                );
-            }
-            if let Some(secret) = vol.get("secret") {
-                buf.push_str("    Type:\tSecret (a volume populated by a Secret)\n");
-                buf.push_str(
-                    format!("    SecretName:\t{}\n",
-                            val_str("/secretName", secret, "<No SecretName>")).as_str(),
-                );
-            }
-            if let Some(aws) = vol.get("awsElasticBlockStore") {
-                buf.push_str(
-                    "    Type:\tAWS Block Store (An AWS Disk resource exposed to the pod)\n",
-                );
-                buf.push_str(
-                    format!("    VolumeId:\t{}\n", val_str("/volumeID", aws, "<No VolumeID>")).as_str(),
-                );
-                buf.push_str(
-                    format!("    FSType:\t{}\n", val_str("/fsType", aws, "<No FsType>")).as_str(),
-                );
-                let mut pnum = 0;
-                if let Some(part) = aws.get("partition") {
-                    if let Some(p) = part.as_u64() {
-                        pnum = p;
-                    }
-                }
-                buf.push_str(format!("    Partition#:\t{}\n", pnum).as_str());
-                if let Some(read_only) = aws.get("readOnly") {
-                    if read_only.as_bool().unwrap() {
-                        buf.push_str("    Read-Only:\tTrue\n");
-                    } else {
-                        buf.push_str("    Read-Only:\tFalse\n");
-                    }
-                } else {
-                    buf.push_str("    Read-Only:\tFalse\n");
-                }
-            }
-        }
-    }
-    buf
+
+/// Utility function to describe a secret
+pub fn describe_format_secret(v: Value) -> String {
+    let fields = vec![
+        ("Name:\t\t", DescItem::MetadataValStr{
+            path: "/name",
+            default: "<No Name>",
+        }),
+        ("Namespace:\t", DescItem::MetadataValStr{
+            path: "/namespace",
+            default: "<No Name>",
+        }),
+        ("Labels:\t", DescItem::KeyValStr {
+            parent: "/metadata/labels",
+            secret_vals: false,
+        }),
+        ("Annotations:", DescItem::KeyValStr {
+            parent: "/metadata/annotations",
+            secret_vals: false,
+        }),
+        ("\nType:\t\t", DescItem::ValStr {
+            path: "/type",
+            default: "<No Type>",
+        }),
+        ("\nData:\n", DescItem::KeyValStr {
+            parent: "/data",
+            secret_vals: true,
+        }),
+    ];
+    describe_object(&v, fields.into_iter())
 }

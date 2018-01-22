@@ -13,14 +13,19 @@
 // limitations under the License.
 
 use der_parser;
+use openssl::x509::X509;
 use regex::Regex;
+use rustls::{ClientConfig, ClientSession, Session};
 use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigner;
 
+
 use std::error::Error;
 use std::fs::File;
+use std::net::{IpAddr, Ipv4Addr, TcpStream};
 use std::io::{BufReader, Read};
 use std::path::Path;
+use std::sync::Arc;
 
 // might need to convert to der format
 pub fn get_cert(path: &str) -> Option<Certificate> {
@@ -183,4 +188,60 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
         }
         None => None,
     }
+}
+
+fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Option<Vec<Certificate>> {
+    let config = ClientConfig::new();
+    let ac = Arc::new(config);
+    let mut session = ClientSession::new(&ac, format!("{}:{}", ip, port).as_str());
+    let mut sock = TcpStream::connect((*ip,port)).unwrap();
+    session.write_tls(&mut sock).unwrap();
+    let rc = session.read_tls(&mut sock);
+
+    if rc.is_err() {
+        println!("TLS read error: {:?}", rc);
+        return None;
+    }
+
+    // If we're ready but there's no data: EOF.
+    if rc.unwrap() == 0 {
+        println!("EOF");
+        return None;
+    }
+    let _processed = session.process_new_packets();
+    session.get_peer_certificates()
+}
+
+// Fetch the cert from the specified endpoint, then, if cert contains a SAN that matches target_ip,
+// and a dns SAN, return the dns SAN.  This is a *HACK*.  But webpki does not support IP Address
+// SANS, and that's what minikube uses, so without this we can't talk to mikikube clusters.  This is
+// essentially safe, as it's just saying, hey, if the .kube/config is pointing at an IP address, try
+// and find a hostname we can use instead.  We do require that the specified IP is in the cert, so
+// it won't enable connecting just anywhere.  The DNS override to make this work is done in
+// connector.rs.
+pub fn try_ip_to_name(target_ip: &IpAddr, port: u16) -> Option<String> {
+    fetch_cert_for_ip(target_ip, port).and_then(|certs| {
+        for cert in certs.iter() {
+            let x509 = X509::from_der(cert.0.as_slice()).unwrap();
+            let mut dns_name:Option<String> = None;
+            let mut found = false;
+            for san in x509.subject_alt_names().unwrap().iter() {
+                if let Some(dns) = san.dnsname() {
+                    if dns_name.is_none() {
+                        dns_name = Some(dns.to_owned())
+                    }
+                }
+                if let Some(ip) = san.ipaddress() {
+                    let ipaddr = Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]);
+                    if &ipaddr == target_ip {
+                        found = true;
+                    }
+                }
+            }
+            if found {
+                return dns_name;
+            }
+        }
+        None
+    })
 }

@@ -32,9 +32,12 @@ use rustls::{Certificate, PrivateKey};
 
 use std::fmt;
 use std::io::BufReader;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use connector::ClickSslConnector;
 use error::{KubeErrNo, KubeError};
 
 // Various things we can return from the kubernetes api
@@ -420,6 +423,26 @@ impl Kluster {
         tlsclient
     }
 
+    // We map ip addresses to a name in the certificate if needed, to keep hyper happy.  see
+    // comments on try_ip_to_name and in connector.rs.
+    fn make_connector(tlsclient: TlsClient, endpoint: &mut Url) -> ClickSslConnector<TlsClient> {
+        let mut dns_host: Option<String> = None;
+        let mut ip: Option<String> = None;
+        if let Some(host) = endpoint.host_str() {
+            if let Ok(addr) = IpAddr::from_str(host) {
+                dns_host = ::certs::try_ip_to_name(&addr, endpoint.port().unwrap_or(443));
+                ip = Some(host.to_owned());
+            }
+        };
+        if let (Some(host), Some(ip_addr)) = (dns_host, ip) {
+            // The cert has a matching IP and a host name, use that
+            endpoint.set_host(Some(host.as_str())).unwrap();
+            ClickSslConnector::new(tlsclient, Some((host, ip_addr)))
+        } else {
+            ClickSslConnector::new(tlsclient, None)
+        }
+    }
+
     pub fn new(
         name: &str,
         cert_opt: Option<String>,
@@ -427,12 +450,14 @@ impl Kluster {
         auth: KlusterAuth,
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
-        let mut client = Client::with_connector(HttpsConnector::new(tlsclient));
+        let mut endpoint = try!(Url::parse(server));
+        let mut client = Client::with_connector(
+            Kluster::make_connector(tlsclient, &mut endpoint));
         client.set_read_timeout(Some(Duration::new(20, 0)));
         client.set_write_timeout(Some(Duration::new(20, 0)));
         Ok(Kluster {
             name: name.to_owned(),
-            endpoint: try!(Url::parse(server)),
+            endpoint: endpoint,
             auth: auth,
             cert_opt: cert_opt,
             client: client,

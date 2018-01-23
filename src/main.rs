@@ -420,9 +420,9 @@ fn build_parser_expr<'a>(line: &'a str, range: Range<usize>) -> Result<(&'a str,
                 b'|' => RightExpr::Pipe(&rest[sepcnt..]),
                 b'>' => {
                     if sepcnt == 1 {
-                        RightExpr::Redir(&rest[sepcnt..])
+                        RightExpr::Redir(&rest[sepcnt..].trim())
                     } else {
-                        RightExpr::Append(&rest[sepcnt..])
+                        RightExpr::Append(&rest[sepcnt..].trim())
                     }
                 },
                 _ => return Err(KubeError::ParseErr(

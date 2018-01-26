@@ -35,14 +35,15 @@ extern crate fd;
 extern crate humantime;
 extern crate hyper;
 extern crate hyper_rustls;
-extern crate openssl;
 extern crate regex;
+extern crate ring;
 extern crate rustls;
 extern crate rustyline;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
 extern crate term;
+extern crate untrusted;
 
 mod certs;
 mod cmd;
@@ -53,6 +54,7 @@ mod describe;
 mod error;
 mod kube;
 mod parser;
+mod subjaltnames;
 mod table;
 mod values;
 

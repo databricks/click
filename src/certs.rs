@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use subjaltnames::{get_subj_alt_names, SubjAltName};
+
 use der_parser;
-use openssl::x509::X509;
 use regex::Regex;
 use rustls::{ClientConfig, ClientSession, Session};
 use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigner;
-
+use untrusted::{Input, Reader};
 
 use std::error::Error;
 use std::fs::File;
-use std::net::{IpAddr, Ipv4Addr, TcpStream};
-use std::io::{BufReader, Read};
+use std::net::{IpAddr, TcpStream};
+use std::io::{self, BufReader, Read};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -190,26 +191,20 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
     }
 }
 
-fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Option<Vec<Certificate>> {
+fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Error> {
     let config = ClientConfig::new();
     let ac = Arc::new(config);
     let mut session = ClientSession::new(&ac, format!("{}:{}", ip, port).as_str());
-    let mut sock = TcpStream::connect((*ip,port)).unwrap();
-    session.write_tls(&mut sock).unwrap();
-    let rc = session.read_tls(&mut sock);
-
-    if rc.is_err() {
-        println!("TLS read error: {:?}", rc);
-        return None;
-    }
+    let mut sock = TcpStream::connect((*ip,port))?;
+    session.write_tls(&mut sock)?;
+    let rc = session.read_tls(&mut sock)?;
 
     // If we're ready but there's no data: EOF.
-    if rc.unwrap() == 0 {
-        println!("EOF");
-        return None;
+    if rc == 0 {
+        return Err(io::Error::new(io::ErrorKind::WriteZero, "No data to read"));
     }
     let _processed = session.process_new_packets();
-    session.get_peer_certificates()
+    Ok(session.get_peer_certificates().unwrap_or(Vec::new()))
 }
 
 // Fetch the cert from the specified endpoint, then, if cert contains a SAN that matches target_ip,
@@ -220,21 +215,22 @@ fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Option<Vec<Certificate>> {
 // it won't enable connecting just anywhere.  The DNS override to make this work is done in
 // connector.rs.
 pub fn try_ip_to_name(target_ip: &IpAddr, port: u16) -> Option<String> {
-    fetch_cert_for_ip(target_ip, port).and_then(|certs| {
+    fetch_cert_for_ip(target_ip, port).map(|certs| {
         for cert in certs.iter() {
-            let x509 = X509::from_der(cert.0.as_slice()).unwrap();
+            let mut reader = Reader::new(Input::from(cert.0.as_slice()));
+            let names = get_subj_alt_names(&mut reader);
             let mut dns_name:Option<String> = None;
             let mut found = false;
-            for san in x509.subject_alt_names().unwrap().iter() {
-                if let Some(dns) = san.dnsname() {
-                    if dns_name.is_none() {
-                        dns_name = Some(dns.to_owned())
-                    }
-                }
-                if let Some(ip) = san.ipaddress() {
-                    let ipaddr = Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]);
-                    if &ipaddr == target_ip {
-                        found = true;
+            for san in names.into_iter() {
+                match san {
+                    SubjAltName::DNSName(dns) => {
+                        dns_name = Some(String::from(dns))
+                    },
+                    SubjAltName::IPAddress(ip) => {
+                        let ipaddr = IpAddr::from(ip);
+                        if &ipaddr == target_ip {
+                            found = true;
+                        }
                     }
                 }
             }
@@ -243,5 +239,5 @@ pub fn try_ip_to_name(target_ip: &IpAddr, port: u16) -> Option<String> {
             }
         }
         None
-    })
+    }).ok().and_then(|res| res)
 }

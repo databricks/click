@@ -17,18 +17,16 @@
 use serde;
 use serde_json::value::Value;
 
-use error::{KubeError};
+use error::KubeError;
 
 use std::borrow::Cow;
 
 pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a, str> {
     match value.pointer(pointer) {
-        Some(p) => {
-            match p.as_str() {
-                Some(s) => s.into(),
-                None => default.into(),
-            }
-        }
+        Some(p) => match p.as_str() {
+            Some(s) => s.into(),
+            None => default.into(),
+        },
         None => default.into(),
     }
 }
@@ -43,12 +41,10 @@ pub fn val_str_opt(pointer: &str, value: &Value) -> Option<String> {
 
 pub fn val_u64(pointer: &str, value: &Value, default: u64) -> u64 {
     match value.pointer(pointer) {
-        Some(p) => {
-            match p.as_u64() {
-                Some(i) => i,
-                None => default,
-            }
-        }
+        Some(p) => match p.as_u64() {
+            Some(i) => i,
+            None => default,
+        },
         None => default,
     }
 }
@@ -60,19 +56,18 @@ pub fn val_item_count(pointer: &str, value: &Value) -> usize {
         Some(p) => {
             if p.is_array() {
                 p.as_array().unwrap().len() // safe, just checked
-            }
-            else if p.is_object() {
+            } else if p.is_object() {
                 p.as_object().unwrap().len() // safe, just checked
             } else {
                 0
             }
         }
-        None => 0
+        None => 0,
     }
 }
 
 pub fn get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
-    where
+where
     for<'de> T: serde::Deserialize<'de>,
 {
     match value.pointer(pointer) {

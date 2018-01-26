@@ -28,8 +28,8 @@ lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
-						format::LineSeparator::new('-', '+', '+', '+')
-				)
+                        format::LineSeparator::new('-', '+', '+', '+')
+                )
         .padding(1,1)
         .build();
 }
@@ -170,7 +170,6 @@ fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
         None => false,
     }
 }
-
 
 pub fn print_table<'a, T>(
     table: &mut Table,

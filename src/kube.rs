@@ -99,12 +99,10 @@ pub enum ContainerState {
 impl fmt::Display for ContainerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ContainerState::Running { started_at } => {
-                match started_at {
-                    Some(sa) => write!(f, "{} (started: {})", Green.paint("running"), sa),
-                    None => write!(f, "{} (unknown start time)", Green.paint("running")),
-                }
-            }
+            &ContainerState::Running { started_at } => match started_at {
+                Some(sa) => write!(f, "{} (started: {})", Green.paint("running"), sa),
+                None => write!(f, "{} (unknown start time)", Green.paint("running")),
+            },
             &ContainerState::Terminated {
                 container_id: _,
                 ref exit_code,
@@ -113,40 +111,33 @@ impl fmt::Display for ContainerState {
                 reason: _,
                 signal: _,
                 started_at: _,
-            } => {
-                match finished_at {
-                    &Some(fa) =>
-                        write!(
-                            f,
-                            "{} at {} (exit code: {})",
-                            Red.paint("terminated"),
-                            fa,
-                            exit_code
-                        ),
-                    &None =>
-                        write!(
-                            f,
-                            "{} (time unknown) (exit code: {})",
-                            Red.paint("terminated"),
-                            exit_code
-                        ),
-                }
-            }
+            } => match finished_at {
+                &Some(fa) => write!(
+                    f,
+                    "{} at {} (exit code: {})",
+                    Red.paint("terminated"),
+                    fa,
+                    exit_code
+                ),
+                &None => write!(
+                    f,
+                    "{} (time unknown) (exit code: {})",
+                    Red.paint("terminated"),
+                    exit_code
+                ),
+            },
             &ContainerState::Waiting {
                 message: _,
                 ref reason,
-            } => {
-                write!(
-                    f,
-                    "{} ({})",
-                    Yellow.paint("waiting"),
-                    reason.as_ref().unwrap_or(&"<no reason given>".to_owned())
-                )
-            }
+            } => write!(
+                f,
+                "{} ({})",
+                Yellow.paint("waiting"),
+                reason.as_ref().unwrap_or(&"<no reason given>".to_owned())
+            ),
         }
     }
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct ContainerStatus {
@@ -222,8 +213,6 @@ pub struct EventList {
     pub items: Vec<Event>,
 }
 
-
-
 // Nodes
 #[derive(Debug, Deserialize)]
 pub struct NodeCondition {
@@ -242,7 +231,6 @@ pub struct NodeSpec {
     pub unschedulable: Option<bool>,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct Node {
     pub metadata: Metadata,
@@ -254,7 +242,6 @@ pub struct Node {
 pub struct NodeList {
     pub items: Vec<Node>,
 }
-
 
 // Deployments
 fn replicas_none() -> u32 {
@@ -293,7 +280,6 @@ pub struct DeploymentList {
     pub items: Vec<Deployment>,
 }
 
-
 // Services
 fn tcp_str() -> String {
     "TCP".to_owned()
@@ -319,7 +305,6 @@ pub struct ServiceSpec {
     pub external_ips: Option<Vec<String>>,
     pub ports: Option<Vec<ServicePort>>,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct Service {
@@ -451,8 +436,7 @@ impl Kluster {
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
         let mut endpoint = try!(Url::parse(server));
-        let mut client = Client::with_connector(
-            Kluster::make_connector(tlsclient, &mut endpoint));
+        let mut client = Client::with_connector(Kluster::make_connector(tlsclient, &mut endpoint));
         client.set_read_timeout(Some(Duration::new(20, 0)));
         client.set_write_timeout(Some(Duration::new(20, 0)));
         Ok(Kluster {
@@ -497,7 +481,6 @@ impl Kluster {
     where
         for<'de> T: Deserialize<'de>,
     {
-
         let resp = try!(self.send_req(path));
         let resp = try!(self.check_resp(resp));
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))

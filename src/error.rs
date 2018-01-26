@@ -37,12 +37,10 @@ impl fmt::Display for KubeErrNo {
             &KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
-            &KubeErrNo::Unauthorized => {
-                write!(
-                    f,
-                    "Not authorized to talk to cluster, check credentials in config"
-                )
-            }
+            &KubeErrNo::Unauthorized => write!(
+                f,
+                "Not authorized to talk to cluster, check credentials in config"
+            ),
             &KubeErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
         }
     }
@@ -79,7 +77,6 @@ pub enum KubeError {
     SerdeJson(serde_json::Error),
     SerdeYaml(serde_yaml::Error),
 }
-
 
 impl fmt::Display for KubeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -127,7 +124,6 @@ impl error::Error for KubeError {
     }
 }
 
-
 impl From<io::Error> for KubeError {
     fn from(err: io::Error) -> KubeError {
         KubeError::Io(err)
@@ -140,7 +136,6 @@ impl From<hyper::error::ParseError> for KubeError {
     }
 }
 
-
 impl From<hyper::error::Error> for KubeError {
     fn from(err: hyper::error::Error) -> KubeError {
         KubeError::HyperErr(err)
@@ -152,7 +147,6 @@ impl From<serde_json::Error> for KubeError {
         KubeError::SerdeJson(err)
     }
 }
-
 
 impl From<serde_yaml::Error> for KubeError {
     fn from(err: serde_yaml::Error) -> KubeError {

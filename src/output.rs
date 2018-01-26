@@ -18,7 +18,7 @@
 use ansi_term::Colour::{Blue, Green};
 use duct_sh::sh_dangerous;
 use duct::Handle;
-use fd;
+use os_pipe::{pipe, PipeWriter};
 use serde::ser::Serialize;
 use serde_json::to_writer;
 use serde_json::Error as JsonError;
@@ -51,7 +51,7 @@ macro_rules! clickwrite {
 }
 
 struct PipeProc {
-    pipe: File,
+    pipe: PipeWriter,
     expr: Handle,
 }
 
@@ -88,10 +88,10 @@ impl ClickWriter {
 
     pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), KubeError> {
         let expr = sh_dangerous(cmd);
-        let pipe = try!(fd::Pipe::new());
-        let handle = try!(expr.stdin_handle(pipe.reader).start());
+        let (pipe_read, pipe_write) = pipe()?;
+        let handle = expr.stdin_handle(pipe_read).start()?;
         self.pipe_proc = Some(PipeProc{
-            pipe: pipe.writer,
+            pipe: pipe_write,
             expr: handle,
         });
         Ok(())

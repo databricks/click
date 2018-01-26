@@ -72,7 +72,6 @@ pub fn get_private_key(path: &str) -> Option<PrivateKey> {
     }
 }
 
-
 fn get_body(s: &str) -> Option<String> {
     lazy_static! {
         // regex taken from pem-parser crate: https://github.com/yberreby/pem-parser-rs
@@ -80,12 +79,10 @@ fn get_body(s: &str) -> Option<String> {
     }
     let remove_carriage = s.replace("\r", "");
     match RE.captures(remove_carriage.as_str()) {
-        Some(caps) => {
-            caps.get(2).map(|m| {
-                let no_headers = m.as_str();
-                no_headers.replace("\n", "")
-            })
-        }
+        Some(caps) => caps.get(2).map(|m| {
+            let no_headers = m.as_str();
+            no_headers.replace("\n", "")
+        }),
         None => None,
     }
 }
@@ -112,15 +109,13 @@ fn validate_private_key(key: PrivateKey) -> Option<PrivateKey> {
 // Convert pem string to der cert
 pub fn get_cert_from_pem(pem: &str) -> Option<Certificate> {
     match get_body(pem) {
-        Some(body) => {
-            match ::base64::decode(body.as_str()) {
-                Ok(der_vec) => Some(Certificate(der_vec)),
-                Err(e) => {
-                    println!("Failed to decode cert: {}", e.description());
-                    None
-                }
+        Some(body) => match ::base64::decode(body.as_str()) {
+            Ok(der_vec) => Some(Certificate(der_vec)),
+            Err(e) => {
+                println!("Failed to decode cert: {}", e.description());
+                None
             }
-        }
+        },
         None => None,
     }
 }
@@ -142,36 +137,33 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                         let algo = di.next();
                         let bitso = di.next();
                         match (algo, bitso) {
-                            (Some(alg), Some(bits)) => {
-                                match alg.ref_iter().next() {
-                                    Some(oid) => {
-                                        if let der_parser::DerObjectContent::OID(ref v) =
-                                            oid.content
-                                        {
-                                            if v == &RSAOID {
-                                                if let der_parser::DerObjectContent::OctetString(ref v) = bits.content {
-                                                    validate_private_key(PrivateKey(v.to_vec()))
-                                                } else {
-                                                    println!("Bit string for private key is invalid");
-                                                    None
-                                                }
+                            (Some(alg), Some(bits)) => match alg.ref_iter().next() {
+                                Some(oid) => {
+                                    if let der_parser::DerObjectContent::OID(ref v) = oid.content {
+                                        if v == &RSAOID {
+                                            if let der_parser::DerObjectContent::OctetString(
+                                                ref v,
+                                            ) = bits.content
+                                            {
+                                                validate_private_key(PrivateKey(v.to_vec()))
                                             } else {
-                                                println!(
-                                                    "Invalid OID in pkcs8 key, cannot continue"
-                                                );
+                                                println!("Bit string for private key is invalid");
                                                 None
                                             }
                                         } else {
                                             println!("Invalid OID in pkcs8 key, cannot continue");
                                             None
                                         }
-                                    }
-                                    None => {
-                                        println!("pkcs8 does not have an OID, cannot continue");
+                                    } else {
+                                        println!("Invalid OID in pkcs8 key, cannot continue");
                                         None
                                     }
                                 }
-                            }
+                                None => {
+                                    println!("pkcs8 does not have an OID, cannot continue");
+                                    None
+                                }
+                            },
                             _ => {
                                 println!("Invalid der data in pkcs8 private key, cannot continue");
                                 None
@@ -195,7 +187,7 @@ fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Err
     let config = ClientConfig::new();
     let ac = Arc::new(config);
     let mut session = ClientSession::new(&ac, format!("{}:{}", ip, port).as_str());
-    let mut sock = TcpStream::connect((*ip,port))?;
+    let mut sock = TcpStream::connect((*ip, port))?;
     session.write_tls(&mut sock)?;
     let rc = session.read_tls(&mut sock)?;
 
@@ -215,29 +207,30 @@ fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Err
 // it won't enable connecting just anywhere.  The DNS override to make this work is done in
 // connector.rs.
 pub fn try_ip_to_name(target_ip: &IpAddr, port: u16) -> Option<String> {
-    fetch_cert_for_ip(target_ip, port).map(|certs| {
-        for cert in certs.iter() {
-            let mut reader = Reader::new(Input::from(cert.0.as_slice()));
-            let names = get_subj_alt_names(&mut reader);
-            let mut dns_name:Option<String> = None;
-            let mut found = false;
-            for san in names.into_iter() {
-                match san {
-                    SubjAltName::DNSName(dns) => {
-                        dns_name = Some(String::from(dns))
-                    },
-                    SubjAltName::IPAddress(ip) => {
-                        let ipaddr = IpAddr::from(ip);
-                        if &ipaddr == target_ip {
-                            found = true;
+    fetch_cert_for_ip(target_ip, port)
+        .map(|certs| {
+            for cert in certs.iter() {
+                let mut reader = Reader::new(Input::from(cert.0.as_slice()));
+                let names = get_subj_alt_names(&mut reader);
+                let mut dns_name: Option<String> = None;
+                let mut found = false;
+                for san in names.into_iter() {
+                    match san {
+                        SubjAltName::DNSName(dns) => dns_name = Some(String::from(dns)),
+                        SubjAltName::IPAddress(ip) => {
+                            let ipaddr = IpAddr::from(ip);
+                            if &ipaddr == target_ip {
+                                found = true;
+                            }
                         }
                     }
                 }
+                if found {
+                    return dns_name;
+                }
             }
-            if found {
-                return dns_name;
-            }
-        }
-        None
-    }).ok().and_then(|res| res)
+            None
+        })
+        .ok()
+        .and_then(|res| res)
 }

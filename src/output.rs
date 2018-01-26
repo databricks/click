@@ -59,9 +59,7 @@ impl PipeProc {
     fn finish(self) -> io::Result<String> {
         drop(self.pipe);
         let output = try!(self.expr.output());
-        String::from_utf8(output.stdout).map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, e)
-        })
+        String::from_utf8(output.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -90,7 +88,7 @@ impl ClickWriter {
         let expr = sh_dangerous(cmd);
         let (pipe_read, pipe_write) = pipe()?;
         let handle = expr.stdin_handle(pipe_read).start()?;
-        self.pipe_proc = Some(PipeProc{
+        self.pipe_proc = Some(PipeProc {
             pipe: pipe_write,
             expr: handle,
         });
@@ -102,7 +100,7 @@ impl ClickWriter {
             match pipe_proc.finish() {
                 Ok(out) => {
                     print!("{}", out);
-                },
+                }
                 Err(e) => {
                     eprint!("Failed to execute command: {}", e);
                 }
@@ -147,7 +145,6 @@ impl Write for ClickWriter {
         }
     }
 }
-
 
 pub struct PrettyColorFormatter<'a> {
     pretty: PrettyFormatter<'a>,

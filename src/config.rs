@@ -23,9 +23,9 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 
 use Env;
-use error::{KubeError, KubeErrNo};
+use error::{KubeErrNo, KubeError};
 use kube::{Kluster, KlusterAuth};
-use certs::{get_cert, get_cert_from_pem, get_private_key, get_key_from_str};
+use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -102,7 +102,6 @@ pub struct UserConf {
     #[serde(rename = "client-key-data")]
     pub client_key_data: Option<String>,
 }
-
 
 impl IConfig {
     fn from_file(path: &str) -> IConfig {
@@ -245,26 +244,24 @@ impl Config {
                         }
                     }
                 }
-                (None, Some(cert_data)) => {
-                    match ::base64::decode(cert_data.as_str()) {
-                        Ok(mut cert) => {
-                            cert.retain(|&i| i != 0);
-                            cluster_map.insert(
-                                cluster.name.clone(),
-                                ClusterConf::new(
-                                    Some(String::from_utf8(cert).unwrap()),
-                                    cluster.conf.server,
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            println!(
-                                "Invalid certificate data, could not base64 decode: {}",
-                                e.description()
-                            );
-                        }
+                (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
+                    Ok(mut cert) => {
+                        cert.retain(|&i| i != 0);
+                        cluster_map.insert(
+                            cluster.name.clone(),
+                            ClusterConf::new(
+                                Some(String::from_utf8(cert).unwrap()),
+                                cluster.conf.server,
+                            ),
+                        );
                     }
-                }
+                    Err(e) => {
+                        println!(
+                            "Invalid certificate data, could not base64 decode: {}",
+                            e.description()
+                        );
+                    }
+                },
                 (None, None) => {
                     if cluster.conf.skip_tls.unwrap_or(false) {
                         println!(
@@ -303,32 +300,49 @@ impl Config {
     }
 
     pub fn cluster_for_context(&self, context: &str) -> Result<Kluster, KubeError> {
-        self.contexts.get(context).map(|ctx| {
-            self.clusters.get(&ctx.cluster).map(|cluster| {
-                self.users.get(&ctx.user).map(|user| {
-
-                    let auth =
-                        if let Some(ref token) = user.token {
-                            Some(KlusterAuth::with_token(token.as_str()))
-                        } else if let (&Some(ref client_cert_path), &Some(ref key_path)) = (&user.client_cert, &user.client_key) {
-                            auth_from_paths(client_cert_path, key_path, context)
-                        } else if let (&Some(ref client_cert_data), &Some(ref key_data)) = (&user.client_cert_data, &user.client_key_data) {
-                            try!(auth_from_data(client_cert_data, key_data, context))
-                        } else {
-                            println!("Invalid context {}.  Each user must have either a token or a client-certificate AND a client-key.", context);
-                            None
-                        };
-                    match auth {
-                        Some(a) => Kluster::new(context, cluster.cert.clone(), cluster.server.as_str(), a),
-                        None => Err(KubeError::Kube(KubeErrNo::InvalidContext)),
-                    }
-                }).ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
-            }).ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
-        }).ok_or(KubeError::Kube(KubeErrNo::InvalidContextName)).
-            and_then(|n| n).and_then(|n| n).and_then(|n| n)
+        self.contexts
+            .get(context)
+            .map(|ctx| {
+                self.clusters
+                    .get(&ctx.cluster)
+                    .map(|cluster| {
+                        self.users
+                            .get(&ctx.user)
+                            .map(|user| {
+                                let auth = if let Some(ref token) = user.token {
+                                    Some(KlusterAuth::with_token(token.as_str()))
+                                } else if let (&Some(ref client_cert_path), &Some(ref key_path)) =
+                                    (&user.client_cert, &user.client_key)
+                                {
+                                    auth_from_paths(client_cert_path, key_path, context)
+                                } else if let (&Some(ref client_cert_data), &Some(ref key_data)) =
+                                    (&user.client_cert_data, &user.client_key_data)
+                                {
+                                    try!(auth_from_data(client_cert_data, key_data, context))
+                                } else {
+                                    println!("Invalid context {}.  Each user must have either a token or a client-certificate AND a client-key.", context);
+                                    None
+                                };
+                                match auth {
+                                    Some(a) => Kluster::new(
+                                        context,
+                                        cluster.cert.clone(),
+                                        cluster.server.as_str(),
+                                        a,
+                                    ),
+                                    None => Err(KubeError::Kube(KubeErrNo::InvalidContext)),
+                                }
+                            })
+                            .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
+                    })
+                    .ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))
+            })
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))
+            .and_then(|n| n)
+            .and_then(|n| n)
+            .and_then(|n| n)
     }
 }
-
 
 /// Click config
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -340,17 +354,18 @@ pub struct ClickConfig {
 impl ClickConfig {
     pub fn from_file(path: &str) -> ClickConfig {
         match File::open(path) {
-            Ok(f) => {
-                match serde_yaml::from_reader(f) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        println!("Could not read config file {:?}, using default values", e);
-                        ClickConfig::default()
-                    }
+            Ok(f) => match serde_yaml::from_reader(f) {
+                Ok(c) => c,
+                Err(e) => {
+                    println!("Could not read config file {:?}, using default values", e);
+                    ClickConfig::default()
                 }
-            }
+            },
             Err(e) => {
-                println!("Could not open config file at {}: {}. Using default values", path, e);
+                println!(
+                    "Could not open config file at {}: {}. Using default values",
+                    path, e
+                );
                 ClickConfig::default()
             }
         }

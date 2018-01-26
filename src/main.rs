@@ -15,18 +15,18 @@
 //! The Command Line Interactive Contoller for Kubernetes
 
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate prettytable;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate lazy_static;
 #[macro_use]
 mod output;
 
 extern crate ansi_term;
 extern crate base64;
-extern crate clap;
 extern crate chrono;
+extern crate clap;
 extern crate ctrlc;
 extern crate der_parser;
 extern crate duct;
@@ -58,8 +58,8 @@ mod subjaltnames;
 mod table;
 mod values;
 
-use ansi_term::Colour::{Blue, Cyan, Red, Green, Yellow, Purple};
-use clap::{Arg, App};
+use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
+use clap::{App, Arg};
 use parser::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -78,7 +78,7 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{Kluster, NodeList, PodList, DeploymentList, ReplicaSetList, SecretList, ServiceList};
+use kube::{DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use values::val_str_opt;
 
@@ -132,8 +132,9 @@ impl Env {
     fn new(config: Config) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
-        ctrlc::set_handler(move || { r.store(true, Ordering::SeqCst); })
-            .expect("Error setting Ctrl-C handler");
+        ctrlc::set_handler(move || {
+            r.store(true, Ordering::SeqCst);
+        }).expect("Error setting Ctrl-C handler");
         Env {
             config: config,
             quit: false,
@@ -177,7 +178,6 @@ impl Env {
                 KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
             }
         );
-
     }
 
     fn get_contexts(&self) -> &HashMap<String, ::config::ContextConf> {
@@ -322,17 +322,14 @@ impl Env {
     where
         F: FnOnce(&Kluster) -> Result<R, KubeError>,
     {
-
         match self.kluster {
-            Some(ref k) => {
-                match f(k) {
-                    Ok(r) => Some(r),
-                    Err(e) => {
-                        println!("{}", e);
-                        None
-                    }
+            Some(ref k) => match f(k) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    println!("{}", e);
+                    None
                 }
-            }
+            },
             None => {
                 println!("Need to have an active context");
                 None
@@ -401,7 +398,10 @@ enum RightExpr<'a> {
     Append(&'a str),
 }
 
-fn build_parser_expr<'a>(line: &'a str, range: Range<usize>) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+fn build_parser_expr<'a>(
+    line: &'a str,
+    range: Range<usize>,
+) -> Result<(&'a str, RightExpr<'a>), KubeError> {
     let (click_cmd, rest) = line.split_at(range.start);
 
     let rbytes = rest.as_bytes();
@@ -409,27 +409,36 @@ fn build_parser_expr<'a>(line: &'a str, range: Range<usize>) -> Result<(&'a str,
     let mut sepcnt = 0;
 
     while rbytes[sepcnt] == sep {
-        sepcnt+=1;
+        sepcnt += 1;
     }
 
     if sep == b'|' && sepcnt > 1 {
-        Err(KubeError::ParseErr(format!("Parse error at {}: unexpected ||", range.start)))
+        Err(KubeError::ParseErr(format!(
+            "Parse error at {}: unexpected ||",
+            range.start
+        )))
     } else if sep == b'>' && sepcnt > 2 {
-        Err(KubeError::ParseErr(format!("Parse error at {}: unexpected >>", range.start)))
+        Err(KubeError::ParseErr(format!(
+            "Parse error at {}: unexpected >>",
+            range.start
+        )))
     } else {
-        let right =
-            match sep {
-                b'|' => RightExpr::Pipe(&rest[sepcnt..]),
-                b'>' => {
-                    if sepcnt == 1 {
-                        RightExpr::Redir(&rest[sepcnt..].trim())
-                    } else {
-                        RightExpr::Append(&rest[sepcnt..].trim())
-                    }
-                },
-                _ => return Err(KubeError::ParseErr(
-                    format!("Parse error at {}: unexpected separator", range.start)))
-            };
+        let right = match sep {
+            b'|' => RightExpr::Pipe(&rest[sepcnt..]),
+            b'>' => {
+                if sepcnt == 1 {
+                    RightExpr::Redir(&rest[sepcnt..].trim())
+                } else {
+                    RightExpr::Append(&rest[sepcnt..].trim())
+                }
+            }
+            _ => {
+                return Err(KubeError::ParseErr(format!(
+                    "Parse error at {}: unexpected separator",
+                    range.start
+                )))
+            }
+        };
         Ok((click_cmd, right))
     }
 }
@@ -438,9 +447,7 @@ fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> 
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
-            '|' | '>' => {
-                return build_parser_expr(line, range)
-            }
+            '|' | '>' => return build_parser_expr(line, range),
             _ => {}
         }
     }
@@ -545,7 +552,6 @@ fn main() {
                 rl.add_history_entry(line.as_str());
                 match parse_line(&line) {
                     Ok((left, right)) => {
-
                         // set up output
                         match right {
                             RightExpr::None => {} // do nothing
@@ -555,17 +561,15 @@ fn main() {
                                     continue;
                                 }
                             }
-                            RightExpr::Redir(filename) => {
-                                match File::create(filename) {
-                                    Ok(out_file) => {
-                                        writer.out_file = Some(out_file);
-                                    }
-                                    Err(ref e) => {
-                                        println!("Can't open output file: {}", e);
-                                        continue;
-                                    }
+                            RightExpr::Redir(filename) => match File::create(filename) {
+                                Ok(out_file) => {
+                                    writer.out_file = Some(out_file);
                                 }
-                            }
+                                Err(ref e) => {
+                                    println!("Can't open output file: {}", e);
+                                    continue;
+                                }
+                            },
                             RightExpr::Append(filename) => {
                                 match OpenOptions::new().append(true).create(true).open(filename) {
                                     Ok(out_file) => {
@@ -593,7 +597,8 @@ fn main() {
                                     if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
                                         cmd.print_help();
                                     } else {
-                                        match hcmd { // match for meta topics
+                                        match hcmd {
+                                            // match for meta topics
                                             "pipes" | "redirection" | "shell" => {
                                                 println!("{}", SHELLP);
                                             }
@@ -621,8 +626,10 @@ fn main() {
                                     println!(
                                         "\nOther help topics (type 'help [TOPIC]' for details)"
                                     );
-                                    println!("  shell               Redirecting and piping click \
-                                              output to shell commands");
+                                    println!(
+                                        "  shell               Redirecting and piping click \
+                                         output to shell commands"
+                                    );
                                 }
                             } else {
                                 println!("Unknown command");

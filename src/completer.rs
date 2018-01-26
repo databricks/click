@@ -66,7 +66,8 @@ impl<'a> Completer for ClickCompleter<'a> {
                     // first thing is a full command, do complete on it
                     let (offset, opts) = cmd.try_complete(rest, self.env);
                     if pos == linecmd.len() && opts.len() > 1 {
-                        // user as pressed tab with no space after the command, and we have completions, so add a space in
+                        // user as pressed tab with no space after the command, and we have
+                        // completions, so add a space in
                         let space_opts = opts.iter().map(|o| format!(" {}", o)).collect();
                         return Ok((line.len(), space_opts));
                     } else {

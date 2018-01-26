@@ -63,21 +63,35 @@ impl<'a> Iterator for Parser<'a> {
                             start = i + 1;
                         }
                         Normal
-                    },
-                    (Normal, _) |
-                    (Escaped, _) => { arg.push(c); Normal },
-                    (SingleQuoted, '\'') => { was_quoted = true; Normal },
-                    (SingleQuoted, _) => { arg.push(c); SingleQuoted },
-                    (DoubleQuoted, '"') => { was_quoted = true; Normal },
+                    }
+                    (Normal, _) | (Escaped, _) => {
+                        arg.push(c);
+                        Normal
+                    }
+                    (SingleQuoted, '\'') => {
+                        was_quoted = true;
+                        Normal
+                    }
+                    (SingleQuoted, _) => {
+                        arg.push(c);
+                        SingleQuoted
+                    }
+                    (DoubleQuoted, '"') => {
+                        was_quoted = true;
+                        Normal
+                    }
                     (DoubleQuoted, '\\') => DoubleQuotedEscaped,
-                    (DoubleQuoted, _) |
-                    (DoubleQuotedEscaped, '"') |
-                    (DoubleQuotedEscaped, '\\') => { arg.push(c); DoubleQuoted },
+                    (DoubleQuoted, _)
+                    | (DoubleQuotedEscaped, '"')
+                    | (DoubleQuotedEscaped, '\\') => {
+                        arg.push(c);
+                        DoubleQuoted
+                    }
                     (DoubleQuotedEscaped, _) => {
                         arg.push('\\');
                         arg.push(c);
                         DoubleQuoted
-                    },
+                    }
                 };
 
                 if yield_value {

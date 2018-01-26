@@ -1,3 +1,18 @@
+// Copyright 2017 Databricks, Inc.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
 use ring::der;
 use untrusted::{Input, Reader};
 
@@ -11,15 +26,16 @@ enum Object {
     SubjAltNames,
 }
 
+// This enum and the general_name function are taken and modified from the webpki crate:
+// https://github.com/briansmith/webpki (see names.rs)
 #[derive(Clone, Copy, Debug)]
 enum GeneralName<'a> {
     DNSName(Input<'a>),
     IPAddress(Input<'a>),
 }
 
-fn general_name<'a>(input: &mut Reader<'a>)
-                    -> Result<GeneralName<'a>, ()> {
-    use ring::der::{CONTEXT_SPECIFIC};
+fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
+    use ring::der::CONTEXT_SPECIFIC;
     const DNS_NAME_TAG: u8 = CONTEXT_SPECIFIC | 2;
     const IP_ADDRESS_TAG: u8 = CONTEXT_SPECIFIC | 7;
 
@@ -31,11 +47,10 @@ fn general_name<'a>(input: &mut Reader<'a>)
     let name = match tag {
         DNS_NAME_TAG => GeneralName::DNSName(value),
         IP_ADDRESS_TAG => GeneralName::IPAddress(value),
-        _ => return Err(())
+        _ => return Err(()),
     };
     Ok(name)
 }
-
 
 fn obj_to_obj<'a>(object: Input<'a>) -> Option<Object> {
     let slice = object.as_slice_less_safe();
@@ -47,7 +62,7 @@ fn obj_to_obj<'a>(object: Input<'a>) -> Option<Object> {
             17 => Some(Object::SubjAltNames),
             19 => Some(Object::BasicConstraints),
             37 => Some(Object::ExtendedKeyUsage),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -62,7 +77,7 @@ fn tag_to_tag(tag: u8) -> der::Tag {
         0x06 => der::Tag::OID,
 
         0x13 => der::Tag::BitString,
-        
+
         0x30 => der::Tag::Sequence,
         0x31 => der::Tag::Sequence,
         0x17 => der::Tag::UTCTime,
@@ -78,64 +93,63 @@ fn tag_to_tag(tag: u8) -> der::Tag {
 fn recurse_reader<'a>(reader: &mut Reader<'a>, vec: &mut Vec<SubjAltName<'a>>) {
     let mut is_subj_alt = false;
     loop {
-       match der::read_tag_and_get_value(reader) {
-           Ok((tag, rest)) => {
-               match tag_to_tag(tag) {
-                   der::Tag::Sequence | der::Tag::ContextSpecificConstructed3 => {
-                       let mut inner_reader = Reader::new(rest);
-                       recurse_reader(&mut inner_reader, vec);                           
-                   }
-                   der::Tag::OID => {
-                       let obj = obj_to_obj(rest);
-                       is_subj_alt = obj.is_some() && obj.unwrap() == Object::SubjAltNames;
-                   },
-                   der::Tag::OctetString => {
-                       if is_subj_alt {
-                           let mut snr = Reader::new(rest);
-                           if snr.skip(2).is_err() {
-                               return;
-                           }
-                           while !snr.at_end() {
-                               let gn = general_name(&mut snr);
-                               match gn {
-                                   Ok(n) => match n {
-                                       GeneralName::DNSName(input) => {
-                                           let name = String::from_utf8_lossy(input.as_slice_less_safe());
-                                           vec.push(SubjAltName::DNSName(name));
-                                       },
-                                       GeneralName::IPAddress(input) => {
-                                           if input.len() >= 4 {
-                                               let mut a = [0;4];
-                                               let mut i = input.iter();
-                                               a[0] = *i.next().unwrap();
-                                               a[1] = *i.next().unwrap();
-                                               a[2] = *i.next().unwrap();
-                                               a[3] = *i.next().unwrap();
-                                               vec.push(SubjAltName::IPAddress(a));
-                                           }
-                                       },
-                                   },
-                                   Err(_) => {
-                                       break;
-                                   }
-                               }
-                           }
-                       }
-                   }
-                   _ => { }
-               }
-           },
-           Err(_) => {
-               break;
-           }
-       }
+        match der::read_tag_and_get_value(reader) {
+            Ok((tag, rest)) => match tag_to_tag(tag) {
+                der::Tag::Sequence | der::Tag::ContextSpecificConstructed3 => {
+                    let mut inner_reader = Reader::new(rest);
+                    recurse_reader(&mut inner_reader, vec);
+                }
+                der::Tag::OID => {
+                    let obj = obj_to_obj(rest);
+                    is_subj_alt = obj.is_some() && obj.unwrap() == Object::SubjAltNames;
+                }
+                der::Tag::OctetString => {
+                    if is_subj_alt {
+                        let mut snr = Reader::new(rest);
+                        if snr.skip(2).is_err() {
+                            return;
+                        }
+                        while !snr.at_end() {
+                            let gn = general_name(&mut snr);
+                            match gn {
+                                Ok(n) => match n {
+                                    GeneralName::DNSName(input) => {
+                                        let name =
+                                            String::from_utf8_lossy(input.as_slice_less_safe());
+                                        vec.push(SubjAltName::DNSName(name));
+                                    }
+                                    GeneralName::IPAddress(input) => {
+                                        if input.len() >= 4 {
+                                            let mut a = [0; 4];
+                                            let mut i = input.iter();
+                                            a[0] = *i.next().unwrap();
+                                            a[1] = *i.next().unwrap();
+                                            a[2] = *i.next().unwrap();
+                                            a[3] = *i.next().unwrap();
+                                            vec.push(SubjAltName::IPAddress(a));
+                                        }
+                                    }
+                                },
+                                Err(_) => {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            },
+            Err(_) => {
+                break;
+            }
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum SubjAltName<'a> {
     DNSName(Cow<'a, str>),
-    IPAddress([u8;4]),
+    IPAddress([u8; 4]),
 }
 
 pub fn get_subj_alt_names<'a>(reader: &mut Reader<'a>) -> Vec<SubjAltName<'a>> {

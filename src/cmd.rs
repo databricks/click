@@ -17,14 +17,14 @@
 use Env;
 use LastList;
 use describe;
-use kube::{ContainerState, DeploymentList, Event, EventList, Pod, PodList, NamespaceList,
-           NodeList, NodeCondition, ReplicaSetList, SecretList, ServiceList, Metadata};
+use kube::{ContainerState, DeploymentList, Event, EventList, Metadata, NamespaceList,
+           NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
-use values::{val_str, val_u64, val_item_count, get_val_as};
+use values::{get_val_as, val_item_count, val_str, val_u64};
 
-use ansi_term::Colour::{Yellow};
-use clap::{Arg, ArgMatches, App, AppSettings};
+use ansi_term::Colour::Yellow;
+use clap::{App, AppSettings, Arg, ArgMatches};
 use chrono::DateTime;
 use chrono::offset::local::Local;
 use chrono::offset::utc::UTC;
@@ -40,7 +40,7 @@ use std;
 use std::cell::RefCell;
 use std::error::Error;
 use std::iter::Iterator;
-use std::io::{self, BufRead, BufReader, Read, Write, stderr};
+use std::io::{self, stderr, BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::Ordering;
@@ -51,8 +51,8 @@ lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
-						format::LineSeparator::new('-', '+', '+', '+')
-				)
+                        format::LineSeparator::new('-', '+', '+', '+')
+                )
         .padding(1,1)
         .build();
 }
@@ -68,7 +68,11 @@ pub trait Cmd {
 }
 
 /// Get the start of a clap object
-fn start_clap(name: &'static str, about: &'static str, aliases: &'static str) -> App<'static, 'static> {
+fn start_clap(
+    name: &'static str,
+    about: &'static str,
+    aliases: &'static str,
+) -> App<'static, 'static> {
     App::new(name)
         .about(about)
         .before_help(aliases)
@@ -77,7 +81,8 @@ fn start_clap(name: &'static str, about: &'static str, aliases: &'static str) ->
         .setting(AppSettings::ColoredHelp)
 }
 
-/// Run specified closure with the given matches, or print error.  Return true if execed, false on err
+/// Run specified closure with the given matches, or print error.  Return true if execed,
+/// false on err
 fn exec_match<F>(
     clap: &RefCell<App<'static, 'static>>,
     env: &mut Env,
@@ -106,7 +111,7 @@ where
 /// * cmd_name: the name of the struct for the command
 /// * name: the string name of the command
 /// * about: an about string describing the command
-/// * extra_args: a closure taking an App that addes any additional argument stuff and returns an App
+/// * extra_args: closure taking an App that addes any additional argument stuff and returns an App
 /// * aliases: a vector of strs that specify what a user can type to invoke this command
 /// * cmplt_expr: an expression to return possible compeltions for the command
 /// * cmd_expr: a closure taking matches, env, and writer that runs to execute the command
@@ -125,7 +130,8 @@ where
 /// # }
 /// ```
 macro_rules! command {
-    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplt_expr: expr, $cmd_expr:expr) => {
+    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplt_expr: expr,
+     $cmd_expr:expr) => {
         pub struct $cmd_name {
             aliases: Vec<&'static str>,
             clap: RefCell<App<'static, 'static>>,
@@ -134,7 +140,8 @@ macro_rules! command {
         impl $cmd_name {
             pub fn new() -> $cmd_name {
                 lazy_static! {
-                    static ref ALIASES_STR:String = format!("{}:\n    {:?}", Yellow.paint("ALIASES"), $aliases);
+                    static ref ALIASES_STR:String = format!("{}:\n    {:?}",
+                                                            Yellow.paint("ALIASES"), $aliases);
                 }
                 let clap = start_clap($name, $about, &ALIASES_STR);
                 let extra = $extra_args(clap);
@@ -146,7 +153,8 @@ macro_rules! command {
         }
 
         impl Cmd for $cmd_name {
-            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>, writer: &mut ClickWriter) -> bool {
+            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>,
+                    writer: &mut ClickWriter) -> bool {
                 exec_match(&self.clap, env, args, writer, $cmd_expr)
             }
 
@@ -208,17 +216,16 @@ fn valid_date(s: String) -> Result<(), String> {
         .map_err(|e| e.description().to_owned())
 }
 
-
 /// Check if a pod has a waiting container
 fn has_waiting(pod: &Pod) -> bool {
     if let Some(ref stats) = pod.status.container_statuses {
-        stats.iter().any(
-            |cs| if let ContainerState::Waiting { .. } = cs.state {
+        stats.iter().any(|cs| {
+            if let ContainerState::Waiting { .. } = cs.state {
                 true
             } else {
                 false
-            },
-        )
+            }
+        })
     } else {
         false
     }
@@ -248,9 +255,9 @@ fn ready_str(pod: &Pod) -> String {
                     ready += 1;
                 }
             }
-            format!("{}/{}",ready,count)
+            format!("{}/{}", ready, count)
         }
-        None => "unknown".to_owned()
+        None => "unknown".to_owned(),
     }
 }
 
@@ -358,9 +365,9 @@ fn print_podlist(
         }
 
         if show_annot {
-            specs.push(CellSpec::new_owned(
-                keyval_string(&pod.metadata.annotations),
-            ));
+            specs.push(CellSpec::new_owned(keyval_string(
+                &pod.metadata.annotations,
+            )));
         }
 
         if show_namespace {
@@ -561,12 +568,14 @@ fn print_servicelist(
                 if let Some(ing_arry) = ing_val.as_array() {
                     let strs: Vec<&str> = ing_arry
                         .iter()
-                        .map(|v| if let Some(hv) = v.get("hostname") {
-                            hv.as_str().unwrap_or("")
-                        } else if let Some(ipv) = v.get("ip") {
-                            ipv.as_str().unwrap_or("")
-                        } else {
-                            ""
+                        .map(|v| {
+                            if let Some(hv) = v.get("hostname") {
+                                hv.as_str().unwrap_or("")
+                            } else if let Some(ipv) = v.get("ip") {
+                                ipv.as_str().unwrap_or("")
+                            } else {
+                                ""
+                            }
                         })
                         .collect();
                     let s = strs.join(", ");
@@ -582,10 +591,12 @@ fn print_servicelist(
         let port_strs: Vec<String> = if let Some(ref ports) = service.spec.ports {
             ports
                 .iter()
-                .map(|p| if let Some(np) = p.node_port {
-                    format!("{}:{}/{}", p.port, np, p.protocol)
-                } else {
-                    format!("{}/{}", p.port, p.protocol)
+                .map(|p| {
+                    if let Some(np) = p.node_port {
+                        format!("{}:{}/{}", p.port, np, p.protocol)
+                    } else {
+                        format!("{}/{}", p.port, p.protocol)
+                    }
                 })
                 .collect()
         } else {
@@ -641,209 +652,220 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     ::table::print_table(&mut table, &filtered, writer);
 }
 
-// Command defintions below.  See documentation for the command! macro for an explanation of arguments passed here
+// Command defintions below.  See documentation for the command! macro for an explanation of
+// arguments passed here
 
-command!(Quit,
-         "quit",
-         "Quit click",
-         identity,
-         vec!("q", "quit", "exit"),
-         noop_complete,
-         |_,env,_| {env.quit = true;}
+command!(
+    Quit,
+    "quit",
+    "Quit click",
+    identity,
+    vec!["q", "quit", "exit"],
+    noop_complete,
+    |_, env, _| {
+        env.quit = true;
+    }
 );
 
-command!(Context,
-         "context",
-         "Set the current context (will clear any selected pod)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("context")
-                      .help("The name of the context")
-                      .required(true)
-                      .index(1))
-         },
-         vec!("ctx", "context"),
-         |args: Vec<&str>, env: &Env| {
-             if args.len() <= 1 {
-                 let mut v = Vec::new();
-                 let argstart = args.get(0);
-                 for context in env.config.contexts.keys() {
-                     if argstart.is_none() || context.starts_with(argstart.unwrap()) {
-                         v.push(context.clone());
-                     }
-                 }
-                 (
-                     match argstart {
-                         Some(line) => line.len(),
-                         None => 0,
-                     },
-                     v
-                 )
-             } else {
-                 (0, Vec::new())
-             }
-         },
-         |matches, env, _| {
-             let context = matches.value_of("context");
-             if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
-                 if k.name == c { // no-op if we're already in the specified context
-                     return;
-                 }
-             }
-             env.set_context(context);
-             env.clear_current();
-         }
+command!(
+    Context,
+    "context",
+    "Set the current context (will clear any selected pod)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("context")
+            .help("The name of the context")
+            .required(true)
+            .index(1)
+    ),
+    vec!["ctx", "context"],
+    |args: Vec<&str>, env: &Env| if args.len() <= 1 {
+        let mut v = Vec::new();
+        let argstart = args.get(0);
+        for context in env.config.contexts.keys() {
+            if argstart.is_none() || context.starts_with(argstart.unwrap()) {
+                v.push(context.clone());
+            }
+        }
+        (
+            match argstart {
+                Some(line) => line.len(),
+                None => 0,
+            },
+            v,
+        )
+    } else {
+        (0, Vec::new())
+    },
+    |matches, env, _| {
+        let context = matches.value_of("context");
+        if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
+            if k.name == c {
+                // no-op if we're already in the specified context
+                return;
+            }
+        }
+        env.set_context(context);
+        env.clear_current();
+    }
 );
 
-command!(Contexts,
-         "contexts",
-         "List available contexts",
-         identity,
-         vec!("contexts","ctxs"),
-         noop_complete,
-         |_,env,writer| {
-             let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
-             contexts.sort();
-             for context in contexts.iter() {
-                 clickwrite!(writer, "{}\n", context);
-             }
-         }
+command!(
+    Contexts,
+    "contexts",
+    "List available contexts",
+    identity,
+    vec!["contexts", "ctxs"],
+    noop_complete,
+    |_, env, writer| {
+        let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
+        contexts.sort();
+        for context in contexts.iter() {
+            clickwrite!(writer, "{}\n", context);
+        }
+    }
 );
 
-command!(Clear,
-         "clear",
-         "Clear the currently selected kubernetes object",
-         identity,
-         vec!("clear"),
-         noop_complete,
-         |_, env, _| {
-             env.clear_current();
-         }
+command!(
+    Clear,
+    "clear",
+    "Clear the currently selected kubernetes object",
+    identity,
+    vec!["clear"],
+    noop_complete,
+    |_, env, _| {
+        env.clear_current();
+    }
 );
 
-command!(Namespace,
-         "namespace",
-         "Set the current namespace (no argument to clear namespace)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("namespace")
-                      .help("The namespace to use")
-                      .required(false)
-                      .index(1))
-         },
-         vec!("ns","namespace"),
-         |args: Vec<&str>, env: &Env| {
-             if args.len() <= 1 {
-                 // no args yet, suggest all namespaces
-                 let v_opt = env.run_on_kluster(|k| {
-                     k.namespaces_for_context()
-                 });
-                 if let Some(v) = v_opt {
-                     match args.get(0) {
-                         Some(line) => {
-                             (
-                                 line.len(),
-                                 v.iter().filter(|ns| ns.starts_with(line)).
-                                          map(|ns| ns.clone()).collect()
-                             )
-                         },
-                         None => (0, v)
-                     }
-                 } else {
-                     (0, Vec::new())
-                 }
-             } else {
-                 (0, Vec::new())
-             }
-         },
-         |matches, env, _| {
-             let ns = matches.value_of("namespace");
-             env.set_namespace(ns);
-         }
+command!(
+    Namespace,
+    "namespace",
+    "Set the current namespace (no argument to clear namespace)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("namespace")
+            .help("The namespace to use")
+            .required(false)
+            .index(1)
+    ),
+    vec!["ns", "namespace"],
+    |args: Vec<&str>, env: &Env| {
+        if args.len() <= 1 {
+            // no args yet, suggest all namespaces
+            let v_opt = env.run_on_kluster(|k| k.namespaces_for_context());
+            if let Some(v) = v_opt {
+                match args.get(0) {
+                    Some(line) => (
+                        line.len(),
+                        v.iter()
+                            .filter(|ns| ns.starts_with(line))
+                            .map(|ns| ns.clone())
+                            .collect(),
+                    ),
+                    None => (0, v),
+                }
+            } else {
+                (0, Vec::new())
+            }
+        } else {
+            (0, Vec::new())
+        }
+    },
+    |matches, env, _| {
+        let ns = matches.value_of("namespace");
+        env.set_namespace(ns);
+    }
 );
 
-command!(Pods,
-         "pods",
-         "Get pods (in current namespace if set)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("label")
-                      .short("l")
-                      .long("label")
-                      .help("Get pods with specified label selector (example: app=kinesis2prom)")
-                      .takes_value(true))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter pods by the specified regex")
-                      .takes_value(true))
-                 .arg(Arg::with_name("showlabels")
-                      .short("L")
-                      .long("labels")
-                      .help("Show pod labels as column in output")
-                      .takes_value(false))
-                 .arg(Arg::with_name("showannot")
-                      .short("A")
-                      .long("show-annotations")
-                      .help("Show pod annotations as column in output")
-                      .takes_value(false))
-         },
-         vec!("pods"),
-         noop_complete,
-         |matches, env, writer| {
+command!(
+    Pods,
+    "pods",
+    "Get pods (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("label")
+            .short("l")
+            .long("label")
+            .help("Get pods with specified label selector (example: app=kinesis2prom)")
+            .takes_value(true)
+    ).arg(
+            Arg::with_name("regex")
+                .short("r")
+                .long("regex")
+                .help("Filter pods by the specified regex")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("showlabels")
+                .short("L")
+                .long("labels")
+                .help("Show pod labels as column in output")
+                .takes_value(false)
+        )
+        .arg(
+            Arg::with_name("showannot")
+                .short("A")
+                .long("show-annotations")
+                .help("Show pod annotations as column in output")
+                .takes_value(false)
+        ),
+    vec!["pods"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
+        let mut urlstr = if let Some(ref ns) = env.namespace {
+            format!("/api/v1/namespaces/{}/pods", ns)
+        } else {
+            "/api/v1/pods".to_owned()
+        };
 
-             let mut urlstr = if let Some(ref ns) = env.namespace {
-                 format!("/api/v1/namespaces/{}/pods", ns)
-             } else {
-                 "/api/v1/pods".to_owned()
-             };
+        let mut pushed_label = false;
+        if let Some(label_selector) = matches.value_of("label") {
+            urlstr.push_str("?labelSelector=");
+            urlstr.push_str(label_selector);
+            pushed_label = true;
+        }
 
-             let mut pushed_label = false;
-             if let Some(label_selector) = matches.value_of("label") {
-                 urlstr.push_str("?labelSelector=");
-                 urlstr.push_str(label_selector);
-                 pushed_label = true;
-             }
+        if let ::KObj::Node(ref node) = env.current_object {
+            if pushed_label {
+                urlstr.push('&');
+            } else {
+                urlstr.push('?');
+            }
+            urlstr.push_str("fieldSelector=spec.nodeName=");
+            urlstr.push_str(node);
+        }
 
-             if let ::KObj::Node(ref node) = env.current_object {
-                 if pushed_label {
-                     urlstr.push('&');
-                 } else {
-                     urlstr.push('?');
-                 }
-                 urlstr.push_str("fieldSelector=spec.nodeName=");
-                 urlstr.push_str(node);
-             }
+        let pl: Option<PodList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
 
-             let pl: Option<PodList> = env.run_on_kluster(|k| {
-                 k.get(urlstr.as_str())
-             });
-
-             match pl {
-                 Some(l) => {
-                     let end_list = print_podlist(l,
-                                                  matches.is_present("showlabels"),
-                                                  matches.is_present("showannot"),
-                                                  env.namespace.is_none(),
-                                                  regex,
-                                                  writer);
-                     env.set_lastlist(LastList::PodList(end_list));
-                 },
-                 None => env.set_lastlist(LastList::None),
-             }
-         }
+        match pl {
+            Some(l) => {
+                let end_list = print_podlist(
+                    l,
+                    matches.is_present("showlabels"),
+                    matches.is_present("showannot"),
+                    env.namespace.is_none(),
+                    regex,
+                    writer,
+                );
+                env.set_lastlist(LastList::PodList(end_list));
+            }
+            None => env.set_lastlist(LastList::None),
+        }
+    }
 );
 
-command!(Logs,
-         "logs",
-         "Get logs from a container in the current pod",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("container")
+command!(
+    Logs,
+    "logs",
+    "Get logs from a container in the current pod",
+    |clap: App<'static, 'static>| {
+        clap.arg(Arg::with_name("container")
                       .help("Specify which container to get logs from")
                       .required(true)
                       .index(1))
@@ -875,323 +897,338 @@ command!(Logs,
                       .validator(valid_date)
                       .help("Only return logs newer than specified RFC3339 date. Eg: 1996-12-19T16:39:57-08:00")
                       .takes_value(true))
-         },
-         vec!("logs"),
-         |args: Vec<&str>, env: &Env| {
-             if args.len() <= 1 {
-                 let mut v = Vec::new();
-                 let argstart = args.get(0);
-                 match env.current_object {
-                     ::KObj::Pod{name:_, ref containers} => {
-                         for cont in containers.iter() {
-                             if argstart.is_none() || cont.starts_with(argstart.unwrap()) {
-                                 v.push(cont.clone());
-                             }
-                         }
-                     }
-                     _ => {}
-                 }
-                 (
-                     match argstart {
-                         Some(line) => line.len(),
-                         None => 0,
-                     },
-                     v
-                 )
-             } else {
-                 (0, Vec::new())
-             }
-         },
-         |matches, env, writer| {
-             let cont = matches.value_of("container").unwrap(); // required so unwrap safe
-             match (&env.current_object_namespace, env.current_pod()) {
-                 (&Some(ref ns), Some(ref pod)) => {
-                     let mut url = format!("/api/v1/namespaces/{}/pods/{}/log?container={}", ns, pod, cont);
-                     if matches.is_present("follow") {
-                         url.push_str("&follow=true");
-                     }
-                     if matches.is_present("previous") {
-                         url.push_str("&previous=true");
-                     }
-                     if matches.is_present("tail") {
-                         url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
-                     }
-                     if matches.is_present("since") {
-                         let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
-                         url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
-                     }
-                     if matches.is_present("sinceTime") {
-                         let specified = DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
-                         let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
-                         url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
-                     }
-                     let logs_reader = env.run_on_kluster(|k| {
-                         k.get_read(url.as_str(), Some(Duration::new(1, 0)))
-                     });
-                     if let Some(lreader) = logs_reader {
-                         let mut reader = BufReader::new(lreader);
-                         let mut line = String::new();
-                         env.ctrlcbool.store(false, Ordering::SeqCst);
-                         while !env.ctrlcbool.load(Ordering::SeqCst) {
-                             if let Ok(amt) = reader.read_line(&mut line) {
-                                 if amt > 0 {
-                                     clickwrite!(writer, "{}", line); // newlines already in line
-                                     line.clear();
-                                 } else {
-                                     break;
-                                 }
-                             } else {
-                                 break;
-                             }
-                         }
-                     }
-                 }
-                 _ => {
-                     clickwrite!(writer, "Need an active pod to get logs.\n");
-                 }
-             }
-         }
+    },
+    vec!["logs"],
+    |args: Vec<&str>, env: &Env| if args.len() <= 1 {
+        let mut v = Vec::new();
+        let argstart = args.get(0);
+        match env.current_object {
+            ::KObj::Pod {
+                name: _,
+                ref containers,
+            } => for cont in containers.iter() {
+                if argstart.is_none() || cont.starts_with(argstart.unwrap()) {
+                    v.push(cont.clone());
+                }
+            },
+            _ => {}
+        }
+        (
+            match argstart {
+                Some(line) => line.len(),
+                None => 0,
+            },
+            v,
+        )
+    } else {
+        (0, Vec::new())
+    },
+    |matches, env, writer| {
+        let cont = matches.value_of("container").unwrap(); // required so unwrap safe
+        match (&env.current_object_namespace, env.current_pod()) {
+            (&Some(ref ns), Some(ref pod)) => {
+                let mut url = format!(
+                    "/api/v1/namespaces/{}/pods/{}/log?container={}",
+                    ns, pod, cont
+                );
+                if matches.is_present("follow") {
+                    url.push_str("&follow=true");
+                }
+                if matches.is_present("previous") {
+                    url.push_str("&previous=true");
+                }
+                if matches.is_present("tail") {
+                    url.push_str(
+                        format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str(),
+                    );
+                }
+                if matches.is_present("since") {
+                    let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
+                    url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
+                }
+                if matches.is_present("sinceTime") {
+                    let specified = DateTime::parse_from_rfc3339(
+                        matches.value_of("sinceTime").unwrap(),
+                    ).unwrap();
+                    let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
+                    url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
+                }
+                let logs_reader =
+                    env.run_on_kluster(|k| k.get_read(url.as_str(), Some(Duration::new(1, 0))));
+                if let Some(lreader) = logs_reader {
+                    let mut reader = BufReader::new(lreader);
+                    let mut line = String::new();
+                    env.ctrlcbool.store(false, Ordering::SeqCst);
+                    while !env.ctrlcbool.load(Ordering::SeqCst) {
+                        if let Ok(amt) = reader.read_line(&mut line) {
+                            if amt > 0 {
+                                clickwrite!(writer, "{}", line); // newlines already in line
+                                line.clear();
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => {
+                clickwrite!(writer, "Need an active pod to get logs.\n");
+            }
+        }
+    }
 );
 
-command!(Describe,
-         "describe",
-         "Describe the active kubernetes object.",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("json")
-                      .short("j")
-                      .long("json")
-                      .help("output full json")
-                      .takes_value(false))
-         },
-         vec!("describe"),
-         noop_complete,
-         |matches, env, writer| {
-             match env.current_object {
-                 ::KObj::None => {clickwrite!(writer, "No active object to describe\n");},
-                 ::KObj::Pod{ref name, ..} => {
-                     if let Some(ref ns) = env.current_object_namespace {
-                         // describe the active pod
-                         let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
-                         let pod_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str())
-                         });
-                         if let Some(pval) = pod_value {
-                             if matches.is_present("json") {
-                                 writer.pretty_color_json(&pval).unwrap_or(());
-                             } else {
-                                 clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
-                             }
-                         }
-                     } else {
-                         write!(stderr(),"Don't know namespace for {}", name).unwrap_or(());
-                     }
-                 },
-                 ::KObj::Node(ref node) => {
-                     // describe the active node
-                     let url = format!("/api/v1/nodes/{}", node);
-                     let node_value = env.run_on_kluster(|k| {
-                         k.get_value(url.as_str())
-                     });
-                     if let Some(nval) = node_value {
-                         if matches.is_present("json") {
-                             writer.pretty_color_json(&nval).unwrap_or(());
-                         } else {
-                             clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
-                         }
-                     }
-                 },
-                 ::KObj::Deployment(ref deployment) => {
-                     if let Some(ref ns) = env.current_object_namespace {
-                         let url = format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, deployment);
-                         let dep_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str())
-                         });
-                         if let Some(dval) = dep_value {
-                             if matches.is_present("json") {
-                                 writer.pretty_color_json(&dval).unwrap_or(());
-                             } else {
-                                 clickwrite!(writer, "Deployment not supported without -j yet\n");
-                             }
-                         }
-                     }
-                 },
-                 ::KObj::ReplicaSet(ref replicaset) => {
-                     if let Some(ref ns) = env.current_object_namespace {
-                         let url = format!("/apis/extensions/v1beta1/namespaces/{}/replicasets/{}", ns, replicaset);
-                         let rs_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str())
-                         });
-                         if let Some(rsval) = rs_value {
-                             if matches.is_present("json") {
-                                 writer.pretty_color_json(&rsval).unwrap_or(());
-                             } else {
-                                 clickwrite!(writer, "ReplicaSet not supported without -j yet\n");
-                             }
-                         }
-                     }
-                 },
-                 ::KObj::Secret(ref secret) => {
-                     if let Some(ref ns) = env.current_object_namespace {
-                         let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
-                         let s_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str())
-                         });
-                         if let Some(sval) = s_value {
-                             if matches.is_present("json") {
-                                 writer.pretty_color_json(&sval).unwrap_or(());
-                             } else {
-                                 clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
-                             }
-                         }
-                     }
-                 },
-                 ::KObj::Service(ref service) => {
-                     if let Some(ref ns) = env.current_object_namespace {
-                         let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
-                         let service_value = env.run_on_kluster(|k| {
-                             k.get_value(url.as_str())
-                         });
-                         if let Some(sval) = service_value {
-                             if matches.is_present("json") {
-                                 writer.pretty_color_json(&sval).unwrap_or(());
-                             } else {
-                                 let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
-                                 let endpoint_val = env.run_on_kluster(|k| {
-                                     k.get_value(url.as_str())
-                                 });
-                                 clickwrite!(writer, "{}\n", describe::describe_format_service(sval, endpoint_val));
-                             }
-                         }
-                     }
-                 },
-             }
-         }
+command!(
+    Describe,
+    "describe",
+    "Describe the active kubernetes object.",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("json")
+            .short("j")
+            .long("json")
+            .help("output full json")
+            .takes_value(false)
+    ),
+    vec!["describe"],
+    noop_complete,
+    |matches, env, writer| {
+        match env.current_object {
+            ::KObj::None => {
+                clickwrite!(writer, "No active object to describe\n");
+            }
+            ::KObj::Pod { ref name, .. } => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    // describe the active pod
+                    let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
+                    let pod_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(pval) = pod_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&pval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
+                        }
+                    }
+                } else {
+                    write!(stderr(), "Don't know namespace for {}", name).unwrap_or(());
+                }
+            }
+            ::KObj::Node(ref node) => {
+                // describe the active node
+                let url = format!("/api/v1/nodes/{}", node);
+                let node_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                if let Some(nval) = node_value {
+                    if matches.is_present("json") {
+                        writer.pretty_color_json(&nval).unwrap_or(());
+                    } else {
+                        clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
+                    }
+                }
+            }
+            ::KObj::Deployment(ref deployment) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!(
+                        "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
+                        ns, deployment
+                    );
+                    let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(dval) = dep_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&dval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "Deployment not supported without -j yet\n");
+                        }
+                    }
+                }
+            }
+            ::KObj::ReplicaSet(ref replicaset) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!(
+                        "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
+                        ns, replicaset
+                    );
+                    let rs_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(rsval) = rs_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&rsval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "ReplicaSet not supported without -j yet\n");
+                        }
+                    }
+                }
+            }
+            ::KObj::Secret(ref secret) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
+                    let s_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(sval) = s_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&sval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
+                        }
+                    }
+                }
+            }
+            ::KObj::Service(ref service) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
+                    let service_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(sval) = service_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&sval).unwrap_or(());
+                        } else {
+                            let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
+                            let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                            clickwrite!(
+                                writer,
+                                "{}\n",
+                                describe::describe_format_service(sval, endpoint_val)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 );
 
-command!(Exec,
-         "exec",
-         "exec specified command on active pod",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("command")
-                      .help("The command to execute")
-                      .required(true)
-                      .index(1))
-                 .arg(Arg::with_name("container")
-                      .short("c")
-                      .long("container")
-                      .help("Exec in the specified container")
-                      .takes_value(true))
-         },
-         vec!("exec"),
-         noop_complete,
-         |matches, env, _writer| {
-             let cmd = matches.value_of("command").unwrap(); // safe as required
-             if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (env.kluster.as_ref(), env.current_object_namespace.as_ref(), env.current_pod().as_ref()) {
-                 let contargs =
-                     if let Some(container) = matches.value_of("container") {
-                         vec!("-c", container)
-                     } else {
-                         vec!()
-                     };
-                 let status = Command::new("kubectl")
-                     .arg("--namespace")
-                     .arg(ns)
-                     .arg("--context")
-                     .arg(&kluster.name)
-                     .arg("exec")
-                     .arg("-it")
-                     .arg(pod)
-                     .args(contargs.iter())
-                     .arg(cmd)
-                     .status()
-                     .expect("failed to execute kubectl");
-                 if !status.success() {
-                     write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
-                 }
-             } else {
-                 write!(stderr(), "Need an active pod in order to exec.").unwrap_or(());
-             }
-         }
+command!(
+    Exec,
+    "exec",
+    "exec specified command on active pod",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("command")
+            .help("The command to execute")
+            .required(true)
+            .index(1)
+    ).arg(
+        Arg::with_name("container")
+            .short("c")
+            .long("container")
+            .help("Exec in the specified container")
+            .takes_value(true)
+    ),
+    vec!["exec"],
+    noop_complete,
+    |matches, env, _writer| {
+        let cmd = matches.value_of("command").unwrap(); // safe as required
+        if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (
+            env.kluster.as_ref(),
+            env.current_object_namespace.as_ref(),
+            env.current_pod().as_ref(),
+        ) {
+            let contargs = if let Some(container) = matches.value_of("container") {
+                vec!["-c", container]
+            } else {
+                vec![]
+            };
+            let status = Command::new("kubectl")
+                .arg("--namespace")
+                .arg(ns)
+                .arg("--context")
+                .arg(&kluster.name)
+                .arg("exec")
+                .arg("-it")
+                .arg(pod)
+                .args(contargs.iter())
+                .arg(cmd)
+                .status()
+                .expect("failed to execute kubectl");
+            if !status.success() {
+                write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
+            }
+        } else {
+            write!(stderr(), "Need an active pod in order to exec.").unwrap_or(());
+        }
+    }
 );
 
-command!(Delete,
-         "delete",
-         "Delete the active object (will ask for confirmation)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("grace")
-                      .short("g")
-                      .long("gracePeriod")
-                      .help("The duration in seconds before the object should be deleted.")
-                      .validator(valid_u32)
-                      .takes_value(true))
-                 .arg(Arg::with_name("orphan")
-                      .short("o")
-                      .long("orphan")
-                      .help("If specified, dependent objects are orphaned.")
-                      .takes_value(false))
-         },
-         vec!("delete"),
-         noop_complete,
-         |matches, env, writer| {
-             if let Some(ref ns) = env.current_object_namespace {
-                 if let Some(mut url) = match env.current_object {
-                     ::KObj::Pod{ref name, ..} => {
-                         clickwrite!(writer, "Delete pod {} [y/N]? ", name);
-                         Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
-                     },
-                     ::KObj::Deployment(ref dep) => {
-                         clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
-                         Some(format!("/apis/extensions/v1beta1/namespaces/{}/deployments/{}", ns, dep))
-                     },
-                     ::KObj::ReplicaSet(ref repset) => {
-                         clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
-                         Some(format!("/apis/extensions/v1beta1/namespaces/{}/replicasets/{}", ns, repset))
-                     },
-                     ::KObj::None => {
-                         write!(stderr(), "No active object").unwrap_or(());
-                         None
-                     },
-                     _ => {
-                         write!(stderr(), "Can only delete pods or deployments").unwrap_or(());
-                         None
-                     },
-                 } {
-                     io::stdout().flush().ok().expect("Could not flush stdout");
-                     let mut conf = String::new();
-                     if let Ok(_) = io::stdin().read_line(&mut conf) {
-                         if conf.trim() == "y" || conf.trim() == "yes" {
-                             if let Some(grace) = matches.value_of("grace") {
-                                 // already validated that it's a legit number
-                                 url.push_str("?gracePeriodSeconds=");
-                                 url.push_str(grace);
-                             }
-                             if matches.is_present("orphan") {
-                                 if matches.is_present("grace") {
-                                     url.push('&');
-                                 } else {
-                                     url.push('?');
-                                 }
-                                 url.push_str("orphanDependents=true");
-                             }
-                             let result = env.run_on_kluster(|k| {
-                                 k.delete(url.as_str())
-                             });
-                             if let Some(_) = result {
-                                 clickwrite!(writer, "Deleted\n");
-                             } else {
-                                 write!(stderr(), "Failed to delete").unwrap_or(());
-                             }
-                         } else {
-                             clickwrite!(writer, "Not deleting\n");
-                         }
-                     } else {
-                         write!(stderr(), "Could not read response, not deleting.").unwrap_or(());
-                     }
-                 }
-             } else {
-                 write!(stderr(), "No active namespace").unwrap_or(()); // TODO: Can you delete without a namespace?
-             }
-         }
+command!(
+    Delete,
+    "delete",
+    "Delete the active object (will ask for confirmation)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("grace")
+            .short("g")
+            .long("gracePeriod")
+            .help("The duration in seconds before the object should be deleted.")
+            .validator(valid_u32)
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("orphan")
+            .short("o")
+            .long("orphan")
+            .help("If specified, dependent objects are orphaned.")
+            .takes_value(false)
+    ),
+    vec!["delete"],
+    noop_complete,
+    |matches, env, writer| {
+        if let Some(ref ns) = env.current_object_namespace {
+            if let Some(mut url) = match env.current_object {
+                ::KObj::Pod { ref name, .. } => {
+                    clickwrite!(writer, "Delete pod {} [y/N]? ", name);
+                    Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
+                }
+                ::KObj::Deployment(ref dep) => {
+                    clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
+                    Some(format!(
+                        "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
+                        ns, dep
+                    ))
+                }
+                ::KObj::ReplicaSet(ref repset) => {
+                    clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
+                    Some(format!(
+                        "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
+                        ns, repset
+                    ))
+                }
+                ::KObj::None => {
+                    write!(stderr(), "No active object").unwrap_or(());
+                    None
+                }
+                _ => {
+                    write!(stderr(), "Can only delete pods or deployments").unwrap_or(());
+                    None
+                }
+            } {
+                io::stdout().flush().ok().expect("Could not flush stdout");
+                let mut conf = String::new();
+                if let Ok(_) = io::stdin().read_line(&mut conf) {
+                    if conf.trim() == "y" || conf.trim() == "yes" {
+                        if let Some(grace) = matches.value_of("grace") {
+                            // already validated that it's a legit number
+                            url.push_str("?gracePeriodSeconds=");
+                            url.push_str(grace);
+                        }
+                        if matches.is_present("orphan") {
+                            if matches.is_present("grace") {
+                                url.push('&');
+                            } else {
+                                url.push('?');
+                            }
+                            url.push_str("orphanDependents=true");
+                        }
+                        let result = env.run_on_kluster(|k| k.delete(url.as_str()));
+                        if let Some(_) = result {
+                            clickwrite!(writer, "Deleted\n");
+                        } else {
+                            write!(stderr(), "Failed to delete").unwrap_or(());
+                        }
+                    } else {
+                        clickwrite!(writer, "Not deleting\n");
+                    }
+                } else {
+                    write!(stderr(), "Could not read response, not deleting.").unwrap_or(());
+                }
+            }
+        } else {
+            write!(stderr(), "No active namespace").unwrap_or(()); // TODO: Can you delete without a namespace?
+        }
+    }
 );
 
 fn containers_string(pod: &Pod) -> String {
@@ -1234,29 +1271,29 @@ fn containers_string(pod: &Pod) -> String {
     buf
 }
 
-command!(Containers,
-         "containers",
-         "List containers on the active pod",
-         identity,
-         vec!("conts","containers"),
-         noop_complete,
-         |_matches, env, writer| {
-             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
-                 let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
-                 let pod_opt: Option<Pod> = env.run_on_kluster(|k| {
-                     k.get(url.as_str())
-                 });
-                 if let Some(pod) = pod_opt {
-                     clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
-                 }
-             } else {
-                 write!(stderr(), "No active pod").unwrap_or(());
-             }} else {
-                 write!(stderr(), "No active namespace").unwrap_or(());
-             }
-         }
+command!(
+    Containers,
+    "containers",
+    "List containers on the active pod",
+    identity,
+    vec!["conts", "containers"],
+    noop_complete,
+    |_matches, env, writer| {
+        if let Some(ref ns) = env.current_object_namespace {
+            if let Some(ref pod) = env.current_pod() {
+                let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+                let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
+                if let Some(pod) = pod_opt {
+                    clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
+                }
+            } else {
+                write!(stderr(), "No active pod").unwrap_or(());
+            }
+        } else {
+            write!(stderr(), "No active namespace").unwrap_or(());
+        }
+    }
 );
-
 
 fn format_event(event: &Event) -> String {
     format!(
@@ -1268,186 +1305,181 @@ fn format_event(event: &Event) -> String {
     )
 }
 
-command!(Events,
-         "events",
-         "Get events for the active pod",
-         identity,
-         vec!("events"),
-         noop_complete,
-         |_matches, env, writer| {
-             if let Some(ref ns) = env.current_object_namespace { if let Some(ref pod) = env.current_pod() {
-                 let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
+command!(
+    Events,
+    "events",
+    "Get events for the active pod",
+    identity,
+    vec!["events"],
+    noop_complete,
+    |_matches, env, writer| if let Some(ref ns) = env.current_object_namespace {
+        if let Some(ref pod) = env.current_pod() {
+            let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
                                    ns,pod,ns);
-                 let oel: Option<EventList> = env.run_on_kluster(|k| {
-                     k.get(url.as_str())
-                 });
-                 if let Some(el) = oel {
-                     if el.items.len() > 0 {
-                         for e in el.items.iter() {
-                             clickwrite!(writer, "{}\n",format_event(e));
-                         }
-                     } else {
-                         clickwrite!(writer, "No events\n");
-                     }
-                 } else {
-                     write!(stderr(), "Failed to fetch events").unwrap_or(());
-                 }
-             } else {
-                 write!(stderr(), "No active pod").unwrap_or(());
-             }} else {
-                 write!(stderr(), "No active namespace").unwrap_or(());
-             }
-         }
+            let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
+            if let Some(el) = oel {
+                if el.items.len() > 0 {
+                    for e in el.items.iter() {
+                        clickwrite!(writer, "{}\n", format_event(e));
+                    }
+                } else {
+                    clickwrite!(writer, "No events\n");
+                }
+            } else {
+                write!(stderr(), "Failed to fetch events").unwrap_or(());
+            }
+        } else {
+            write!(stderr(), "No active pod").unwrap_or(());
+        }
+    } else {
+        write!(stderr(), "No active namespace").unwrap_or(());
+    }
 );
 
-command!(Nodes,
-         "nodes",
-         "Get nodes",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("labels")
-                      .short("L")
-                      .long("labels")
-                      .help("include labels in output")
-                      .takes_value(false))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter pods by the specified regex")
-                      .takes_value(true))
+command!(
+    Nodes,
+    "nodes",
+    "Get nodes",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("labels")
+            .short("L")
+            .long("labels")
+            .help("include labels in output")
+            .takes_value(false)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter pods by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["nodes"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-         },
-         vec!("nodes"),
-         noop_complete,
-         |matches, env, writer| {
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
-
-             let url = "/api/v1/nodes";
-             let nl: Option<NodeList> = env.run_on_kluster(|k| {
-                 k.get(url)
-             });
-             match nl {
-                 Some(n) => {
-                     let final_list = print_nodelist(n, matches.is_present("labels"), regex, writer);
-                     env.set_lastlist(LastList::NodeList(final_list));
-                 },
-                 None => env.set_lastlist(LastList::None),
-             }
-         }
+        let url = "/api/v1/nodes";
+        let nl: Option<NodeList> = env.run_on_kluster(|k| k.get(url));
+        match nl {
+            Some(n) => {
+                let final_list = print_nodelist(n, matches.is_present("labels"), regex, writer);
+                env.set_lastlist(LastList::NodeList(final_list));
+            }
+            None => env.set_lastlist(LastList::None),
+        }
+    }
 );
 
-command!(Services,
-         "services",
-         "Get services (in current namespace if set)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("labels")
-                      .short("L")
-                      .long("labels")
-                      .help("include labels in output")
-                      .takes_value(false))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter services by the specified regex")
-                      .takes_value(true))
+command!(
+    Services,
+    "services",
+    "Get services (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("labels")
+            .short("L")
+            .long("labels")
+            .help("include labels in output")
+            .takes_value(false)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter services by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["services"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-         },
-         vec!("services"),
-         noop_complete,
-         |matches, env, writer| {
-
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
-
-             let url =
-                 if let Some(ref ns) = env.namespace {
-                     format!("/api/v1/namespaces/{}/services", ns)
-                 } else {
-                     "/api/v1/services".to_owned()
-                 };
-             let sl: Option<ServiceList> = env.run_on_kluster(|k| {
-                 k.get(url.as_str())
-             });
-             if let Some(s) = sl {
-                 let filtered = print_servicelist(s, regex, matches.is_present("labels"), writer);
-                 env.set_lastlist(LastList::ServiceList(filtered));
-             } else {
-                 clickwrite!(writer, "no services\n");
-                 env.set_lastlist(LastList::None);
-             }
-         }
+        let url = if let Some(ref ns) = env.namespace {
+            format!("/api/v1/namespaces/{}/services", ns)
+        } else {
+            "/api/v1/services".to_owned()
+        };
+        let sl: Option<ServiceList> = env.run_on_kluster(|k| k.get(url.as_str()));
+        if let Some(s) = sl {
+            let filtered = print_servicelist(s, regex, matches.is_present("labels"), writer);
+            env.set_lastlist(LastList::ServiceList(filtered));
+        } else {
+            clickwrite!(writer, "no services\n");
+            env.set_lastlist(LastList::None);
+        }
+    }
 );
 
-
-command!(EnvCmd,
-         "env",
-         "Print information about the current environment",
-         identity,
-         vec!("env"),
-         noop_complete,
-         |_matches, env, writer| {
-             clickwrite!(writer, "{}\n", env);
-         }
+command!(
+    EnvCmd,
+    "env",
+    "Print information about the current environment",
+    identity,
+    vec!["env"],
+    noop_complete,
+    |_matches, env, writer| {
+        clickwrite!(writer, "{}\n", env);
+    }
 );
 
-command!(Deployments,
-         "deployments",
-         "Get deployments (in current namespace if set)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("label")
-                      .short("l")
-                      .long("label")
-                      .help("Get deployments with specified label selector")
-                      .takes_value(true))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter deployments by the specified regex")
-                      .takes_value(true))
-         },
-         vec!("deps","deployments"),
-         noop_complete,
-         |matches, env, writer| {
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
+command!(
+    Deployments,
+    "deployments",
+    "Get deployments (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("label")
+            .short("l")
+            .long("label")
+            .help("Get deployments with specified label selector")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter deployments by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["deps", "deployments"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-             let mut urlstr = if let Some(ref ns) = env.namespace {
-                 format!("/apis/extensions/v1beta1/namespaces/{}/deployments", ns)
-             } else {
-                 "/apis/extensions/v1beta1/deployments".to_owned()
-             };
+        let mut urlstr = if let Some(ref ns) = env.namespace {
+            format!("/apis/extensions/v1beta1/namespaces/{}/deployments", ns)
+        } else {
+            "/apis/extensions/v1beta1/deployments".to_owned()
+        };
 
-             if let Some(label_selector) = matches.value_of("label") {
-                 urlstr.push_str("?labelSelector=");
-                 urlstr.push_str(label_selector);
-             }
+        if let Some(label_selector) = matches.value_of("label") {
+            urlstr.push_str("?labelSelector=");
+            urlstr.push_str(label_selector);
+        }
 
-             let dl: Option<DeploymentList> = env.run_on_kluster(|k| {
-                 k.get(urlstr.as_str())
-             });
-             match dl {
-                 Some(d) => {
-                     let final_list = print_deployments(d, matches.is_present("labels"), regex, writer);
-                     env.set_lastlist(LastList::DeploymentList(final_list));
-                 },
-                 None => env.set_lastlist(LastList::None),
-             }
-         }
+        let dl: Option<DeploymentList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+        match dl {
+            Some(d) => {
+                let final_list = print_deployments(d, matches.is_present("labels"), regex, writer);
+                env.set_lastlist(LastList::DeploymentList(final_list));
+            }
+            None => env.set_lastlist(LastList::None),
+        }
+    }
 );
 
 fn print_replicasets(
@@ -1463,15 +1495,18 @@ fn print_replicasets(
         specs.push(CellSpec::new_owned(
             val_str("/metadata/name", &rs, "<none>").into_owned(),
         ));
-        specs.push(CellSpec::new_owned(
-            format!("{}", val_u64("/spec/replicas", &rs, 0)),
-        ));
-        specs.push(CellSpec::new_owned(
-            format!("{}", val_u64("/status/replicas", &rs, 0)),
-        ));
-        specs.push(CellSpec::new_owned(
-            format!("{}", val_u64("/status/readyReplicas", &rs, 0)),
-        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/spec/replicas", &rs, 0)
+        )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/status/replicas", &rs, 0)
+        )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/status/readyReplicas", &rs, 0)
+        )));
         (rs, specs)
     });
 
@@ -1486,59 +1521,55 @@ fn print_replicasets(
     ReplicaSetList { items: final_rss }
 }
 
-command!(ReplicaSets,
-         "replicasets",
-         "Get replicasets (in current namespace if set)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("show_label")
-                      .short("L")
-                      .long("labels")
-                      .help("Show replicaset labels")
-                      .takes_value(true))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter replicasets by the specified regex")
-                      .takes_value(true))
-         },
-         vec!("rs","replicasets"),
-         noop_complete,
-         |matches, env, writer| {
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
+command!(
+    ReplicaSets,
+    "replicasets",
+    "Get replicasets (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("show_label")
+            .short("L")
+            .long("labels")
+            .help("Show replicaset labels")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter replicasets by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["rs", "replicasets"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-             let urlstr = if let Some(ref ns) = env.namespace {
-                 format!("/apis/extensions/v1beta1/namespaces/{}/replicasets", ns)
-             } else {
-                 "/apis/extensions/v1beta1/replicasets".to_owned()
-             };
+        let urlstr = if let Some(ref ns) = env.namespace {
+            format!("/apis/extensions/v1beta1/namespaces/{}/replicasets", ns)
+        } else {
+            "/apis/extensions/v1beta1/replicasets".to_owned()
+        };
 
-             let rsl: Option<ReplicaSetList> = env.run_on_kluster(|k| {
-                 k.get(urlstr.as_str())
-             });
+        let rsl: Option<ReplicaSetList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
 
-             match rsl {
-                 Some(l) => {
-                     let final_list = print_replicasets(l, regex, writer);
-                     env.set_lastlist(LastList::ReplicaSetList(final_list));
-                 },
-                 None => {
-                     env.set_lastlist(LastList::None);
-                 }
-             }
-         }
+        match rsl {
+            Some(l) => {
+                let final_list = print_replicasets(l, regex, writer);
+                env.set_lastlist(LastList::ReplicaSetList(final_list));
+            }
+            None => {
+                env.set_lastlist(LastList::None);
+            }
+        }
+    }
 );
 
-fn print_secrets(
-    list: SecretList,
-    regex: Option<Regex>,
-    writer: &mut ClickWriter,
-) -> SecretList {
+fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWriter) -> SecretList {
     let mut table = Table::new();
     table.set_titles(row!["####", "Name", "Type", "Data", "Age"]);
     let rss_specs = list.items.into_iter().map(|rs| {
@@ -1547,15 +1578,14 @@ fn print_secrets(
         let metadata: Metadata = get_val_as("/metadata", &rs).unwrap();
 
         specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(metadata.name));
         specs.push(CellSpec::new_owned(
-            metadata.name
+            val_str("/type", &rs, "<none>").into_owned(),
         ));
-        specs.push(CellSpec::new_owned(
-            val_str("/type", &rs, "<none>").into_owned()
-        ));
-        specs.push(CellSpec::new_owned(
-            format!("{}", val_item_count("/data", &rs))
-        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_item_count("/data", &rs)
+        )));
         specs.push(CellSpec::new_owned(format!(
             "{}",
             time_since(metadata.creation_timestamp.unwrap())
@@ -1574,123 +1604,126 @@ fn print_secrets(
     SecretList { items: final_rss }
 }
 
+command!(
+    Secrets,
+    "secrets",
+    "Get secrets (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("show_label")
+            .short("L")
+            .long("labels")
+            .help("Show secret labels")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter secrets by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["secrets"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-command!(Secrets,
-         "secrets",
-         "Get secrets (in current namespace if set)",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("show_label")
-                      .short("L")
-                      .long("labels")
-                      .help("Show secret labels")
-                      .takes_value(true))
-                 .arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter secrets by the specified regex")
-                      .takes_value(true))
-         },
-         vec!("secrets"),
-         noop_complete,
-         |matches, env, writer| {
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
+        let urlstr = if let Some(ref ns) = env.namespace {
+            format!("/api/v1/namespaces/{}/secrets", ns)
+        } else {
+            "/api/v1/secrets".to_owned()
+        };
 
-             let urlstr = if let Some(ref ns) = env.namespace {
-                 format!("/api/v1/namespaces/{}/secrets", ns)
-             } else {
-                 "/api/v1/secrets".to_owned()
-             };
+        let sl: Option<SecretList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
 
-             let sl: Option<SecretList> = env.run_on_kluster(|k| {
-                 k.get(urlstr.as_str())
-             });
-
-             match sl {
-                 Some(l) => {
-                     let final_list = print_secrets(l, regex, writer);
-                     env.set_lastlist(LastList::SecretList(final_list));
-                 },
-                 None => {
-                     env.set_lastlist(LastList::None);
-                 }
-             }
-         }
+        match sl {
+            Some(l) => {
+                let final_list = print_secrets(l, regex, writer);
+                env.set_lastlist(LastList::SecretList(final_list));
+            }
+            None => {
+                env.set_lastlist(LastList::None);
+            }
+        }
+    }
 );
 
+command!(
+    Namespaces,
+    "namespaces",
+    "Get namespaces in current context",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter namespaces by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["namespaces"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
 
-command!(Namespaces,
-         "namespaces",
-         "Get namespaces in current context",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("regex")
-                      .short("r")
-                      .long("regex")
-                      .help("Filter namespaces by the specified regex")
-                      .takes_value(true))
-         },
-         vec!("namespaces"),
-         noop_complete,
-         |matches, env, writer| {
-             let regex = match ::table::get_regex(&matches) {
-                 Ok(r) => r,
-                 Err(s) => {
-                     write!(stderr(), "{}\n", s).unwrap_or(());
-                     return;
-                 }
-             };
+        let nl: Option<NamespaceList> = env.run_on_kluster(|k| k.get("/api/v1/namespaces"));
 
-             let nl: Option<NamespaceList> = env.run_on_kluster(|k| {
-                 k.get("/api/v1/namespaces")
-             });
-
-             if let Some(l) = nl {
-                 print_namespaces(&l, regex, writer);
-             }
-         }
+        if let Some(l) = nl {
+            print_namespaces(&l, regex, writer);
+        }
+    }
 );
 
-command!(UtcCmd,
-         "utc",
-         "Print current time in UTC",
-         identity,
-         vec!("utc"),
-         noop_complete,
-         |_, _, writer| {
-             clickwrite!(writer, "{}\n", UTC::now());
-         }
+command!(
+    UtcCmd,
+    "utc",
+    "Print current time in UTC",
+    identity,
+    vec!["utc"],
+    noop_complete,
+    |_, _, writer| {
+        clickwrite!(writer, "{}\n", UTC::now());
+    }
 );
 
-command!(PortForward,
-         "port-forward",
-         "Forward one (or more) local ports to the currently active pod",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("ports")
-                      .help("the ports to forward")
-                      .multiple(true)
-                      .validator(|s: String| {
-                          let parts:Vec<&str> = s.split(':').collect();
-                          if parts.len() > 2 {
-                              Err(format!("Invalid port specification '{}', can only contain one ':'", s))
-                          } else {
-                              for part in parts {
-                                  if !(part == "") {
-                                      if let Err(e) = part.parse::<u32>() {
-                                          return Err(e.description().to_owned());
-                                      }
-                                  }
-                              }
-                              Ok(())
-                          }
-                      })
-                      .required(true)
-                      .index(1))
-                 .after_help("
+command!(
+    PortForward,
+    "port-forward",
+    "Forward one (or more) local ports to the currently active pod",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("ports")
+            .help("the ports to forward")
+            .multiple(true)
+            .validator(|s: String| {
+                let parts: Vec<&str> = s.split(':').collect();
+                if parts.len() > 2 {
+                    Err(format!(
+                        "Invalid port specification '{}', can only contain one ':'",
+                        s
+                    ))
+                } else {
+                    for part in parts {
+                        if !(part == "") {
+                            if let Err(e) = part.parse::<u32>() {
+                                return Err(e.description().to_owned());
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+            })
+            .required(true)
+            .index(1)
+    ).after_help(
+        "
 Examples:
   # Forward local ports 5000 and 6000 to pod ports 5000 and 6000
   port-forward 5000 6000
@@ -1702,94 +1735,95 @@ Examples:
   port-forward 0:3456
 
   # Forwards a random port locally to port 3456 on the pod
-  port-forward :3456")
-         },
-         vec!("pf","port-forward"),
-         noop_complete,
-         |matches, env, writer| {
-             let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
+  port-forward :3456"
+    ),
+    vec!["pf", "port-forward"],
+    noop_complete,
+    |matches, env, writer| {
+        let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
 
-             let pod =
-             {
-                 let epod = env.current_pod();
-                 match epod {
-                     Some(p) => {
-                         p.clone()
-                     }
-                     None => {
-                         write!(stderr(), "No active pod").unwrap_or(());
-                         return;
-                     }
-                 }
-             };
+        let pod = {
+            let epod = env.current_pod();
+            match epod {
+                Some(p) => p.clone(),
+                None => {
+                    write!(stderr(), "No active pod").unwrap_or(());
+                    return;
+                }
+            }
+        };
 
-             let ns =
-                 if let Some(ref ns) = env.current_object_namespace {
-                     ns.clone()
-                 } else {
-                     write!(stderr(), "No current namespace").unwrap_or(());
-                     return;
-                 };
+        let ns = if let Some(ref ns) = env.current_object_namespace {
+            ns.clone()
+        } else {
+            write!(stderr(), "No current namespace").unwrap_or(());
+            return;
+        };
 
-             let context =
-                 if let Some(ref kluster) = env.kluster {
-                     kluster.name.clone()
-                 } else {
-                     write!(stderr(), "No active context").unwrap_or(());
-                     return;
-                 };
+        let context = if let Some(ref kluster) = env.kluster {
+            kluster.name.clone()
+        } else {
+            write!(stderr(), "No active context").unwrap_or(());
+            return;
+        };
 
-             match Command::new("kubectl")
-                 .arg("--namespace")
-                 .arg(ns)
-                 .arg("--context")
-                 .arg(context)
-                 .arg("port-forward")
-                 .arg(&pod)
-                 .args(ports.iter())
-                 .stdout(Stdio::piped())
-                 .spawn() {
-                     Ok(mut child) => {
-                         let mut stdout = child.stdout.take().unwrap();
-                         let output = Arc::new(Mutex::new(String::new()));
-                         let output_clone = output.clone();
+        match Command::new("kubectl")
+            .arg("--namespace")
+            .arg(ns)
+            .arg("--context")
+            .arg(context)
+            .arg("port-forward")
+            .arg(&pod)
+            .args(ports.iter())
+            .stdout(Stdio::piped())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let mut stdout = child.stdout.take().unwrap();
+                let output = Arc::new(Mutex::new(String::new()));
+                let output_clone = output.clone();
 
-                         thread::spawn(move || {
-                             let mut buffer = [0;128];
-                             loop {
-                                 match stdout.read(&mut buffer[..]) {
-                                     Ok(read) => {
-                                         if read > 0 {
-                                             let readstr = String::from_utf8_lossy(&buffer[0..read]);
-                                             let mut res = output_clone.lock().unwrap();
-                                             res.push_str(&*readstr);
-                                         } else {
-                                             break;
-                                         }
-                                     },
-                                     Err(e) => {
-                                         write!(stderr(), "Error reading child output: {}", e.description()).unwrap_or(());
-                                         break;
-                                     }
-                                 }
-                             }
-                         });
+                thread::spawn(move || {
+                    let mut buffer = [0; 128];
+                    loop {
+                        match stdout.read(&mut buffer[..]) {
+                            Ok(read) => {
+                                if read > 0 {
+                                    let readstr = String::from_utf8_lossy(&buffer[0..read]);
+                                    let mut res = output_clone.lock().unwrap();
+                                    res.push_str(&*readstr);
+                                } else {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                write!(stderr(), "Error reading child output: {}", e.description())
+                                    .unwrap_or(());
+                                break;
+                            }
+                        }
+                    }
+                });
 
-                         let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
-                         clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
+                let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
+                clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
 
-                         env.add_port_forward(::PortForward {
-                             child: child,
-                             pod: pod,
-                             ports: pvec,
-                             output: output,
-                         });
-                     }
-                     Err(e) => {
-                         write!(stderr(), "Couldn't execute kubectl, not forwarding.  Error is: {}", e.description()).unwrap_or(());
-                     }
-                 }
-         }
+                env.add_port_forward(::PortForward {
+                    child: child,
+                    pod: pod,
+                    ports: pvec,
+                    output: output,
+                });
+            }
+            Err(e) => {
+                write!(
+                    stderr(),
+                    "Couldn't execute kubectl, not forwarding.  Error is: {}",
+                    e.description()
+                ).unwrap_or(());
+            }
+        }
+    }
 );
 
 /// Print out port forwards found in iterator
@@ -1820,79 +1854,85 @@ fn print_pfs(pfs: std::slice::Iter<::PortForward>) {
     table.printstd();
 }
 
-
-command!(PortForwards,
-         "port-forwards",
-         "List or control active port forwards.  Default is to list.",
-         |clap: App<'static, 'static>| {
-             clap.arg(Arg::with_name("action")
-                      .help("Action to take")
-                      .required(false)
-                      .possible_values(&["list", "output", "stop"])
-                      .index(1))
-                 .arg(Arg::with_name("index")
-                      .help("Index (from 'port-forwards list') of port forward to take action on")
-                      .validator(|s: String| {
-                          s.parse::<usize>().map(|_| ()).map_err(|e| e.description().to_owned())
-                      })
-                      .required(false)
-                      .index(2))
-                 .after_help("Example:
+command!(
+    PortForwards,
+    "port-forwards",
+    "List or control active port forwards.  Default is to list.",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("action")
+            .help("Action to take")
+            .required(false)
+            .possible_values(&["list", "output", "stop"])
+            .index(1)
+    ).arg(
+            Arg::with_name("index")
+                .help("Index (from 'port-forwards list') of port forward to take action on")
+                .validator(|s: String| s.parse::<usize>()
+                    .map(|_| ())
+                    .map_err(|e| e.description().to_owned()))
+                .required(false)
+                .index(2)
+        )
+        .after_help(
+            "Example:
   # List all active port forwards
   pfs
 
   # Stop item number 3 in list from above command
-  pfs stop 3")
-         },
-         vec!("pfs","port-forwards"),
-         noop_complete,
-         |matches, env, writer| {
-             let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
-             let output = matches.is_present("action") && matches.value_of("action").unwrap() == "output";
-             if let Some(index) = matches.value_of("index") {
-                 let i = index.parse::<usize>().unwrap();
-                 match env.get_port_forward(i) {
-                     Some(pf) => {
-                         if stop {
-                             clickwrite!(writer, "Stop port-forward: ");
-                         }
-                         clickwrite!(writer, "Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
+  pfs stop 3"
+        ),
+    vec!["pfs", "port-forwards"],
+    noop_complete,
+    |matches, env, writer| {
+        let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
+        let output =
+            matches.is_present("action") && matches.value_of("action").unwrap() == "output";
+        if let Some(index) = matches.value_of("index") {
+            let i = index.parse::<usize>().unwrap();
+            match env.get_port_forward(i) {
+                Some(pf) => {
+                    if stop {
+                        clickwrite!(writer, "Stop port-forward: ");
+                    }
+                    clickwrite!(writer, "Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
 
-                         if output {
-                             clickwrite!(writer, " Output:\n{}", *pf.output.lock().unwrap());
-                         }
-                     }
-                     None => {
-                         write!(stderr(), "Invalid index (try without args to get a list)").unwrap_or(());
-                         return;
-                     }
-                 }
+                    if output {
+                        clickwrite!(writer, " Output:\n{}", *pf.output.lock().unwrap());
+                    }
+                }
+                None => {
+                    write!(stderr(), "Invalid index (try without args to get a list)")
+                        .unwrap_or(());
+                    return;
+                }
+            }
 
-                 if stop {
-                     clickwrite!(writer, "  [y/N]? ");
-                     io::stdout().flush().ok().expect("Could not flush stdout");
-                     let mut conf = String::new();
-                     if let Ok(_) = io::stdin().read_line(&mut conf) {
-                         if conf.trim() == "y" || conf.trim() == "yes" {
-                             match env.stop_port_forward(i) {
-                                 Ok(()) => {
-                                     clickwrite!(writer, "Stopped\n");
-                                 },
-                                 Err(e) => {
-                                     write!(stderr(), "Failed to stop: {}", e.description()).unwrap_or(());
-                                 }
-                             }
-                         } else {
-                             clickwrite!(writer, "Not stopping\n");
-                         }
-                     } else {
-                         write!(stderr(), "Could not read response, not stopping.").unwrap_or(());
-                     }
-                 } else {
-                     clickwrite!(writer, "\n"); // just flush the above description
-                 }
-             } else {
-                 print_pfs(env.get_port_forwards());
-             }
-         }
+            if stop {
+                clickwrite!(writer, "  [y/N]? ");
+                io::stdout().flush().ok().expect("Could not flush stdout");
+                let mut conf = String::new();
+                if let Ok(_) = io::stdin().read_line(&mut conf) {
+                    if conf.trim() == "y" || conf.trim() == "yes" {
+                        match env.stop_port_forward(i) {
+                            Ok(()) => {
+                                clickwrite!(writer, "Stopped\n");
+                            }
+                            Err(e) => {
+                                write!(stderr(), "Failed to stop: {}", e.description())
+                                    .unwrap_or(());
+                            }
+                        }
+                    } else {
+                        clickwrite!(writer, "Not stopping\n");
+                    }
+                } else {
+                    write!(stderr(), "Could not read response, not stopping.").unwrap_or(());
+                }
+            } else {
+                clickwrite!(writer, "\n"); // just flush the above description
+            }
+        } else {
+            print_pfs(env.get_port_forwards());
+        }
+    }
 );

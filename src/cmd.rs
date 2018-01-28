@@ -28,6 +28,7 @@ use clap::{App, AppSettings, Arg, ArgMatches};
 use chrono::DateTime;
 use chrono::offset::local::Local;
 use chrono::offset::utc::UTC;
+use duct;
 use humantime::parse_duration;
 use prettytable::{format, Table};
 use prettytable::cell::Cell;
@@ -897,6 +898,15 @@ command!(
                       .validator(valid_date)
                       .help("Only return logs newer than specified RFC3339 date. Eg: 1996-12-19T16:39:57-08:00")
                       .takes_value(true))
+                 .arg(Arg::with_name("editor")
+                      .long("editor")
+                      .short("e")
+                      .conflicts_with("follow")
+                      .help("Open fetched logs in an editor rather than printing them out. with \
+                             --editor ARG, ARG is used as the editor command, otherwise the \
+                             $EDITOR environment variable is used.")
+                      .takes_value(true)
+                      .min_values(0))
     },
     vec!["logs"],
     |args: Vec<&str>, env: &Env| if args.len() <= 1 {
@@ -943,7 +953,8 @@ command!(
                     );
                 }
                 if matches.is_present("since") {
-                    let dur = parse_duration(matches.value_of("since").unwrap()).unwrap(); // all already validated
+                     // all unwraps already validated
+                    let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
                     url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
                 }
                 if matches.is_present("sinceTime") {
@@ -959,16 +970,99 @@ command!(
                     let mut reader = BufReader::new(lreader);
                     let mut line = String::new();
                     env.ctrlcbool.store(false, Ordering::SeqCst);
-                    while !env.ctrlcbool.load(Ordering::SeqCst) {
-                        if let Ok(amt) = reader.read_line(&mut line) {
-                            if amt > 0 {
-                                clickwrite!(writer, "{}", line); // newlines already in line
-                                line.clear();
+                    if matches.is_present("editor") {
+                        // We're opening in an editor, save to a temp
+                        let editor =
+                            if let Some(v) = matches.value_of("editor") {
+                                v.to_owned()
+                            }
+                            else if let Some(ref e) = env.editor {
+                                e.clone()
+                            }
+                            else {
+                                match std::env::var("EDITOR") {
+                                    Ok(ed) => ed,
+                                    Err(e) => {
+                                        clickwrite!(writer,
+                                                    "Could not get EDITOR environment \
+                                                     variable: {}\n",
+                                                    e.description());
+                                        return;
+                                    }
+                                }
+                            };
+                        let tmpdir = match &env.tempdir {
+                            &Ok(ref td) => td,
+                            &Err(ref e) => {
+                                clickwrite!(writer, "Failed to create tempdir: {}\n",
+                                            e.description());
+                                return;
+                            }
+                        };
+                        let file_path = tmpdir.path().join(format!("{}_{}_{}.log",
+                                                                   pod, cont,
+                                                                   Local::now().to_rfc3339()));
+                        match std::fs::File::create(&file_path) {
+                            Ok(mut file) => {
+                                let mut buffer = [0; 1024];
+                                while !env.ctrlcbool.load(Ordering::SeqCst) {
+                                    match reader.read(&mut buffer[..]) {
+                                        Ok(amt) => {
+                                            if amt == 0 {
+                                                break;
+                                            }
+                                            if let Err(e) = file.write(&buffer[0..amt]) {
+                                                clickwrite!(writer,
+                                                            "Failed to write to file: {}\n",
+                                                            e.description());
+                                                return;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            clickwrite!(writer,
+                                                        "Failed to read from remote: {}\n",
+                                                        e.description());
+                                        }
+                                    }
+                                }
+                                // file is created, run $EDITOR on it
+                                if let Err(e) = file.flush() {
+                                    clickwrite!(writer,
+                                                "Could not flush file: {}, data may be absent.\n",
+                                                e.description());
+                                }
+                                clickwrite!(writer, "Starting editor\n");
+                                let expr = if editor.contains(" ") {
+                                    // split the whitespace
+                                    let mut eargs: Vec<&str> = editor.split_whitespace().collect();
+                                    eargs.push(file_path.to_str().unwrap());
+                                    duct::cmd(eargs[0], &eargs[1..])
+                                } else {
+                                    cmd!(editor, file_path)
+                                };
+                                if let Err(e) = expr.start() {
+                                    clickwrite!(writer, "Could not start editor: {}\n",
+                                                e.description());
+                                }
+                            }
+                            Err(e) => {
+                                clickwrite!(writer, "Could not create temp file: {}\n",
+                                            e.description());
+                            }
+                        }
+                    }
+                    else {
+                        while !env.ctrlcbool.load(Ordering::SeqCst) {
+                            if let Ok(amt) = reader.read_line(&mut line) {
+                                if amt > 0 {
+                                    clickwrite!(writer, "{}", line); // newlines already in line
+                                    line.clear();
+                                } else {
+                                    break;
+                                }
                             } else {
                                 break;
                             }
-                        } else {
-                            break;
                         }
                     }
                 }

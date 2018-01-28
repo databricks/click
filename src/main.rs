@@ -15,6 +15,8 @@
 //! The Command Line Interactive Contoller for Kubernetes
 
 #[macro_use]
+extern crate duct;
+#[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate prettytable;
@@ -29,7 +31,6 @@ extern crate chrono;
 extern crate clap;
 extern crate ctrlc;
 extern crate der_parser;
-extern crate duct;
 extern crate duct_sh;
 extern crate humantime;
 extern crate hyper;
@@ -42,6 +43,7 @@ extern crate rustyline;
 extern crate serde;
 extern crate serde_json;
 extern crate serde_yaml;
+extern crate tempdir;
 extern crate term;
 extern crate untrusted;
 
@@ -63,6 +65,7 @@ use clap::{App, Arg};
 use parser::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use tempdir::TempDir;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -120,12 +123,14 @@ pub struct Env {
     quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
+    editor: Option<String>,
     current_object: KObj,
     pub current_object_namespace: Option<String>,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
     prompt: String,
+    tempdir: std::io::Result<TempDir>,
 }
 
 impl Env {
@@ -140,6 +145,7 @@ impl Env {
             quit: false,
             kluster: None,
             namespace: None,
+            editor: None,
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
@@ -151,6 +157,7 @@ impl Env {
                 Green.paint("none"),
                 Yellow.paint("none")
             ),
+            tempdir: TempDir::new("click"),
         }
     }
 
@@ -216,6 +223,10 @@ impl Env {
         }
         self.namespace = namespace.map(|n| n.to_owned());
         self.set_prompt();
+    }
+
+    fn set_editor(&mut self, editor: &Option<String>) {
+        self.editor = editor.clone();
     }
 
     fn set_lastlist(&mut self, list: LastList) {
@@ -512,6 +523,7 @@ fn main() {
     let mut env = Env::new(config);
     env.set_namespace(click_conf.namespace.as_ref().map(|x| &**x));
     env.set_context(click_conf.context.as_ref().map(|x| &**x));
+    env.set_editor(&click_conf.editor);
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));

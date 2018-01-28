@@ -349,6 +349,7 @@ impl Config {
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
+    pub editor: Option<String>,
 }
 
 impl ClickConfig {
@@ -374,6 +375,7 @@ impl ClickConfig {
     pub fn from_env(&mut self, env: &Env) {
         self.namespace = env.namespace.clone();
         self.context = env.kluster.as_ref().map(|k| k.name.clone());
+        self.editor = env.editor.clone();
     }
 
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {

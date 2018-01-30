@@ -604,10 +604,11 @@ fn main() {
                             }
                         }
 
-                        let mut parts = left.split_whitespace();
+                        let mut parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
+                        let mut parts = parts_vec.iter().map(|s| &**s);
                         if let Some(cmdstr) = parts.next() {
                             // There was something typed
-                            if let Ok(num) = cmdstr.parse::<usize>() {
+                            if let Ok(num) = (cmdstr as &str).parse::<usize>() {
                                 env.set_current(num);
                             } else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
                                 // found a matching command

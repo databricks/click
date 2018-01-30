@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{self, BufReader, Read};
 
 use Env;
 use error::{KubeErrNo, KubeError};
@@ -104,9 +104,12 @@ pub struct UserConf {
 }
 
 impl IConfig {
-    fn from_file(path: &str) -> IConfig {
-        let f = File::open(path).unwrap();
-        serde_yaml::from_reader(f).unwrap()
+    fn from_file(path: &str) -> Result<IConfig, io::Error> {
+        let f = File::open(path)?;
+        serde_yaml::from_reader(f).map_err(|e|
+                                           io::Error::new(io::ErrorKind::Other,
+                                                          format!("Couldn't read yaml: {}",
+                                                                  e.description())))
     }
 }
 
@@ -121,50 +124,53 @@ pub struct Config {
 }
 
 // some utility functions
+fn get_full_path(path: String) -> Result<String, KubeError> {
+    if path.is_empty() {
+        return Err(KubeError::ConfigFileError("Empty certificate/key path".to_owned()));
+    }
+    // unwrap okay, validated above
+    if path.chars().next().unwrap() == '/' {
+        Ok(path)
+    } else if let Some(home_dir) = env::home_dir() {
+        Ok(format!(
+            "{}/.kube/{}",
+            home_dir.as_path().display(),
+            path
+        ))
+    } else {
+        return Err(KubeError::ConfigFileError("Could not get path kubernetes \
+                                               certificates/keys (not fully specified, and \
+                                               your home directory is not known."
+                                              .to_owned()));
+    }
+}
+
 fn auth_from_paths(
-    client_cert_path: &String,
-    key_path: &String,
+    client_cert_path: String,
+    key_path: String,
     context: &str,
-) -> Option<KlusterAuth> {
+) -> Result<KlusterAuth, KubeError> {
     if client_cert_path.len() == 0 {
-        println!(
+        return Err(KubeError::ConfigFileError(format!(
             "Empty client certificate path for {}, can't continue",
             context
-        );
-        return None;
+        )));
     }
     if key_path.len() == 0 {
-        println!("Empty client key path for {}, can't continue", context);
-        return None;
+        return Err(KubeError::ConfigFileError(
+            format!("Empty client key path for {}, can't continue", context)));
     }
 
-    let cert_full_path = if client_cert_path.chars().next().unwrap() == '/' {
-        // unwrap is okay because we validated non-empty
-        client_cert_path.clone()
-    } else {
-        format!(
-            "{}/.kube/{}",
-            env::home_dir().unwrap().as_path().display(),
-            client_cert_path
-        )
-    };
-    let key_full_path = if key_path.chars().next().unwrap() == '/' {
-        key_path.clone()
-    } else {
-        format!(
-            "{}/.kube/{}",
-            env::home_dir().unwrap().as_path().display(),
-            key_path
-        )
-    };
+    let cert_full_path = get_full_path(client_cert_path)?;
+    let key_full_path = get_full_path(key_path)?;
     if let (Some(cert), Some(private_key)) = (
         get_cert(cert_full_path.as_str()),
         get_private_key(key_full_path.as_str()),
     ) {
-        Some(KlusterAuth::with_cert_and_key(cert, private_key))
+        Ok(KlusterAuth::with_cert_and_key(cert, private_key))
     } else {
-        println!("Can't read/convert cert or private key for {}", context);
-        None
+        Err(KubeError::ConfigFileError(format!(
+            "Can't read/convert cert or private key for {}", context)))
     }
 }
 
@@ -172,33 +178,41 @@ fn auth_from_data(
     client_cert_data: &String,
     key_data: &String,
     context: &str,
-) -> Result<Option<KlusterAuth>, KubeError> {
+) -> Result<KlusterAuth, KubeError> {
     if client_cert_data.len() == 0 {
-        println!(
+        Err(KubeError::ConfigFileError(format!(
             "Empty client certificate data for {}, can't continue",
-            context
-        );
-        return Ok(None);
+            context)))
     }
-    if key_data.len() == 0 {
-        println!("Empty client key data for {}, can't continue", context);
-        return Ok(None);
-    }
-    let mut cert_enc = try!(::base64::decode(client_cert_data.as_str()));
-    cert_enc.retain(|&i| i != 0);
-    let cert = get_cert_from_pem(String::from_utf8(cert_enc).unwrap().as_str());
-    let mut key_enc = try!(::base64::decode(key_data.as_str()));
-    key_enc.retain(|&i| i != 0);
-    let key = get_key_from_str(String::from_utf8(key_enc).unwrap().as_str());
-    match (cert, key) {
-        (Some(c), Some(k)) => Ok(Some(KlusterAuth::with_cert_and_key(c, k))),
-        _ => Ok(None),
+    else if key_data.len() == 0 {
+        Err(KubeError::ConfigFileError(format!(
+            "Empty client key data for {}, can't continue", context)))
+    } else {
+        let mut cert_enc = ::base64::decode(client_cert_data.as_str())?;
+        cert_enc.retain(|&i| i != 0);
+        let cert_pem = String::from_utf8(cert_enc).
+            map_err(|e|
+                    KubeError::ConfigFileError(format!(
+                        "Invalid utf8 data in certificate: {}", e.description())))?;
+        let cert = get_cert_from_pem(cert_pem.as_str());
+        let mut key_enc = ::base64::decode(key_data.as_str())?;
+        key_enc.retain(|&i| i != 0);
+        let key_str = String::from_utf8(key_enc).
+            map_err(|e|
+                    KubeError::ConfigFileError(format!(
+                        "Invalid utf8 data in key: {}", e.description())))?;
+        let key = get_key_from_str(key_str.as_str());
+        match (cert, key) {
+            (Some(c), Some(k)) => Ok(KlusterAuth::with_cert_and_key(c, k)),
+            _ => Err(KubeError::ConfigFileError(format!(
+                "Invalid certificate or key data for context: {}", context)))
+        }
     }
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Config {
-        let iconf = IConfig::from_file(path);
+    pub fn from_file(path: &str) -> Result<Config, KubeError> {
+        let iconf = IConfig::from_file(path)?;
 
         // copy over clusters
         let mut cluster_map = HashMap::new();
@@ -212,19 +226,12 @@ impl Config {
                 (Some(cert_config_path), _) => {
                     if has_cd {
                         println!(
-                            "Cluster {} specifies a certificate path and certificate data, ignoring data and using the path",
+                            "Cluster {} specifies a certificate path and certificate data, \
+                             ignoring data and using the path",
                             cluster.name
                         );
                     }
-                    let cert_path = if cert_config_path.chars().next().unwrap() == '/' {
-                        cert_config_path
-                    } else {
-                        format!(
-                            "{}/.kube/{}",
-                            env::home_dir().unwrap().as_path().display(),
-                            cert_config_path
-                        )
-                    };
+                    let cert_path = get_full_path(cert_config_path)?;
                     match File::open(cert_path) {
                         Ok(f) => {
                             let mut br = BufReader::new(f);
@@ -237,7 +244,8 @@ impl Config {
                         }
                         Err(e) => {
                             println!(
-                                "Invalid server cert path for cluster {}, cannot continue: {}",
+                                "Invalid server cert path for cluster {}: {}.\nAny contexts using \
+                                 this cluster will be unavailable.",
                                 cluster.name,
                                 e.description()
                             );
@@ -247,10 +255,14 @@ impl Config {
                 (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
                     Ok(mut cert) => {
                         cert.retain(|&i| i != 0);
+                        let cert_pem = String::from_utf8(cert).
+                            map_err(|e|
+                                    KubeError::ConfigFileError(format!(
+                                        "Invalid utf8 data in certificate: {}", e.description())))?;
                         cluster_map.insert(
                             cluster.name.clone(),
                             ClusterConf::new(
-                                Some(String::from_utf8(cert).unwrap()),
+                                Some(cert_pem),
                                 cluster.conf.server,
                             ),
                         );
@@ -271,8 +283,8 @@ impl Config {
                     //cluster_map.insert(cluster.name.clone(), ClusterConf::new(None,cluster.conf.server));
                     } else {
                         println!(
-                            "Ignoring invalid cluster \"{}\": has no cert and tls verification not skipped",
-                            cluster.name
+                            "Ignoring invalid cluster \"{}\": has no cert and tls verification not \
+                             skipped", cluster.name
                         );
                     }
                 }
@@ -291,12 +303,12 @@ impl Config {
             user_map.insert(user.name.clone(), user.conf.clone());
         }
 
-        Config {
+        Ok(Config {
             source_file: path.to_owned(),
             clusters: cluster_map,
             contexts: context_map,
             users: user_map,
-        }
+        })
     }
 
     pub fn cluster_for_context(&self, context: &str) -> Result<Kluster, KubeError> {
@@ -310,28 +322,28 @@ impl Config {
                             .get(&ctx.user)
                             .map(|user| {
                                 let auth = if let Some(ref token) = user.token {
-                                    Some(KlusterAuth::with_token(token.as_str()))
+                                    Ok(KlusterAuth::with_token(token.as_str()))
                                 } else if let (&Some(ref client_cert_path), &Some(ref key_path)) =
                                     (&user.client_cert, &user.client_key)
                                 {
-                                    auth_from_paths(client_cert_path, key_path, context)
+                                    auth_from_paths(client_cert_path.clone(),
+                                                    key_path.clone(),
+                                                    context)
                                 } else if let (&Some(ref client_cert_data), &Some(ref key_data)) =
                                     (&user.client_cert_data, &user.client_key_data)
                                 {
-                                    try!(auth_from_data(client_cert_data, key_data, context))
+                                    auth_from_data(client_cert_data, key_data, context)
                                 } else {
-                                    println!("Invalid context {}.  Each user must have either a token or a client-certificate AND a client-key.", context);
-                                    None
-                                };
-                                match auth {
-                                    Some(a) => Kluster::new(
-                                        context,
-                                        cluster.cert.clone(),
-                                        cluster.server.as_str(),
-                                        a,
-                                    ),
-                                    None => Err(KubeError::Kube(KubeErrNo::InvalidContext)),
-                                }
+                                    Err(KubeError::ConfigFileError(format!(
+                                        "Invalid context {}.  Each user must have either a token \
+                                         or a client-certificate AND a client-key.", context)))
+                                }?;
+                                Kluster::new(
+                                    context,
+                                    cluster.cert.clone(),
+                                    cluster.server.as_str(),
+                                    auth
+                                )
                             })
                             .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))
                     })
@@ -364,7 +376,7 @@ impl ClickConfig {
             },
             Err(e) => {
                 println!(
-                    "Could not open config file at {}: {}. Using default values",
+                    "Could not open config file at '{}': {}. Using default values",
                     path, e
                 );
                 ClickConfig::default()

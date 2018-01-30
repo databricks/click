@@ -480,7 +480,7 @@ Examples:\n\
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")
-        .version("0.1")
+        .version("0.3.0")
         .author("Nick Lanham <nick@databricks.com>")
         .about("Command Line Interactive Contoller for Kubernetes")
         .arg(
@@ -515,7 +515,16 @@ fn main() {
     let mut config_path = conf_dir.clone();
     config_path.push("config");
 
-    let config = Config::from_file(config_path.as_path().to_str().unwrap());
+    let config = match Config::from_file(config_path.as_path().to_str().
+                                         unwrap_or("[CONFIG_PATH_EMPTY")) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("Could not load kubernetes config: '{}'. Cannot continue.  Error was: {}",
+                     config_path.as_path().to_str().unwrap_or("[CONFIG_PATH_EMPTY"),
+                     e.description());
+            return;
+        }
+    };
 
     let mut hist_path = conf_dir.clone();
     hist_path.push("click.history");

@@ -22,7 +22,6 @@ use std::convert::From;
 
 #[derive(Debug)]
 pub enum KubeErrNo {
-    InvalidContext,
     InvalidContextName,
     InvalidCluster,
     InvalidUser,
@@ -33,7 +32,6 @@ pub enum KubeErrNo {
 impl fmt::Display for KubeErrNo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &KubeErrNo::InvalidContext => write!(f, "Invalid Context"),
             &KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
@@ -49,7 +47,6 @@ impl fmt::Display for KubeErrNo {
 impl error::Error for KubeErrNo {
     fn description(&self) -> &str {
         match self {
-            &KubeErrNo::InvalidContext => "Invalid Context",
             &KubeErrNo::InvalidContextName => "Invalid Context Name",
             &KubeErrNo::InvalidCluster => "Invalid Cluster Name",
             &KubeErrNo::InvalidUser => "Invalid User Name",
@@ -70,6 +67,7 @@ pub enum KubeError {
     ParseErr(String),
     Kube(KubeErrNo),
     KubeServerError(String),
+    ConfigFileError(String),
     DecodeError(base64::DecodeError),
     Io(io::Error),
     HyperParse(hyper::error::ParseError),
@@ -84,6 +82,7 @@ impl fmt::Display for KubeError {
             KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
             KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
             KubeError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
+            KubeError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
             KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
@@ -100,6 +99,7 @@ impl error::Error for KubeError {
             KubeError::ParseErr(ref s) => s,
             KubeError::Kube(ref err) => err.description(),
             KubeError::KubeServerError(ref s) => s,
+            KubeError::ConfigFileError(ref s) => s,
             KubeError::DecodeError(ref err) => err.description(),
             KubeError::Io(ref err) => err.description(),
             KubeError::HyperParse(ref err) => err.description(),
@@ -114,6 +114,7 @@ impl error::Error for KubeError {
             KubeError::ParseErr(_) => None,
             KubeError::Kube(ref err) => Some(err),
             KubeError::KubeServerError(_) => None,
+            KubeError::ConfigFileError(_) => None,
             KubeError::DecodeError(ref err) => Some(err),
             KubeError::Io(ref err) => Some(err),
             KubeError::HyperParse(ref err) => Some(err),

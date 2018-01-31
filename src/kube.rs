@@ -18,6 +18,7 @@ use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use hyper::{Client, Url};
+use hyper::client::Body;
 use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::header::{Authorization, Bearer};
@@ -529,9 +530,11 @@ impl Kluster {
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self, path: &str) -> Result<Response, KubeError> {
+    pub fn delete(&self, path: &str, body: String) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
         let req = self.client.delete(url);
+        let hyper_body = Body::BufBody(body.as_bytes(), body.len());
+        let req = req.body(hyper_body);
         let req = if let KlusterAuth::Token(ref token) = self.auth {
             req.header(Authorization(Bearer {
                 token: token.clone(),

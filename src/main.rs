@@ -60,7 +60,7 @@ mod subjaltnames;
 mod table;
 mod values;
 
-use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
+use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::{App, Arg};
 use parser::Parser;
 use rustyline::error::ReadlineError;
@@ -81,7 +81,7 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList, ServiceList};
+use kube::{DeploymentList, ConfigMapList, Kluster, NodeList, PodList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use values::val_str_opt;
 
@@ -96,6 +96,7 @@ enum KObj {
     Deployment(String),
     Service(String),
     ReplicaSet(String),
+    ConfigMap(String),
     Secret(String),
 }
 
@@ -106,6 +107,7 @@ enum LastList {
     DeploymentList(DeploymentList),
     ServiceList(ServiceList),
     ReplicaSetList(ReplicaSetList),
+    ConfigMapList(ConfigMapList),
     SecretList(SecretList),
 }
 
@@ -184,6 +186,7 @@ impl Env {
                 KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
                 KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
                 KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
+                KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
                 KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
             }
         );
@@ -295,6 +298,23 @@ impl Env {
                         }
                         None => {
                             println!("ReplicaSet has no name in metadata");
+                            self.current_object = KObj::None;
+                        }
+                    }
+                } else {
+                    self.current_object = KObj::None;
+                }
+            }
+            LastList::ConfigMapList(ref cml) => {
+                if let Some(ref cm) = cml.items.get(num) {
+                    match val_str_opt("/metadata/name", cm) {
+                        Some(name) => {
+                            let namespace = val_str_opt("/metadata/namespace", cm);
+                            self.current_object = KObj::ConfigMap(name);
+                            self.current_object_namespace = namespace;
+                        }
+                        None => {
+                            println!("ConfigMap has no name in metadata");
                             self.current_object = KObj::None;
                         }
                     }
@@ -544,6 +564,7 @@ fn main() {
     commands.push(Box::new(cmd::Deployments::new()));
     commands.push(Box::new(cmd::Services::new()));
     commands.push(Box::new(cmd::ReplicaSets::new()));
+    commands.push(Box::new(cmd::ConfigMaps::new()));
     commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));
     commands.push(Box::new(cmd::Describe::new()));

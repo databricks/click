@@ -341,6 +341,12 @@ pub struct ReplicaSetList {
     pub items: Vec<Value>,
 }
 
+// ConfigMaps
+#[derive(Debug, Deserialize)]
+pub struct ConfigMapList {
+    pub items: Vec<Value>,
+}
+
 // Secrets
 #[derive(Debug, Deserialize)]
 pub struct SecretList {

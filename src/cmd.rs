@@ -17,7 +17,7 @@
 use Env;
 use LastList;
 use describe;
-use kube::{ContainerState, DeploymentList, Event, EventList, Metadata, NamespaceList,
+use kube::{ContainerState, ConfigMapList, DeploymentList, Event, EventList, Metadata, NamespaceList,
            NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
@@ -1152,6 +1152,22 @@ command!(
                     }
                 }
             }
+            ::KObj::ConfigMap(ref config_map) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!(
+                        "/api/v1/namespaces/{}/configmaps/{}",
+                        ns, config_map
+                    );
+                    let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(cval) = cm_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&cval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "ConfigMap not supported without -j yet\n");
+                        }
+                    }
+                }
+            }
             ::KObj::Secret(ref secret) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
@@ -1281,11 +1297,12 @@ command!(
                     ))
                 }
                 ::KObj::None => {
-                    write!(stderr(), "No active object").unwrap_or(());
+                    write!(stderr(), "No active object\n").unwrap_or(());
                     None
                 }
                 _ => {
-                    write!(stderr(), "Can only delete pods or deployments").unwrap_or(());
+                    write!(stderr(), "Can only delete pods, deployments or replicasets for now\n")
+                        .unwrap_or(());
                     None
                 }
             } {
@@ -1553,7 +1570,7 @@ command!(
                 env.set_editor(&Some(value.to_owned()));
             }
             _ => {
-                // this shoudln't happen
+                // this shouldn't happen
                 write!(stderr(), "Invalid option\n").unwrap_or(());
                 failed = true;
             }
@@ -1701,6 +1718,87 @@ command!(
         }
     }
 );
+
+fn print_configmaps(
+    list: ConfigMapList,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> ConfigMapList {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "Data", "Age"]);
+    let cm_specs = list.items.into_iter().map(|cm| {
+        let mut specs = Vec::new();
+        let metadata: Metadata = get_val_as("/metadata", &cm).unwrap();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(metadata.name));
+        let data_count = val_item_count("/data", &cm);
+        specs.push(CellSpec::new_owned(format!("{}", data_count)));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(metadata.creation_timestamp.unwrap())
+        )));
+        (cm, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(cm_specs, r),
+        None => cm_specs.collect(),
+    };
+
+    ::table::print_table(&mut table, &filtered, writer);
+
+    let final_rss = filtered.into_iter().map(|cm_spec| cm_spec.0).collect();
+    ConfigMapList { items: final_rss }
+}
+
+command!(
+    ConfigMaps,
+    "configmaps",
+    "Get configmaps (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("show_label")
+            .short("L")
+            .long("labels")
+            .help("Show replicaset labels")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter replicasets by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["cm", "configmaps"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
+
+        let urlstr = if let Some(ref ns) = env.namespace {
+            format!("/api/v1/namespaces/{}/configmaps", ns)
+        } else {
+            "/api/v1/configmaps".to_owned()
+        };
+
+        let cml: Option<ConfigMapList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+
+        match cml {
+            Some(l) => {
+                let final_list = print_configmaps(l, regex, writer);
+                env.set_lastlist(LastList::ConfigMapList(final_list));
+            }
+            None => {
+                env.set_lastlist(LastList::None);
+            }
+        }
+    }
+);
+
 
 fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWriter) -> SecretList {
     let mut table = Table::new();

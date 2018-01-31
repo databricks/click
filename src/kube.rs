@@ -530,11 +530,16 @@ impl Kluster {
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self, path: &str, body: String) -> Result<Response, KubeError> {
+    pub fn delete(&self, path: &str, body: Option<String>) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
         let req = self.client.delete(url);
-        let hyper_body = Body::BufBody(body.as_bytes(), body.len());
-        let req = req.body(hyper_body);
+        let req = match body {
+            Some(ref b) => {
+                let hyper_body = Body::BufBody(b.as_bytes(), b.len());
+                req.body(hyper_body)
+            },
+            None => req
+        };
         let req = if let KlusterAuth::Token(ref token) = self.auth {
             req.header(Authorization(Bearer {
                 token: token.clone(),

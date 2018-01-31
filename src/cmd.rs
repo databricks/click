@@ -1297,6 +1297,7 @@ command!(
     noop_complete,
     |matches, env, writer| {
         if let Some(ref ns) = env.current_object_namespace {
+            let mut no_delete_opts = false;
             if let Some(mut url) = match env.current_object {
                 ::KObj::Pod { ref name, .. } => {
                     clickwrite!(writer, "Delete pod {} [y/N]? ", name);
@@ -1316,13 +1317,37 @@ command!(
                         ns, repset
                     ))
                 }
+                ::KObj::Service(ref service) => {
+                    clickwrite!(writer, "Delete service {} [y/N]? ", service);
+                    no_delete_opts = true;
+                    Some(format!(
+                        "/api/v1/namespaces/{}/services/{}",
+                        ns, service
+                    ))
+                }
+                ::KObj::ConfigMap(ref cm) => {
+                    clickwrite!(writer, "Delete configmap {} [y/N]? ", cm);
+                    Some(format!(
+                        "/api/v1/namespaces/{}/configmaps/{}",
+                        ns, cm
+                    ))
+                }
+                ::KObj::Secret(ref secret) => {
+                    clickwrite!(writer, "Delete secret {} [y/N]? ", secret);
+                    Some(format!(
+                        "/api/v1/namespaces/{}/secrets/{}",
+                        ns, secret
+                    ))
+                }
+                ::KObj::Node(ref node) => {
+                    clickwrite!(writer, "Delete node {} [y/N]? ", node);
+                    Some(format!(
+                        "/api/v1/nodes/{}",
+                        node
+                    ))
+                }
                 ::KObj::None => {
                     write!(stderr(), "No active object\n").unwrap_or(());
-                    None
-                }
-                _ => {
-                    write!(stderr(), "Can only delete pods, deployments or replicasets for now\n")
-                        .unwrap_or(());
                     None
                 }
             } {
@@ -1336,32 +1361,37 @@ command!(
                                 policy = "Orphan";
                             }
                         }
-                        let mut delete_body = json!({
-                            "kind":"DeleteOptions",
-                            "apiVersion":"v1",
-                            "propagationPolicy": policy
-                        });
-                        if let Some(grace) = matches.value_of("grace") {
-                            let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
-                            if graceu32 == 0 {
-                                // don't allow zero, make it one.  zero is force delete which
-                                // can mess things up.
+                        let delete_body = if no_delete_opts {
+                            None
+                        } else {
+                            let mut delete_body = json!({
+                                "kind":"DeleteOptions",
+                                "apiVersion":"v1",
+                                "propagationPolicy": policy
+                            });
+                            if let Some(grace) = matches.value_of("grace") {
+                                let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
+                                if graceu32 == 0 {
+                                    // don't allow zero, make it one.  zero is force delete which
+                                    // can mess things up.
+                                    delete_body.as_object_mut().unwrap().insert(
+                                        "gracePeriodSeconds".to_owned(), json!(1));
+                                } else {
+                                    // already validated that it's a legit number
+                                    delete_body.as_object_mut().unwrap().insert(
+                                        "gracePeriodSeconds".to_owned(), json!(graceu32));
+                                }
+                            } else if matches.is_present("force") {
+                                delete_body.as_object_mut().unwrap().insert(
+                                    "gracePeriodSeconds".to_owned(), json!(0));
+                            } else if matches.is_present("now") {
                                 delete_body.as_object_mut().unwrap().insert(
                                     "gracePeriodSeconds".to_owned(), json!(1));
-                            } else {
-                                // already validated that it's a legit number
-                                delete_body.as_object_mut().unwrap().insert(
-                                    "gracePeriodSeconds".to_owned(), json!(graceu32));
                             }
-                        } else if matches.is_present("force") {
-                            delete_body.as_object_mut().unwrap().insert(
-                                "gracePeriodSeconds".to_owned(), json!(0));
-                        } else if matches.is_present("now") {
-                            delete_body.as_object_mut().unwrap().insert(
-                                "gracePeriodSeconds".to_owned(), json!(1));
-                        }
+                            Some(delete_body.to_string())
+                        };
                         let result = env.run_on_kluster(|k| k.delete(url.as_str(),
-                                                                     delete_body.to_string()));
+                                                                     delete_body));
                         if let Some(x) = result {
                             if x.status.is_success() {
                                 clickwrite!(writer, "Deleted\n");

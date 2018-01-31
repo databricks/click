@@ -134,18 +134,18 @@ pub struct Env {
 }
 
 impl Env {
-    fn new(config: Config) -> Env {
+    fn new(config: Config, click_config: &ClickConfig) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
         ctrlc::set_handler(move || {
             r.store(true, Ordering::SeqCst);
         }).expect("Error setting Ctrl-C handler");
-        Env {
+        let mut env = Env {
             config: config,
             quit: false,
             kluster: None,
-            namespace: None,
-            editor: None,
+            namespace: click_config.namespace.clone(),
+            editor: click_config.editor.clone(),
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
@@ -158,7 +158,9 @@ impl Env {
                 Yellow.paint("none")
             ),
             tempdir: TempDir::new("click"),
-        }
+        };
+        env.set_context(click_config.context.as_ref().map(|x| &**x));
+        env
     }
 
     // sets the prompt string based on current settings
@@ -386,6 +388,7 @@ impl fmt::Display for Env {
   Current Context: {}
   Availble Contexts: {:?}
   Kubernetes Config File: {}
+  Editor: {}
 }}",
             if let Some(ref k) = self.kluster {
                 Red.bold().paint(k.name.as_str())
@@ -394,6 +397,7 @@ impl fmt::Display for Env {
             },
             self.config.contexts.keys(),
             self.config.source_file,
+            self.editor.as_ref().unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
         )
     }
 }
@@ -529,10 +533,7 @@ fn main() {
     let mut hist_path = conf_dir.clone();
     hist_path.push("click.history");
 
-    let mut env = Env::new(config);
-    env.set_namespace(click_conf.namespace.as_ref().map(|x| &**x));
-    env.set_context(click_conf.context.as_ref().map(|x| &**x));
-    env.set_editor(&click_conf.editor);
+    let mut env = Env::new(config, &click_conf);
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
@@ -551,6 +552,7 @@ fn main() {
     commands.push(Box::new(cmd::Events::new()));
     commands.push(Box::new(cmd::Clear::new()));
     commands.push(Box::new(cmd::EnvCmd::new()));
+    commands.push(Box::new(cmd::SetCmd::new()));
     commands.push(Box::new(cmd::Delete::new()));
     commands.push(Box::new(cmd::UtcCmd::new()));
     commands.push(Box::new(cmd::Namespaces::new()));

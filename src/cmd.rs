@@ -1527,6 +1527,45 @@ command!(
 );
 
 command!(
+    SetCmd,
+    "set",
+    "Set click options",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("option")
+            .help("The click option to set")
+            .required(true)
+            .index(1)
+            .possible_values(&["editor"])
+    ).arg(
+        Arg::with_name("value")
+            .help("The value to set the option to")
+            .required(true)
+            .index(2)
+    ),
+    vec!["set"],
+    noop_complete,
+    |matches, env, writer| {
+        let option = matches.value_of("option").unwrap(); // safe, required
+        let value = matches.value_of("value").unwrap(); // safe, required
+        let mut failed = false;
+        match option {
+            "editor" => {
+                env.set_editor(&Some(value.to_owned()));
+            }
+            _ => {
+                // this shoudln't happen
+                write!(stderr(), "Invalid option\n").unwrap_or(());
+                failed = true;
+            }
+        }
+        if !failed {
+            clickwrite!(writer, "Set {} to {}\n", option, value);
+        }
+    }
+);
+
+
+command!(
     Deployments,
     "deployments",
     "Get deployments (in current namespace if set)",

@@ -123,10 +123,10 @@ struct PortForward {
 /// Keep track of our repl environment
 pub struct Env {
     config: Config,
+    click_config: ClickConfig,
     quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
-    editor: Option<String>,
     current_object: KObj,
     pub current_object_namespace: Option<String>,
     last_objs: LastList,
@@ -137,18 +137,20 @@ pub struct Env {
 }
 
 impl Env {
-    fn new(config: Config, click_config: &ClickConfig) -> Env {
+    fn new(config: Config, click_config: ClickConfig) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
         ctrlc::set_handler(move || {
             r.store(true, Ordering::SeqCst);
         }).expect("Error setting Ctrl-C handler");
+        let namespace = click_config.namespace.clone();
+        let context = click_config.context.clone();
         let mut env = Env {
             config: config,
+            click_config: click_config,
             quit: false,
             kluster: None,
-            namespace: click_config.namespace.clone(),
-            editor: click_config.editor.clone(),
+            namespace: namespace,
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
@@ -162,10 +164,18 @@ impl Env {
             ),
             tempdir: TempDir::new("click"),
         };
-        env.set_context(click_config.context.as_ref().map(|x| &**x));
+        env.set_context(context.as_ref().map(|x| &**x));
         env
     }
 
+    fn save_click_config(&mut self, click_path: PathBuf) {
+        self.click_config.namespace = self.namespace.clone();
+        self.click_config.context = self.kluster.as_ref().map(|k| k.name.clone());
+        self.click_config
+            .save_to_file(click_path.as_path().to_str().unwrap())
+            .unwrap();
+    }
+    
     // sets the prompt string based on current settings
     fn set_prompt(&mut self) {
         self.prompt = format!(
@@ -232,7 +242,7 @@ impl Env {
     }
 
     fn set_editor(&mut self, editor: &Option<String>) {
-        self.editor = editor.clone();
+        self.click_config.editor = editor.clone();
     }
 
     fn set_lastlist(&mut self, list: LastList) {
@@ -418,7 +428,7 @@ impl fmt::Display for Env {
             },
             self.config.contexts.keys(),
             self.config.source_file,
-            self.editor.as_ref().unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
+            self.click_config.editor.as_ref().unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
         )
     }
 }
@@ -535,7 +545,7 @@ fn main() {
 
     let mut click_path = conf_dir.clone();
     click_path.push("click.config");
-    let mut click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
+    let click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
 
     let mut config_path = conf_dir.clone();
     config_path.push("config");
@@ -554,7 +564,7 @@ fn main() {
     let mut hist_path = conf_dir.clone();
     hist_path.push("click.history");
 
-    let mut env = Env::new(config, &click_conf);
+    let mut env = Env::new(config, click_conf);
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
@@ -696,10 +706,8 @@ fn main() {
             }
         }
     }
-    click_conf.from_env(&env);
-    click_conf
-        .save_to_file(click_path.as_path().to_str().unwrap())
-        .unwrap();
+
+    env.save_click_config(click_path);
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);
     }

@@ -986,7 +986,7 @@ command!(
                             if let Some(v) = matches.value_of("editor") {
                                 v.to_owned()
                             }
-                            else if let Some(ref e) = env.editor {
+                            else if let Some(ref e) = env.click_config.editor {
                                 e.clone()
                             }
                             else {

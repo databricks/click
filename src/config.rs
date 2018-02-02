@@ -22,7 +22,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 
-use Env;
 use error::{KubeErrNo, KubeError};
 use kube::{Kluster, KlusterAuth};
 use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
@@ -382,12 +381,6 @@ impl ClickConfig {
                 ClickConfig::default()
             }
         }
-    }
-
-    pub fn from_env(&mut self, env: &Env) {
-        self.namespace = env.namespace.clone();
-        self.context = env.kluster.as_ref().map(|k| k.name.clone());
-        self.editor = env.editor.clone();
     }
 
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {

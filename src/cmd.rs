@@ -94,7 +94,10 @@ fn exec_match<F>(
 where
     F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> (),
 {
-    match clap.borrow_mut().get_matches_from_safe_borrow(args) {
+    // TODO: Should be able to not clone and use get_matches_from_safe_borrow, but
+    // that causes weird errors involving conflicting arguments being used
+    // between invocations of commands 
+    match clap.borrow_mut().clone().get_matches_from_safe(args) {
         Ok(matches) => {
             func(matches, env, writer);
             true
@@ -1509,13 +1512,13 @@ command!(
                     clickwrite!(writer, "No events\n");
                 }
             } else {
-                write!(stderr(), "Failed to fetch events").unwrap_or(());
+                write!(stderr(), "Failed to fetch events\n").unwrap_or(());
             }
         } else {
-            write!(stderr(), "No active pod").unwrap_or(());
+            write!(stderr(), "No active pod\n").unwrap_or(());
         }
     } else {
-        write!(stderr(), "No active namespace").unwrap_or(());
+        write!(stderr(), "No active namespace\n").unwrap_or(());
     }
 );
 

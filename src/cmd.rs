@@ -1229,35 +1229,72 @@ command!(
             .long("container")
             .help("Exec in the specified container")
             .takes_value(true)
+    ).arg(
+        Arg::with_name("terminal")
+            .short("t")
+            .long("terminal")
+            .help("Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
+                   terminal command, otherwise the default is used ('set terminal <value>' to \
+                   specify default)")
+            .takes_value(true)
+            .min_values(0)
     ),
     vec!["exec"],
     noop_complete,
-    |matches, env, _writer| {
+    |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
         if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (
             env.kluster.as_ref(),
             env.current_object_namespace.as_ref(),
             env.current_pod().as_ref(),
         ) {
-            let contargs = if let Some(container) = matches.value_of("container") {
+            let mut contargs = if let Some(container) = matches.value_of("container") {
                 vec!["-c", container]
             } else {
                 vec![]
             };
-            let status = Command::new("kubectl")
-                .arg("--namespace")
-                .arg(ns)
-                .arg("--context")
-                .arg(&kluster.name)
-                .arg("exec")
-                .arg("-it")
-                .arg(pod)
-                .args(contargs.iter())
-                .arg(cmd)
-                .status()
-                .expect("failed to execute kubectl");
-            if !status.success() {
-                write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
+            if matches.is_present("terminal") {
+                let terminal = if let Some(t) = matches.value_of("terminal") {
+                    t
+                } else if let Some(ref t) = env.click_config.terminal {
+                    t
+                } else {
+                    "xterm -e"
+                };
+                let mut targs: Vec<&str> = terminal.split_whitespace().collect();
+                let mut kubectl_args = vec![
+                    "kubectl",
+                    "--namespace",
+                    ns,
+                    "--context",
+                    &kluster.name,
+                    "exec",
+                    "-it",
+                    pod
+                ];
+                targs.append(&mut kubectl_args);
+                targs.append(&mut contargs);
+                targs.push(cmd);
+                clickwrite!(writer, "Starting in terminal\n");
+                if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
+                    clickwrite!(writer, "Could not launch in terminal: {}\n", e.description());
+                }
+            } else {
+                let status = Command::new("kubectl")
+                    .arg("--namespace")
+                    .arg(ns)
+                    .arg("--context")
+                    .arg(&kluster.name)
+                    .arg("exec")
+                    .arg("-it")
+                    .arg(pod)
+                    .args(contargs.iter())
+                    .arg(cmd)
+                    .status()
+                    .expect("failed to execute kubectl");
+                if !status.success() {
+                    write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
+                }
             }
         } else {
             write!(stderr(), "Need an active pod in order to exec.").unwrap_or(());
@@ -1627,7 +1664,7 @@ command!(
             .help("The click option to set")
             .required(true)
             .index(1)
-            .possible_values(&["editor"])
+            .possible_values(&["editor", "terminal"])
     ).arg(
         Arg::with_name("value")
             .help("The value to set the option to")
@@ -1643,6 +1680,9 @@ command!(
         match option {
             "editor" => {
                 env.set_editor(&Some(value.to_owned()));
+            }
+            "terminal" => {
+                env.set_terminal(&Some(value.to_owned()));
             }
             _ => {
                 // this shouldn't happen

@@ -361,6 +361,7 @@ pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
     pub editor: Option<String>,
+    pub terminal: Option<String>,
 }
 
 impl ClickConfig {

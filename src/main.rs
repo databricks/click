@@ -245,6 +245,10 @@ impl Env {
         self.click_config.editor = editor.clone();
     }
 
+    fn set_terminal(&mut self, terminal: &Option<String>) {
+        self.click_config.terminal = terminal.clone();
+    }
+
     fn set_lastlist(&mut self, list: LastList) {
         self.last_objs = list;
     }
@@ -420,6 +424,7 @@ impl fmt::Display for Env {
   Availble Contexts: {:?}
   Kubernetes Config File: {}
   Editor: {}
+  Terminal: {}
 }}",
             if let Some(ref k) = self.kluster {
                 Red.bold().paint(k.name.as_str())
@@ -429,6 +434,7 @@ impl fmt::Display for Env {
             self.config.contexts.keys(),
             self.config.source_file,
             self.click_config.editor.as_ref().unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
+            self.click_config.terminal.as_ref().unwrap_or(&"<unset, will use xterm>".to_owned()),
         )
     }
 }

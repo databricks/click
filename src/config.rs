@@ -92,6 +92,7 @@ struct IUser {
 #[derive(Debug, Deserialize, Clone)]
 pub struct UserConf {
     pub token: Option<String>,
+    
     #[serde(rename = "client-certificate")]
     pub client_cert: Option<String>,
     #[serde(rename = "client-key")]
@@ -100,6 +101,9 @@ pub struct UserConf {
     pub client_cert_data: Option<String>,
     #[serde(rename = "client-key-data")]
     pub client_key_data: Option<String>,
+
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 impl IConfig {
@@ -322,6 +326,10 @@ impl Config {
                             .map(|user| {
                                 let auth = if let Some(ref token) = user.token {
                                     Ok(KlusterAuth::with_token(token.as_str()))
+                                } else if let (&Some(ref username), &Some(ref password)) =
+                                    (&user.username, &user.password)
+                                {
+                                    Ok(KlusterAuth::with_userpass(username, password))
                                 } else if let (&Some(ref client_cert_path), &Some(ref key_path)) =
                                     (&user.client_cert, &user.client_key)
                                 {
@@ -334,8 +342,9 @@ impl Config {
                                     auth_from_data(client_cert_data, key_data, context)
                                 } else {
                                     Err(KubeError::ConfigFileError(format!(
-                                        "Invalid context {}.  Each user must have either a token \
-                                         or a client-certificate AND a client-key.", context)))
+                                        "Invalid context {}.  Each user must have either a token, \
+                                         a username AND password, or a client-certificate AND \
+                                         a client-key.", context)))
                                 }?;
                                 Kluster::new(
                                     context,

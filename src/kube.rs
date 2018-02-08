@@ -18,10 +18,10 @@ use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::utc::UTC;
 use hyper::{Client, Url};
-use hyper::client::Body;
+use hyper::client::{Body, RequestBuilder};
 use hyper::client::request::Request;
 use hyper::client::response::Response;
-use hyper::header::{Authorization, Bearer};
+use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::net::HttpsConnector;
 use hyper::status::StatusCode;
@@ -356,9 +356,10 @@ pub struct SecretList {
 
 // Kubernetes authentication data
 
-// Auth is either a token or a cert and key
+// Auth is either a token, a username/password, or a cert and key
 pub enum KlusterAuth {
     Token(String),
+    UserPass(String, String),
     CertKey(Vec<Certificate>, PrivateKey),
 }
 
@@ -367,6 +368,10 @@ impl KlusterAuth {
         KlusterAuth::Token(token.to_owned())
     }
 
+    pub fn with_userpass(user: &str, pass: &str) -> KlusterAuth {
+        KlusterAuth::UserPass(user.to_owned(), pass.to_owned())
+    }
+    
     pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> KlusterAuth {
         KlusterAuth::CertKey(vec![cert], private_key)
     }
@@ -435,6 +440,23 @@ impl Kluster {
         }
     }
 
+    fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
+        match self.auth {
+            KlusterAuth::Token(ref token) => {
+                req.header(Authorization(Bearer {
+                    token: token.clone(),
+                }))
+            },
+            KlusterAuth::UserPass(ref user, ref pass) => {
+                req.header(Authorization(Basic {
+                    username: user.clone(),
+                    password: Some(pass.clone()),
+                }))
+            },
+            KlusterAuth::CertKey(..) => req
+        }
+    }
+    
     pub fn new(
         name: &str,
         cert_opt: Option<String>,
@@ -458,13 +480,7 @@ impl Kluster {
     fn send_req(&self, path: &str) -> Result<Response, KubeError> {
         let url = try!(self.endpoint.join(path));
         let req = self.client.get(url);
-        let req = if let KlusterAuth::Token(ref token) = self.auth {
-            req.header(Authorization(Bearer {
-                token: token.clone(),
-            }))
-        } else {
-            req
-        };
+        let req = self.add_auth_header(req);
         req.send().map_err(|he| KubeError::from(he))
     }
 
@@ -510,6 +526,11 @@ impl Kluster {
                     headers.set(Authorization(Bearer {
                         token: token.clone(),
                     }));
+                } else if let KlusterAuth::UserPass(ref user, ref pass) = self.auth {
+                    headers.set(Authorization(Basic {
+                        username: user.clone(),
+                        password: Some(pass.clone()),
+                    }));
                 }
             }
             try!(req.set_read_timeout(timeout));
@@ -540,13 +561,7 @@ impl Kluster {
             },
             None => req
         };
-        let req = if let KlusterAuth::Token(ref token) = self.auth {
-            req.header(Authorization(Bearer {
-                token: token.clone(),
-            }))
-        } else {
-            req
-        };
+        let req = self.add_auth_header(req);
         req.send().map_err(|he| KubeError::from(he))
     }
 

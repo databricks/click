@@ -5,6 +5,8 @@ authors = ["Nick Lanham <nick@afternight.org>"]
 homepage = "https://github.com/databricks/click/wiki"
 repository = "https://github.com/databricks/click"
 license = "Apache-2.0"
+keywords = ["kubernetes", "repl", "click", "cli"]
+categories = ["command-line-interface", "command-line-utilities"]
 
 [dependencies]
 ansi_term = "0.9"

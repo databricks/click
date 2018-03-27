@@ -9,11 +9,11 @@ license = "Apache-2.0"
 [dependencies]
 ansi_term = "0.9"
 base64 = "0.5"
-chrono = { version = "0.3", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 clap = "2.22"
 ctrlc = "3.0"
 der-parser = "0.3"
-duct = "^0.9"
+duct = "^0.10"
 duct_sh = "^0.1"
 humantime = "1.0"
 hyper = "0.10"

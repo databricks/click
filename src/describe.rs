@@ -19,8 +19,8 @@ use values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
 use chrono::DateTime;
-use chrono::offset::local::Local;
-use chrono::offset::utc::UTC;
+use chrono::offset::Local;
+use chrono::offset::Utc;
 use serde_json::Value;
 
 use std::borrow::Cow;
@@ -110,7 +110,7 @@ where
                 ref default,
             } => val_str(path, metadata, default),
             DescItem::ObjectCreated => {
-                let created: DateTime<UTC> = DateTime::from_str(&val_str(
+                let created: DateTime<Utc> = DateTime::from_str(&val_str(
                     "/creationTimestamp",
                     metadata,
                     "<No CreationTime>",

@@ -40,7 +40,7 @@ The order of the prompt is \[context\]\[namespace\]\[object\].
 The object changes color depending on what type of object it is.  (e.g yellow for pods, blue for
 nodes and so on)
 
-# Why am I getting BadDER error
+# Why am I getting a BadDER error
 If your Kubernetes cluster is using Node Authorization
 (https://kubernetes.io/docs/admin/authorization/node/) your API Server may be using a certificate
 with a DNS name like "system:something".  This is technically a bad cert as DNS names can't have a

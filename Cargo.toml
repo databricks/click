@@ -1,11 +1,12 @@
 [package]
 name = "click"
-version = "0.3.0"
+version = "0.3.1"
 description = "A command-line REPL for Kubernetes that integrates into existing cli workflows"
 authors = ["Nick Lanham <nick@afternight.org>"]
 homepage = "https://github.com/databricks/click/wiki"
 repository = "https://github.com/databricks/click"
 license = "Apache-2.0"
+readme = "README.md"
 keywords = ["kubernetes", "repl", "click", "cli"]
 categories = ["command-line-interface", "command-line-utilities"]
 

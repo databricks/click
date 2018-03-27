@@ -42,4 +42,5 @@ colon in them, and since the WebPKI crate is more strict than Go, Click will not
 from the API Server even though kubectl will.  
 
 For the moment, you can build click, then run the `fix_bad_der.sh` script that's in the util
-directory, and then rebuild click.  This patches WebPKI to accept the cert.
+directory, and then run `cargo clean`, and then rebuild click.  This patches WebPKI to accept the
+cert.

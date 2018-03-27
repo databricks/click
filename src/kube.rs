@@ -16,7 +16,7 @@
 
 use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
-use chrono::offset::utc::UTC;
+use chrono::offset::Utc;
 use hyper::{Client, Url};
 use hyper::client::{Body, RequestBuilder};
 use hyper::client::request::Request;
@@ -58,9 +58,9 @@ pub struct Metadata {
     pub name: String,
     pub namespace: Option<String>,
     #[serde(rename = "creationTimestamp")]
-    pub creation_timestamp: Option<DateTime<UTC>>,
+    pub creation_timestamp: Option<DateTime<Utc>>,
     #[serde(rename = "deletionTimestamp")]
-    pub deletion_timestamp: Option<DateTime<UTC>>,
+    pub deletion_timestamp: Option<DateTime<Utc>>,
     pub labels: Option<Map<String, Value>>,
     pub annotations: Option<Map<String, Value>>,
     #[serde(rename = "ownerReferences")]
@@ -74,7 +74,7 @@ pub enum ContainerState {
     #[serde(rename = "running")]
     Running {
         #[serde(rename = "startedAt")]
-        started_at: Option<DateTime<UTC>>,
+        started_at: Option<DateTime<Utc>>,
     },
     #[serde(rename = "terminated")]
     Terminated {
@@ -83,12 +83,12 @@ pub enum ContainerState {
         #[serde(rename = "exitCode")]
         exit_code: u32,
         #[serde(rename = "finishedAt")]
-        finished_at: Option<DateTime<UTC>>,
+        finished_at: Option<DateTime<Utc>>,
         message: Option<String>,
         reason: Option<String>,
         signal: Option<u32>,
         #[serde(rename = "startedAt")]
-        started_at: Option<DateTime<UTC>>,
+        started_at: Option<DateTime<Utc>>,
     },
     #[serde(rename = "waiting")]
     Waiting {
@@ -206,7 +206,7 @@ pub struct Event {
     pub message: String,
     pub reason: String,
     #[serde(rename = "lastTimestamp")]
-    pub last_timestamp: DateTime<UTC>,
+    pub last_timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]

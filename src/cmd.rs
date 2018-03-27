@@ -26,8 +26,8 @@ use values::{get_val_as, val_item_count, val_str, val_u64};
 use ansi_term::Colour::Yellow;
 use clap::{App, AppSettings, Arg, ArgMatches};
 use chrono::DateTime;
-use chrono::offset::local::Local;
-use chrono::offset::utc::UTC;
+use chrono::offset::Local;
+use chrono::offset::Utc;
 use duct;
 use humantime::parse_duration;
 use prettytable::{format, Table};
@@ -288,8 +288,8 @@ fn phase_style_str(phase: &str) -> &'static str {
     }
 }
 
-fn time_since(date: DateTime<UTC>) -> String {
-    let now = UTC::now();
+fn time_since(date: DateTime<Utc>) -> String {
+    let now = Utc::now();
     let diff = now.signed_duration_since(date);
     if diff.num_days() > 0 {
         format!(
@@ -971,7 +971,7 @@ command!(
                     let specified = DateTime::parse_from_rfc3339(
                         matches.value_of("sinceTime").unwrap(),
                     ).unwrap();
-                    let dur = UTC::now().signed_duration_since(specified.with_timezone(&UTC));
+                    let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
                     url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
                 }
                 let logs_reader =
@@ -2036,7 +2036,7 @@ command!(
     vec!["utc"],
     noop_complete,
     |_, _, writer| {
-        clickwrite!(writer, "{}\n", UTC::now());
+        clickwrite!(writer, "{}\n", Utc::now());
     }
 );
 

@@ -4,7 +4,7 @@
 # cases.  This is a hack, but right now we don't really have a better idea
 
 CARGO_DIR="${CARGO_HOME:-$HOME}/.cargo"
-WEBPKI_VERSION=${WEBPKI_VERSION:-"0.10.2"}
+WEBPKI_VERSION=${WEBPKI_VERSION:-"0.12.1"}
 WEBPKI_DIR=$(find $CARGO_DIR/registry/src/ -name webpki-$WEBPKI_VERSION)
 
 pushd $WEBPKI_DIR

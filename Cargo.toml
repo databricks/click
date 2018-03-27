@@ -1,6 +1,7 @@
 [package]
 name = "click"
 version = "0.3.0"
+description = "A command-line REPL for Kubernetes that integrates into existing cli workflows"
 authors = ["Nick Lanham <nick@afternight.org>"]
 homepage = "https://github.com/databricks/click/wiki"
 repository = "https://github.com/databricks/click"

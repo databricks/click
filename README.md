@@ -33,3 +33,13 @@ Once your in the repl, try typing `help` to see what you can do.
 The order of the prompt is \[context\]\[namespace\]\[object\].
 
 The object will be yellow if it's a pod, blue if it's a node.
+
+# Why am I getting BadDER error
+If your Kubernetes cluster is using Node Authorization
+(https://kubernetes.io/docs/admin/authorization/node/) your API Server may be using a certificate
+with a DNS name like "system:something".  This is technically a bad cert as DNS names can't have a
+colon in them, and since the WebPKI crate is more strict than Go, Click will not accept the cert
+from the API Server even though kubectl will.  
+
+For the moment, you can build click, then run the `fix_bad_der.sh` script that's in the util
+directory, and then rebuild click.  This patches WebPKI to accept the cert.

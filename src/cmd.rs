@@ -895,7 +895,7 @@ command!(
     |clap: App<'static, 'static>| {
         clap.arg(Arg::with_name("container")
                       .help("Specify which container to get logs from")
-                      .required(true)
+                      .required(false)
                       .index(1))
                  .arg(Arg::with_name("follow")
                       .short("f")
@@ -961,7 +961,29 @@ command!(
         (0, Vec::new())
     },
     |matches, env, writer| {
-        let cont = matches.value_of("container").unwrap(); // required so unwrap safe
+        let cont = match matches.value_of("container") {
+            Some(c) => c,
+            None => {
+                match env.current_object {
+                    ::KObj::Pod {
+                        name: _,
+                        ref containers,
+                    } => {
+                        if containers.len() == 1 {
+                            containers[0].as_str()
+                        } else {
+                            clickwrite!(writer, "Pod has multiple containers, please specify one of: \
+                                                 {:?}\n", containers);
+                            return;
+                        }
+                    }
+                    _ =>  {
+                        clickwrite!(writer, "Need an active pod to get logs.\n");
+                        return;
+                    }
+                }
+            }
+        };
         match (&env.current_object_namespace, env.current_pod()) {
             (&Some(ref ns), Some(ref pod)) => {
                 let mut url = format!(

@@ -681,11 +681,12 @@ command!(
 command!(
     Context,
     "context",
-    "Set the current context (will clear any selected pod)",
+    "Set the current context (will clear any selected pod). \
+     With no argument, lists available contexts.",
     |clap: App<'static, 'static>| clap.arg(
         Arg::with_name("context")
             .help("The name of the context")
-            .required(true)
+            .required(false)
             .index(1)
     ),
     vec!["ctx", "context"],
@@ -707,16 +708,32 @@ command!(
     } else {
         (0, Vec::new())
     },
-    |matches, env, _| {
-        let context = matches.value_of("context");
-        if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
-            if k.name == c {
-                // no-op if we're already in the specified context
-                return;
+    |matches, env, writer| {
+        if matches.is_present("context") {
+            let context = matches.value_of("context");
+            if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
+                if k.name == c {
+                    // no-op if we're already in the specified context
+                    return;
+                }
             }
+            env.set_context(context);
+            env.clear_current();
+        } else {
+            let mut contexts: Vec<&String> = env.config.contexts.keys().collect();
+            contexts.sort();
+            let mut table = Table::new();
+            table.set_titles(row!["Context", "Api Server Address"]);
+            let ctxs = contexts.iter().map(|context| {
+                let mut row = Vec::new();
+                let cluster = env.config.clusters.get(*context).unwrap();
+                row.push(CellSpec::with_style(context, "FR"));
+                row.push(CellSpec::new(cluster.server.as_str()));
+                (context, row)
+            }).collect();
+            table.set_format(TBLFMT.clone());
+            ::table::print_table(&mut table, &ctxs, writer);            
         }
-        env.set_context(context);
-        env.clear_current();
     }
 );
 

@@ -23,7 +23,7 @@ Alternately, to build it yourself, clone the click repository and run `cargo bui
 
 ## Docker build
 
-`docker run --rm -it -v $HOME/.kube/:/root/.kube/ click`
+`docker build . -t click`
 
 # Running
 If you used `cargo install`, you can just run `click` (assuming `~/.cargo/bin` is in your PATH).

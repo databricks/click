@@ -21,6 +21,10 @@ Click is on crates.io, so you can just run `cargo install` to install it.
 
 Alternately, to build it yourself, clone the click repository and run `cargo build`.
 
+## Docker build
+
+`docker run --rm -it -v $HOME/.kube/:/root/.kube/ click`
+
 # Running
 If you used `cargo install`, you can just run `click` (assuming `~/.cargo/bin` is in your PATH).
 
@@ -33,6 +37,10 @@ configuration.  It also stores its own config in the .kube dir.  You
 can change this with the --config option.
 
 Once you're in the REPL, try typing `help` to see what you can do.
+
+## Docker
+
+`docker run --rm -it -v $HOME/.kube/:/root/.kube/ click`
 
 # Prompt
 The order of the prompt is \[context\]\[namespace\]\[object\].

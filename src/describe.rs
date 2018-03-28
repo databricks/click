@@ -25,7 +25,7 @@ use serde_json::Value;
 
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::str::FromStr;
+use std::str::{self, FromStr};
 
 pub enum DescItem<'a> {
     ValStr {
@@ -67,7 +67,22 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
                     first = false;
                     outstr.push('\t');
                     outstr.push_str(key);
-                    if secret_vals {
+
+                    let is_service_token = if secret_vals && key == "token" {
+                        let typ = v.pointer("/type").and_then(|t| t.as_str()).unwrap_or("");
+                        typ == "kubernetes.io/service-account-token"
+                    } else {
+                        false
+                    };
+
+                    if is_service_token {
+                        outstr.push_str(":\t");
+                        match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
+                            Ok(dec) => outstr.push_str(str::from_utf8(&dec[..]).
+                                                       unwrap_or("Invalid utf-8 data")),
+                            Err(_) => outstr.push_str("Could not decode secret"),
+                        }
+                    } else if secret_vals {
                         outstr.push_str(":\t");
                         match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
                             Ok(dec) => outstr.push_str(format!("{} bytes", dec.len()).as_str()),

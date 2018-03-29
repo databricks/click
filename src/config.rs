@@ -283,12 +283,8 @@ impl Config {
                             "Can't do insecure-skip-tls-verify yet, ignoring cluster: {}",
                             cluster.name
                         );
-                    //cluster_map.insert(cluster.name.clone(), ClusterConf::new(None,cluster.conf.server));
                     } else {
-                        println!(
-                            "Ignoring invalid cluster \"{}\": has no cert and tls verification not \
-                             skipped", cluster.name
-                        );
+                        cluster_map.insert(cluster.name.clone(), ClusterConf::new(None, cluster.conf.server));
                     }
                 }
             }

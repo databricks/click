@@ -30,6 +30,7 @@ mod output;
 extern crate ansi_term;
 extern crate base64;
 extern crate chrono;
+#[macro_use]
 extern crate clap;
 extern crate ctrlc;
 extern crate der_parser;
@@ -85,6 +86,7 @@ use error::KubeError;
 use kube::{DeploymentList, ConfigMapList, Kluster, NodeList, PodList, ReplicaSetList, SecretList, ServiceList};
 use output::ClickWriter;
 use values::val_str_opt;
+use std::env;
 
 /// An object we can have as a "current" thing
 enum KObj {
@@ -521,7 +523,7 @@ Examples:\n\
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")
-        .version("0.3.0")
+        .version(crate_version!())
         .author("Nick Lanham <nick@databricks.com>")
         .about("Command Line Interactive Contoller for Kubernetes")
         .arg(
@@ -553,8 +555,13 @@ fn main() {
     click_path.push("click.config");
     let click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
 
-    let mut config_path = conf_dir.clone();
-    config_path.push("config");
+    let config_path = env::var_os("KUBECONFIG")
+        .map(|p| PathBuf::from(p))
+        .unwrap_or_else(|| {
+            let mut config_path = conf_dir.clone();
+            config_path.push("config");
+            config_path
+        });
 
     let config = match Config::from_file(config_path.as_path().to_str().
                                          unwrap_or("[CONFIG_PATH_EMPTY")) {

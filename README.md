@@ -46,7 +46,7 @@ with a DNS name like "system:something".  This is technically a bad cert as DNS 
 colon in them. Since the WebPKI crate is more strict than Go, Click will not accept the cert
 from the API Server even though kubectl will.  
 
-To patch WebPKI to accept the cert (for now):
+To temporarily patch WebPKI to accept the cert:
 1. Build Click
 2. Run the `fix_bad_der.sh` script that is in the util directory
 3. Run `cargo clean`

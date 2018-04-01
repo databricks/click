@@ -14,9 +14,12 @@
 
 //! Handle reading .kube/config files
 
+use chrono::DateTime;
+use chrono::offset::{FixedOffset, Utc};
 use serde_yaml;
 
 use std::collections::HashMap;
+use std::convert::From;
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -86,11 +89,65 @@ pub struct ContextConf {
 struct IUser {
     name: String,
     #[serde(rename = "user")]
-    conf: UserConf,
+    conf: IUserConf,
+}
+
+
+
+// Classes to hold deserialized data for auth
+#[derive(Debug, Deserialize, Clone)]
+pub struct AuthProvider {
+    name: String,
+    config: AuthProviderConfig,
+}
+
+impl AuthProvider {
+    fn check_dt(&self, expiry: DateTime<FixedOffset>) -> Result<(), KubeError> {
+        let etime = expiry.with_timezone(&Utc);
+        let now = Utc::now();
+        println!("HERE: {} < {}", etime, now);
+        if etime > now {
+            Ok(())
+        } else {
+            Err(KubeError::ConfigFileError(
+                "Token is expired.  Try running a kubectl command to refresh it".to_owned()))
+        }
+    }
+    
+    fn check_expired(&self) -> Result<(), KubeError> {
+        match self.config.expiry {
+            Some(ref e) => {
+                // Somehow google sometimes puts a date like "2018-03-31 22:22:01" in the config
+                // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
+                if let Ok(expiry) = DateTime::parse_from_rfc3339(e) {
+                    self.check_dt(expiry)
+                } else if let Ok(expiry) = DateTime::parse_from_str(e,"%Y-%m-%d %H:%M:%S") {
+                    self.check_dt(expiry)
+                } else {
+                    Err(KubeError::ConfigFileError(
+                        format!("Expiry was in a format I didn't expect: {}", e)))
+                }
+            }
+            None => {
+                println!("No expiry set, cannot validate if token is still valid");
+                Ok(())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct UserConf {
+pub struct AuthProviderConfig {
+    #[serde(rename = "access-token")]
+    access_token: Option<String>,
+    expiry: Option<String>,
+}
+
+/// This represents what we can find in a user in the actual config file (note the Deserialize).
+/// Hence all the optional fields.  At some point we should write a custom deserializer for this to
+/// make it cleaner
+#[derive(Debug, Deserialize, Clone)]
+pub struct IUserConf {
     pub token: Option<String>,
     
     #[serde(rename = "client-certificate")]
@@ -104,6 +161,43 @@ pub struct UserConf {
 
     pub username: Option<String>,
     pub password: Option<String>,
+
+    #[serde(rename = "auth-provider")]
+    pub auth_provider: Option<AuthProvider>,
+}
+
+// These are the different kinds of authentication data  a user might have
+
+/// KeyCert can be either raw data from a "client-*-data" field, or a path to a file with the data
+/// from a "client-*" field.
+#[derive(Debug)]
+pub enum UserConf {
+    Token(String),
+    KeyCertPath(String, String),
+    KeyCertData(String, String),
+    UserPass(String, String),
+    AuthProvider(AuthProvider),
+    Unsupported,
+}
+
+impl From<IUserConf> for UserConf {
+    fn from(iconf: IUserConf) -> UserConf {
+        if let Some(token) = iconf.token {
+            UserConf::Token(token)
+        } else if let (Some(username), Some(password)) = (iconf.username, iconf.password) {
+            UserConf::UserPass(username, password)
+        } else if let
+            (Some(client_cert_path), Some(key_path)) = (iconf.client_cert, iconf.client_key) {
+              UserConf::KeyCertPath(client_cert_path, key_path)
+        } else if let
+            (Some(client_cert_data), Some(key_data)) = (iconf.client_cert_data, iconf.client_key_data) {
+              UserConf::KeyCertData(client_cert_data, key_data)
+        } else if let Some(auth_provider) = iconf.auth_provider {
+            UserConf::AuthProvider(auth_provider)
+        } else {
+            UserConf::Unsupported
+        }
+    }
 }
 
 impl IConfig {
@@ -298,8 +392,8 @@ impl Config {
 
         // copy over users
         let mut user_map = HashMap::new();
-        for user in iconf.users.iter() {
-            user_map.insert(user.name.clone(), user.conf.clone());
+        for user in iconf.users.into_iter() {
+            user_map.insert(user.name.clone(), user.conf.into());
         }
 
         Ok(Config {
@@ -320,27 +414,35 @@ impl Config {
                         self.users
                             .get(&ctx.user)
                             .map(|user| {
-                                let auth = if let Some(ref token) = user.token {
-                                    Ok(KlusterAuth::with_token(token.as_str()))
-                                } else if let (&Some(ref username), &Some(ref password)) =
-                                    (&user.username, &user.password)
-                                {
-                                    Ok(KlusterAuth::with_userpass(username, password))
-                                } else if let (&Some(ref client_cert_path), &Some(ref key_path)) =
-                                    (&user.client_cert, &user.client_key)
-                                {
-                                    auth_from_paths(client_cert_path.clone(),
-                                                    key_path.clone(),
-                                                    context)
-                                } else if let (&Some(ref client_cert_data), &Some(ref key_data)) =
-                                    (&user.client_cert_data, &user.client_key_data)
-                                {
-                                    auth_from_data(client_cert_data, key_data, context)
-                                } else {
-                                    Err(KubeError::ConfigFileError(format!(
-                                        "Invalid context {}.  Each user must have either a token, \
-                                         a username AND password, or a client-certificate AND \
-                                         a client-key.", context)))
+                                let auth = match user {
+                                    &UserConf::Token(ref token) => {
+                                        Ok(KlusterAuth::with_token(token.as_str()))
+                                    }
+                                    &UserConf::UserPass(ref username, ref password) => {
+                                        Ok(KlusterAuth::with_userpass(username, password))
+                                    }
+                                    &UserConf::KeyCertPath(ref cert_path, ref key_path) => {
+                                        auth_from_paths(cert_path.clone(),
+                                                        key_path.clone(),
+                                                        context)
+                                    }
+                                    &UserConf::KeyCertData(ref cert_data, ref key_data) => {
+                                        auth_from_data(cert_data, key_data, context)
+                                    }
+                                    &UserConf::AuthProvider(ref provider) => {
+                                        if let Some(ref token) = provider.config.access_token {
+                                            provider.check_expired()?;
+                                            Ok(KlusterAuth::with_token(token.as_str()))
+                                        } else {
+                                            Err(KubeError::ConfigFileError("No access token in provider".to_owned()))
+                                        }
+                                    }
+                                    _ => {
+                                        Err(KubeError::ConfigFileError(format!(
+                                            "Invalid context {}.  Each user must have either a token, \
+                                             a username AND password, or a client-certificate AND \
+                                             a client-key.", context)))
+                                    }
                                 }?;
                                 Kluster::new(
                                     context,

@@ -14,8 +14,8 @@
 
 //! Handle reading .kube/config files
 
-use chrono::DateTime;
-use chrono::offset::{FixedOffset, Utc};
+use chrono::{DateTime, Local, TimeZone};
+use chrono::offset::Utc;
 use serde_yaml;
 
 use std::collections::HashMap;
@@ -102,15 +102,15 @@ pub struct AuthProvider {
 }
 
 impl AuthProvider {
-    fn check_dt(&self, expiry: DateTime<FixedOffset>) -> Result<(), KubeError> {
+    fn check_dt<T: TimeZone>(&self, expiry: DateTime<T>) -> Result<(), KubeError> {
         let etime = expiry.with_timezone(&Utc);
         let now = Utc::now();
-        println!("HERE: {} < {}", etime, now);
         if etime > now {
             Ok(())
         } else {
             Err(KubeError::ConfigFileError(
-                "Token is expired.  Try running a kubectl command to refresh it".to_owned()))
+                "Token is expired.  Try running a kubectl command against this cluster to refresh \
+                 it".to_owned()))
         }
     }
     
@@ -121,11 +121,12 @@ impl AuthProvider {
                 // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
                 if let Ok(expiry) = DateTime::parse_from_rfc3339(e) {
                     self.check_dt(expiry)
-                } else if let Ok(expiry) = DateTime::parse_from_str(e,"%Y-%m-%d %H:%M:%S") {
+                } else if let Ok(expiry) = Local.datetime_from_str(e,"%Y-%m-%d %H:%M:%S") {
                     self.check_dt(expiry)
                 } else {
                     Err(KubeError::ConfigFileError(
-                        format!("Expiry was in a format I didn't expect: {}", e)))
+                        format!("Expiry was in a format I didn't expect: {} ({:?})", e,
+                                Local.datetime_from_str(e,"%Y-%m-%d %H:%M:%S"))))
                 }
             }
             None => {
@@ -434,7 +435,10 @@ impl Config {
                                             provider.check_expired()?;
                                             Ok(KlusterAuth::with_token(token.as_str()))
                                         } else {
-                                            Err(KubeError::ConfigFileError("No access token in provider".to_owned()))
+                                            Err(KubeError::ConfigFileError(
+                                                "No access token in provider, try running a kubectl \
+                                                 command against this cluster first, which will put \
+                                                 a token in your config.".to_owned()))
                                         }
                                     }
                                     _ => {

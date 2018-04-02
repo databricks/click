@@ -17,8 +17,9 @@
 use Env;
 use LastList;
 use describe;
-use kube::{ContainerState, ConfigMapList, DeploymentList, Event, EventList, Metadata, NamespaceList,
-           NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList, ServiceList};
+use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
+           NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
+           ServiceList};
 use output::ClickWriter;
 use table::CellSpec;
 use values::{get_val_as, val_item_count, val_str, val_u64};
@@ -96,7 +97,7 @@ where
 {
     // TODO: Should be able to not clone and use get_matches_from_safe_borrow, but
     // that causes weird errors involving conflicting arguments being used
-    // between invocations of commands 
+    // between invocations of commands
     match clap.borrow_mut().clone().get_matches_from_safe(args) {
         Ok(matches) => {
             func(matches, env, writer);
@@ -724,15 +725,18 @@ command!(
             contexts.sort();
             let mut table = Table::new();
             table.set_titles(row!["Context", "Api Server Address"]);
-            let ctxs = contexts.iter().map(|context| {
-                let mut row = Vec::new();
-                let cluster = env.config.clusters.get(*context).unwrap();
-                row.push(CellSpec::with_style(context, "FR"));
-                row.push(CellSpec::new(cluster.server.as_str()));
-                (context, row)
-            }).collect();
+            let ctxs = contexts
+                .iter()
+                .map(|context| {
+                    let mut row = Vec::new();
+                    let cluster = env.config.clusters.get(*context).unwrap();
+                    row.push(CellSpec::with_style(context, "FR"));
+                    row.push(CellSpec::new(cluster.server.as_str()));
+                    (context, row)
+                })
+                .collect();
             table.set_format(TBLFMT.clone());
-            ::table::print_table(&mut table, &ctxs, writer);            
+            ::table::print_table(&mut table, &ctxs, writer);
         }
     }
 );
@@ -963,26 +967,28 @@ command!(
     |matches, env, writer| {
         let cont = match matches.value_of("container") {
             Some(c) => c,
-            None => {
-                match env.current_object {
-                    ::KObj::Pod {
-                        name: _,
-                        ref containers,
-                    } => {
-                        if containers.len() == 1 {
-                            containers[0].as_str()
-                        } else {
-                            clickwrite!(writer, "Pod has multiple containers, please specify one of: \
-                                                 {:?}\n", containers);
-                            return;
-                        }
-                    }
-                    _ =>  {
-                        clickwrite!(writer, "Need an active pod to get logs.\n");
+            None => match env.current_object {
+                ::KObj::Pod {
+                    name: _,
+                    ref containers,
+                } => {
+                    if containers.len() == 1 {
+                        containers[0].as_str()
+                    } else {
+                        clickwrite!(
+                            writer,
+                            "Pod has multiple containers, please specify one of: \
+                             {:?}\n",
+                            containers
+                        );
                         return;
                     }
                 }
-            }
+                _ => {
+                    clickwrite!(writer, "Need an active pod to get logs.\n");
+                    return;
+                }
+            },
         };
         match (&env.current_object_namespace, env.current_pod()) {
             (&Some(ref ns), Some(ref pod)) => {
@@ -1002,7 +1008,7 @@ command!(
                     );
                 }
                 if matches.is_present("since") {
-                     // all unwraps already validated
+                    // all unwraps already validated
                     let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
                     url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
                 }
@@ -1021,36 +1027,41 @@ command!(
                     env.ctrlcbool.store(false, Ordering::SeqCst);
                     if matches.is_present("editor") {
                         // We're opening in an editor, save to a temp
-                        let editor =
-                            if let Some(v) = matches.value_of("editor") {
-                                v.to_owned()
-                            }
-                            else if let Some(ref e) = env.click_config.editor {
-                                e.clone()
-                            }
-                            else {
-                                match std::env::var("EDITOR") {
-                                    Ok(ed) => ed,
-                                    Err(e) => {
-                                        clickwrite!(writer,
-                                                    "Could not get EDITOR environment \
-                                                     variable: {}\n",
-                                                    e.description());
-                                        return;
-                                    }
+                        let editor = if let Some(v) = matches.value_of("editor") {
+                            v.to_owned()
+                        } else if let Some(ref e) = env.click_config.editor {
+                            e.clone()
+                        } else {
+                            match std::env::var("EDITOR") {
+                                Ok(ed) => ed,
+                                Err(e) => {
+                                    clickwrite!(
+                                        writer,
+                                        "Could not get EDITOR environment \
+                                         variable: {}\n",
+                                        e.description()
+                                    );
+                                    return;
                                 }
-                            };
+                            }
+                        };
                         let tmpdir = match &env.tempdir {
                             &Ok(ref td) => td,
                             &Err(ref e) => {
-                                clickwrite!(writer, "Failed to create tempdir: {}\n",
-                                            e.description());
+                                clickwrite!(
+                                    writer,
+                                    "Failed to create tempdir: {}\n",
+                                    e.description()
+                                );
                                 return;
                             }
                         };
-                        let file_path = tmpdir.path().join(format!("{}_{}_{}.log",
-                                                                   pod, cont,
-                                                                   Local::now().to_rfc3339()));
+                        let file_path = tmpdir.path().join(format!(
+                            "{}_{}_{}.log",
+                            pod,
+                            cont,
+                            Local::now().to_rfc3339()
+                        ));
                         match std::fs::File::create(&file_path) {
                             Ok(mut file) => {
                                 let mut buffer = [0; 1024];
@@ -1061,24 +1072,30 @@ command!(
                                                 break;
                                             }
                                             if let Err(e) = file.write(&buffer[0..amt]) {
-                                                clickwrite!(writer,
-                                                            "Failed to write to file: {}\n",
-                                                            e.description());
+                                                clickwrite!(
+                                                    writer,
+                                                    "Failed to write to file: {}\n",
+                                                    e.description()
+                                                );
                                                 return;
                                             }
                                         }
                                         Err(e) => {
-                                            clickwrite!(writer,
-                                                        "Failed to read from remote: {}\n",
-                                                        e.description());
+                                            clickwrite!(
+                                                writer,
+                                                "Failed to read from remote: {}\n",
+                                                e.description()
+                                            );
                                         }
                                     }
                                 }
                                 // file is created, run $EDITOR on it
                                 if let Err(e) = file.flush() {
-                                    clickwrite!(writer,
-                                                "Could not flush file: {}, data may be absent.\n",
-                                                e.description());
+                                    clickwrite!(
+                                        writer,
+                                        "Could not flush file: {}, data may be absent.\n",
+                                        e.description()
+                                    );
                                 }
                                 clickwrite!(writer, "Starting editor\n");
                                 let expr = if editor.contains(" ") {
@@ -1090,17 +1107,22 @@ command!(
                                     cmd!(editor, file_path)
                                 };
                                 if let Err(e) = expr.start() {
-                                    clickwrite!(writer, "Could not start editor: {}\n",
-                                                e.description());
+                                    clickwrite!(
+                                        writer,
+                                        "Could not start editor: {}\n",
+                                        e.description()
+                                    );
                                 }
                             }
                             Err(e) => {
-                                clickwrite!(writer, "Could not create temp file: {}\n",
-                                            e.description());
+                                clickwrite!(
+                                    writer,
+                                    "Could not create temp file: {}\n",
+                                    e.description()
+                                );
                             }
                         }
-                    }
-                    else {
+                    } else {
                         while !env.ctrlcbool.load(Ordering::SeqCst) {
                             if let Ok(amt) = reader.read_line(&mut line) {
                                 if amt > 0 {
@@ -1203,10 +1225,7 @@ command!(
             }
             ::KObj::ConfigMap(ref config_map) => {
                 if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/api/v1/namespaces/{}/configmaps/{}",
-                        ns, config_map
-                    );
+                    let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
                     let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(cval) = cm_value {
                         if matches.is_present("json") {
@@ -1263,21 +1282,24 @@ command!(
             .required(true)
             .index(1)
     ).arg(
-        Arg::with_name("container")
-            .short("c")
-            .long("container")
-            .help("Exec in the specified container")
-            .takes_value(true)
-    ).arg(
-        Arg::with_name("terminal")
-            .short("t")
-            .long("terminal")
-            .help("Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
-                   terminal command, otherwise the default is used ('set terminal <value>' to \
-                   specify default)")
-            .takes_value(true)
-            .min_values(0)
-    ),
+            Arg::with_name("container")
+                .short("c")
+                .long("container")
+                .help("Exec in the specified container")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("terminal")
+                .short("t")
+                .long("terminal")
+                .help(
+                    "Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
+                     terminal command, otherwise the default is used ('set terminal <value>' to \
+                     specify default)"
+                )
+                .takes_value(true)
+                .min_values(0)
+        ),
     vec!["exec"],
     noop_complete,
     |matches, env, writer| {
@@ -1309,14 +1331,18 @@ command!(
                     &kluster.name,
                     "exec",
                     "-it",
-                    pod
+                    pod,
                 ];
                 targs.append(&mut kubectl_args);
                 targs.append(&mut contargs);
                 targs.push(cmd);
                 clickwrite!(writer, "Starting in terminal\n");
                 if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
-                    clickwrite!(writer, "Could not launch in terminal: {}\n", e.description());
+                    clickwrite!(
+                        writer,
+                        "Could not launch in terminal: {}\n",
+                        e.description()
+                    );
                 }
             } else {
                 let status = Command::new("kubectl")
@@ -1345,7 +1371,8 @@ command!(
     Delete,
     "delete",
     "Delete the active object (will ask for confirmation)",
-    |clap: App<'static, 'static>| clap.arg(
+    |clap: App<'static, 'static>| {
+        clap.arg(
         Arg::with_name("grace")
             .short("g")
             .long("gracePeriod")
@@ -1371,7 +1398,8 @@ command!(
           .takes_value(false)
           .conflicts_with("grace")
           .conflicts_with("now")
-    ),
+    )
+    },
     vec!["delete"],
     noop_complete,
     |matches, env, writer| {
@@ -1399,31 +1427,19 @@ command!(
                 ::KObj::Service(ref service) => {
                     clickwrite!(writer, "Delete service {} [y/N]? ", service);
                     no_delete_opts = true;
-                    Some(format!(
-                        "/api/v1/namespaces/{}/services/{}",
-                        ns, service
-                    ))
+                    Some(format!("/api/v1/namespaces/{}/services/{}", ns, service))
                 }
                 ::KObj::ConfigMap(ref cm) => {
                     clickwrite!(writer, "Delete configmap {} [y/N]? ", cm);
-                    Some(format!(
-                        "/api/v1/namespaces/{}/configmaps/{}",
-                        ns, cm
-                    ))
+                    Some(format!("/api/v1/namespaces/{}/configmaps/{}", ns, cm))
                 }
                 ::KObj::Secret(ref secret) => {
                     clickwrite!(writer, "Delete secret {} [y/N]? ", secret);
-                    Some(format!(
-                        "/api/v1/namespaces/{}/secrets/{}",
-                        ns, secret
-                    ))
+                    Some(format!("/api/v1/namespaces/{}/secrets/{}", ns, secret))
                 }
                 ::KObj::Node(ref node) => {
                     clickwrite!(writer, "Delete node {} [y/N]? ", node);
-                    Some(format!(
-                        "/api/v1/nodes/{}",
-                        node
-                    ))
+                    Some(format!("/api/v1/nodes/{}", node))
                 }
                 ::KObj::None => {
                     write!(stderr(), "No active object\n").unwrap_or(());
@@ -1436,7 +1452,8 @@ command!(
                     if conf.trim() == "y" || conf.trim() == "yes" {
                         let mut policy = "Foreground";
                         if let Some(cascade) = matches.value_of("cascade") {
-                            if !(cascade.parse::<bool>()).unwrap() { // safe as validated
+                            if !(cascade.parse::<bool>()).unwrap() {
+                                // safe as validated
                                 policy = "Orphan";
                             }
                         }
@@ -1453,24 +1470,31 @@ command!(
                                 if graceu32 == 0 {
                                     // don't allow zero, make it one.  zero is force delete which
                                     // can mess things up.
-                                    delete_body.as_object_mut().unwrap().insert(
-                                        "gracePeriodSeconds".to_owned(), json!(1));
+                                    delete_body
+                                        .as_object_mut()
+                                        .unwrap()
+                                        .insert("gracePeriodSeconds".to_owned(), json!(1));
                                 } else {
                                     // already validated that it's a legit number
-                                    delete_body.as_object_mut().unwrap().insert(
-                                        "gracePeriodSeconds".to_owned(), json!(graceu32));
+                                    delete_body
+                                        .as_object_mut()
+                                        .unwrap()
+                                        .insert("gracePeriodSeconds".to_owned(), json!(graceu32));
                                 }
                             } else if matches.is_present("force") {
-                                delete_body.as_object_mut().unwrap().insert(
-                                    "gracePeriodSeconds".to_owned(), json!(0));
+                                delete_body
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .insert("gracePeriodSeconds".to_owned(), json!(0));
                             } else if matches.is_present("now") {
-                                delete_body.as_object_mut().unwrap().insert(
-                                    "gracePeriodSeconds".to_owned(), json!(1));
+                                delete_body
+                                    .as_object_mut()
+                                    .unwrap()
+                                    .insert("gracePeriodSeconds".to_owned(), json!(1));
                             }
                             Some(delete_body.to_string())
                         };
-                        let result = env.run_on_kluster(|k| k.delete(url.as_str(),
-                                                                     delete_body));
+                        let result = env.run_on_kluster(|k| k.delete(url.as_str(), delete_body));
                         if let Some(x) = result {
                             if x.status.is_success() {
                                 clickwrite!(writer, "Deleted\n");
@@ -1735,7 +1759,6 @@ command!(
     }
 );
 
-
 command!(
     Deployments,
     "deployments",
@@ -1952,7 +1975,6 @@ command!(
         }
     }
 );
-
 
 fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWriter) -> SecretList {
     let mut table = Table::new();

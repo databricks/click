@@ -83,7 +83,8 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{DeploymentList, ConfigMapList, Kluster, NodeList, PodList, ReplicaSetList, SecretList, ServiceList};
+use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
+           ServiceList};
 use output::ClickWriter;
 use values::val_str_opt;
 use std::env;
@@ -177,7 +178,7 @@ impl Env {
             .save_to_file(click_path.as_path().to_str().unwrap())
             .unwrap();
     }
-    
+
     // sets the prompt string based on current settings
     fn set_prompt(&mut self) {
         self.prompt = format!(
@@ -435,8 +436,14 @@ impl fmt::Display for Env {
             },
             self.config.contexts.keys(),
             self.config.source_file,
-            self.click_config.editor.as_ref().unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
-            self.click_config.terminal.as_ref().unwrap_or(&"<unset, will use xterm>".to_owned()),
+            self.click_config
+                .editor
+                .as_ref()
+                .unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
+            self.click_config
+                .terminal
+                .as_ref()
+                .unwrap_or(&"<unset, will use xterm>".to_owned()),
         )
     }
 }
@@ -563,13 +570,22 @@ fn main() {
             config_path
         });
 
-    let config = match Config::from_file(config_path.as_path().to_str().
-                                         unwrap_or("[CONFIG_PATH_EMPTY")) {
+    let config = match Config::from_file(
+        config_path
+            .as_path()
+            .to_str()
+            .unwrap_or("[CONFIG_PATH_EMPTY"),
+    ) {
         Ok(c) => c,
         Err(e) => {
-            println!("Could not load kubernetes config: '{}'. Cannot continue.  Error was: {}",
-                     config_path.as_path().to_str().unwrap_or("[CONFIG_PATH_EMPTY"),
-                     e.description());
+            println!(
+                "Could not load kubernetes config: '{}'. Cannot continue.  Error was: {}",
+                config_path
+                    .as_path()
+                    .to_str()
+                    .unwrap_or("[CONFIG_PATH_EMPTY"),
+                e.description()
+            );
             return;
         }
     };

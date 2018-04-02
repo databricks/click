@@ -154,22 +154,42 @@ impl AuthProvider {
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<String>) {
         match self.config.cmd_path {
             Some(ref conf_cmd) => {
-                //println!("DO CALL: {} {:?}", cmd, self.config.cmd_args);
                 let args = self.config.cmd_args.as_ref().map(|argstr| argstr.split_whitespace().collect()).
                     unwrap_or(vec!());
                 match cmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         let v: Value = serde_json::from_str(output.as_str()).unwrap();
-                        let token_pointer = self.make_pointer(self.config.token_key.as_ref().unwrap().as_str());
-                        let expiry_pointer = self.make_pointer(self.config.expiry_key.as_ref().unwrap().as_str());
-                        let extracted_token = v.pointer(token_pointer.as_str()).and_then(|tv| {
-                            tv.as_str()
-                        });
-                        let extracted_expiry = v.pointer(expiry_pointer.as_str()).and_then(|ev| {
-                            ev.as_str()
-                        });
-                        *token = extracted_token.map(|t| t.to_owned());
-                        *expiry = extracted_expiry.map(|e| e.to_owned());
+                        let mut updated_token = false;
+                        match self.config.token_key.as_ref() {
+                            Some(ref tk) => {
+                                let token_pntr = self.make_pointer(tk.as_str());
+                                let extracted_token = v.pointer(token_pntr.as_str()).and_then(|tv| {
+                                    tv.as_str()
+                                });
+                                *token = extracted_token.map(|t| t.to_owned());
+                                updated_token = true;
+                            }
+                            None => {
+                                println!("No token-key in auth-provider, cannot extract token");
+                            }
+                        }
+
+                        if updated_token {
+                            match self.config.expiry_key.as_ref() {
+                                Some(ref ek) => {
+                                    let expiry_pntr = self.make_pointer(ek.as_str());
+                                    let extracted_expiry = v.pointer(expiry_pntr.as_str()).
+                                        and_then(|ev| {
+                                            ev.as_str()
+                                        });
+                                    *expiry = extracted_expiry.map(|e| e.to_owned());
+                                }
+                                None => {
+                                    println!("No expiry-key in config, will have to pull a new \
+                                              token on every command");
+                                }
+                            }
+                        }
                     }
                     Err(e) => {
                         println!("Failed to run update command: {}", e);
@@ -188,14 +208,18 @@ impl AuthProvider {
         if token.is_none() || self.is_expired() {
             // update
             let mut expiry = self.expiry.borrow_mut();
+            *token = None;
             self.update_token(&mut token, &mut expiry)
         }
-        if token.is_none() {
-            println!("Couldn't get an authentication token. You can try exiting Click and running \
-                      a kubectl command against the cluster to refresh it. Also please report this \
-                      error on the Click github page.");
+        match token.as_ref() {
+            Some(t) => t.clone(),
+            None => {
+                println!("Couldn't get an authentication token. You can try exiting Click and \
+                          running a kubectl command against the cluster to refresh it. Also please \
+                          report this error on the Click github page.");
+                "".to_owned()
+            }
         }
-        token.as_ref().unwrap().clone()
     }
 }
 

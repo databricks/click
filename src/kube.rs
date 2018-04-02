@@ -37,6 +37,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use config::AuthProvider;
 use connector::ClickSslConnector;
 use error::{KubeErrNo, KubeError};
 
@@ -360,6 +361,7 @@ pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
     CertKey(Vec<Certificate>, PrivateKey),
+    AuthProvider(AuthProvider),
 }
 
 impl KlusterAuth {
@@ -373,6 +375,10 @@ impl KlusterAuth {
     
     pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> KlusterAuth {
         KlusterAuth::CertKey(vec![cert], private_key)
+    }
+
+    pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
+        KlusterAuth::AuthProvider(auth_provider)
     }
 }
 
@@ -452,13 +458,19 @@ impl Kluster {
                     token: token.clone(),
                 }))
             },
+            KlusterAuth::AuthProvider(ref auth_provider) => {
+                let token = auth_provider.ensure_token();
+                req.header(Authorization(Bearer {
+                    token: token,
+                }))
+            },
             KlusterAuth::UserPass(ref user, ref pass) => {
                 req.header(Authorization(Basic {
                     username: user.clone(),
                     password: Some(pass.clone()),
                 }))
             },
-            KlusterAuth::CertKey(..) => req
+            KlusterAuth::CertKey(..) => req,
         }
     }
     

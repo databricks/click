@@ -16,8 +16,12 @@
 
 use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
+use duct::cmd;
+use serde_json::{self, Value};
 use serde_yaml;
 
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
 use std::env;
@@ -98,24 +102,30 @@ struct IUser {
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthProvider {
     name: String,
-    config: AuthProviderConfig,
+    pub token: RefCell<Option<String>>,
+    pub expiry: RefCell<Option<String>>,
+    pub config: AuthProviderConfig,
 }
 
 impl AuthProvider {
-    fn check_dt<T: TimeZone>(&self, expiry: DateTime<T>) -> Result<(), KubeError> {
-        let etime = expiry.with_timezone(&Utc);
-        let now = Utc::now();
-        if etime > now {
-            Ok(())
-        } else {
-            Err(KubeError::ConfigFileError(
-                "Token is expired.  Try running a kubectl command against this cluster to refresh \
-                 it".to_owned()))
-        }
+    // Copy the token and expiry out of the config into the refcells
+    fn copy_up(&self) {
+        let mut token = self.token.borrow_mut();
+        *token = Some(self.config.access_token.clone().unwrap());
+        let mut expiry = self.expiry.borrow_mut();
+        *expiry = Some(self.config.expiry.clone().unwrap());
     }
     
-    fn check_expired(&self) -> Result<(), KubeError> {
-        match self.config.expiry {
+    // true if expiry is before now
+    fn check_dt<T: TimeZone>(&self, expiry: DateTime<T>) -> bool {
+        let etime = expiry.with_timezone(&Utc);
+        let now = Utc::now();
+        etime < now
+    }
+    
+    fn is_expired(&self) -> bool {
+        let expiry = self.expiry.borrow();
+        match *expiry {
             Some(ref e) => {
                 // Somehow google sometimes puts a date like "2018-03-31 22:22:01" in the config
                 // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
@@ -124,24 +134,86 @@ impl AuthProvider {
                 } else if let Ok(expiry) = Local.datetime_from_str(e,"%Y-%m-%d %H:%M:%S") {
                     self.check_dt(expiry)
                 } else {
-                    Err(KubeError::ConfigFileError(
-                        format!("Expiry was in a format I didn't expect: {} ({:?})", e,
-                                Local.datetime_from_str(e,"%Y-%m-%d %H:%M:%S"))))
+                    true
                 }
             }
             None => {
                 println!("No expiry set, cannot validate if token is still valid");
-                Ok(())
+                false
             }
         }
+    }
+
+    // Turn a {.credential.expiry_key} type string into a serde_json pointer string like
+    // /credential/expiry_key
+    fn make_pointer(&self, s: &str) -> String {
+        let l = s.len()-1;
+        let split = &s[1..l].split('.');
+        split.clone().collect::<Vec<&str>>().join("/")
+    }
+    
+    fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<String>) {
+        match self.config.cmd_path {
+            Some(ref conf_cmd) => {
+                //println!("DO CALL: {} {:?}", cmd, self.config.cmd_args);
+                let args = self.config.cmd_args.as_ref().map(|argstr| argstr.split_whitespace().collect()).
+                    unwrap_or(vec!());
+                match cmd(conf_cmd, &args).read() {
+                    Ok(output) => {
+                        let v: Value = serde_json::from_str(output.as_str()).unwrap();
+                        let token_pointer = self.make_pointer(self.config.token_key.as_ref().unwrap().as_str());
+                        let expiry_pointer = self.make_pointer(self.config.expiry_key.as_ref().unwrap().as_str());
+                        let extracted_token = v.pointer(token_pointer.as_str()).and_then(|tv| {
+                            tv.as_str()
+                        });
+                        let extracted_expiry = v.pointer(expiry_pointer.as_str()).and_then(|ev| {
+                            ev.as_str()
+                        });
+                        *token = extracted_token.map(|t| t.to_owned());
+                        *expiry = extracted_expiry.map(|e| e.to_owned());
+                    }
+                    Err(e) => {
+                        println!("Failed to run update command: {}", e);
+                    }
+                }
+            }
+            None => {
+                println!("No update command specified, can't update");
+            }
+        }
+    }
+    
+    /// Checks that we have a valid token, and if not, attempts to update it based on the config
+    pub fn ensure_token(&self) -> String {
+        let mut token = self.token.borrow_mut();
+        if token.is_none() || self.is_expired() {
+            // update
+            let mut expiry = self.expiry.borrow_mut();
+            self.update_token(&mut token, &mut expiry)
+        }
+        if token.is_none() {
+            println!("Couldn't get an authentication token. You can try exiting Click and running \
+                      a kubectl command against the cluster to refresh it. Also please report this \
+                      error on the Click github page.");
+        }
+        token.as_ref().unwrap().clone()
     }
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthProviderConfig {
     #[serde(rename = "access-token")]
-    access_token: Option<String>,
+    pub access_token: Option<String>,
     expiry: Option<String>,
+
+    #[serde(rename = "cmd-args")]
+    cmd_args: Option<String>,
+    #[serde(rename = "cmd-path")]
+    cmd_path: Option<String>,
+    #[serde(rename = "expiry-key")]
+    expiry_key: Option<String>,
+    #[serde(rename = "token-key")]
+    token_key: Option<String>,
 }
 
 /// This represents what we can find in a user in the actual config file (note the Deserialize).
@@ -432,8 +504,8 @@ impl Config {
                                     }
                                     &UserConf::AuthProvider(ref provider) => {
                                         if let Some(ref token) = provider.config.access_token {
-                                            provider.check_expired()?;
-                                            Ok(KlusterAuth::with_token(token.as_str()))
+                                            provider.copy_up();
+                                            Ok(KlusterAuth::with_auth_provider(provider.clone()))
                                         } else {
                                             Err(KubeError::ConfigFileError(
                                                 "No access token in provider, try running a kubectl \

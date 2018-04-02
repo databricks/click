@@ -78,8 +78,8 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
                     if is_service_token {
                         outstr.push_str(":\t");
                         match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
-                            Ok(dec) => outstr.push_str(str::from_utf8(&dec[..]).
-                                                       unwrap_or("Invalid utf-8 data")),
+                            Ok(dec) => outstr
+                                .push_str(str::from_utf8(&dec[..]).unwrap_or("Invalid utf-8 data")),
                             Err(_) => outstr.push_str("Could not decode secret"),
                         }
                     } else if secret_vals {

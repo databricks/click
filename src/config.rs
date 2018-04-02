@@ -43,18 +43,14 @@ struct IConfig {
 #[derive(Debug, Deserialize)]
 struct ICluster {
     name: String,
-    #[serde(rename = "cluster")]
-    conf: IClusterConf,
+    #[serde(rename = "cluster")] conf: IClusterConf,
 }
 
 #[derive(Debug, Deserialize)]
 struct IClusterConf {
-    #[serde(rename = "certificate-authority")]
-    pub cert: Option<String>,
-    #[serde(rename = "certificate-authority-data")]
-    pub cert_data: Option<String>,
-    #[serde(rename = "insecure-skip-tls-verify")]
-    pub skip_tls: Option<bool>,
+    #[serde(rename = "certificate-authority")] pub cert: Option<String>,
+    #[serde(rename = "certificate-authority-data")] pub cert_data: Option<String>,
+    #[serde(rename = "insecure-skip-tls-verify")] pub skip_tls: Option<bool>,
     pub server: String,
 }
 
@@ -76,8 +72,7 @@ impl ClusterConf {
 #[derive(Debug, Deserialize)]
 struct IContext {
     name: String,
-    #[serde(rename = "context")]
-    conf: ContextConf,
+    #[serde(rename = "context")] conf: ContextConf,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -91,11 +86,8 @@ pub struct ContextConf {
 #[derive(Debug, Deserialize)]
 struct IUser {
     name: String,
-    #[serde(rename = "user")]
-    conf: IUserConf,
+    #[serde(rename = "user")] conf: IUserConf,
 }
-
-
 
 // Classes to hold deserialized data for auth
 #[derive(Debug, Deserialize, Clone)]
@@ -114,14 +106,14 @@ impl AuthProvider {
         let mut expiry = self.expiry.borrow_mut();
         *expiry = self.config.expiry.clone();
     }
-    
+
     // true if expiry is before now
     fn check_dt<T: TimeZone>(&self, expiry: DateTime<T>) -> bool {
         let etime = expiry.with_timezone(&Utc);
         let now = Utc::now();
         etime < now
     }
-    
+
     fn is_expired(&self) -> bool {
         let expiry = self.expiry.borrow();
         match *expiry {
@@ -130,7 +122,7 @@ impl AuthProvider {
                 // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
                 if let Ok(expiry) = DateTime::parse_from_rfc3339(e) {
                     self.check_dt(expiry)
-                } else if let Ok(expiry) = Local.datetime_from_str(e,"%Y-%m-%d %H:%M:%S") {
+                } else if let Ok(expiry) = Local.datetime_from_str(e, "%Y-%m-%d %H:%M:%S") {
                     self.check_dt(expiry)
                 } else {
                     true
@@ -146,16 +138,19 @@ impl AuthProvider {
     // Turn a {.credential.expiry_key} type string into a serde_json pointer string like
     // /credential/expiry_key
     fn make_pointer(&self, s: &str) -> String {
-        let l = s.len()-1;
+        let l = s.len() - 1;
         let split = &s[1..l].split('.');
         split.clone().collect::<Vec<&str>>().join("/")
     }
-    
+
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<String>) {
         match self.config.cmd_path {
             Some(ref conf_cmd) => {
-                let args = self.config.cmd_args.as_ref().map(|argstr| argstr.split_whitespace().collect()).
-                    unwrap_or(vec!());
+                let args = self.config
+                    .cmd_args
+                    .as_ref()
+                    .map(|argstr| argstr.split_whitespace().collect())
+                    .unwrap_or(vec![]);
                 match cmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         let v: Value = serde_json::from_str(output.as_str()).unwrap();
@@ -163,9 +158,8 @@ impl AuthProvider {
                         match self.config.token_key.as_ref() {
                             Some(ref tk) => {
                                 let token_pntr = self.make_pointer(tk.as_str());
-                                let extracted_token = v.pointer(token_pntr.as_str()).and_then(|tv| {
-                                    tv.as_str()
-                                });
+                                let extracted_token =
+                                    v.pointer(token_pntr.as_str()).and_then(|tv| tv.as_str());
                                 *token = extracted_token.map(|t| t.to_owned());
                                 updated_token = true;
                             }
@@ -178,15 +172,15 @@ impl AuthProvider {
                             match self.config.expiry_key.as_ref() {
                                 Some(ref ek) => {
                                     let expiry_pntr = self.make_pointer(ek.as_str());
-                                    let extracted_expiry = v.pointer(expiry_pntr.as_str()).
-                                        and_then(|ev| {
-                                            ev.as_str()
-                                        });
+                                    let extracted_expiry =
+                                        v.pointer(expiry_pntr.as_str()).and_then(|ev| ev.as_str());
                                     *expiry = extracted_expiry.map(|e| e.to_owned());
                                 }
                                 None => {
-                                    println!("No expiry-key in config, will have to pull a new \
-                                              token on every command");
+                                    println!(
+                                        "No expiry-key in config, will have to pull a new \
+                                         token on every command"
+                                    );
                                 }
                             }
                         }
@@ -201,7 +195,7 @@ impl AuthProvider {
             }
         }
     }
-    
+
     /// Checks that we have a valid token, and if not, attempts to update it based on the config
     pub fn ensure_token(&self) -> String {
         let mut token = self.token.borrow_mut();
@@ -214,9 +208,11 @@ impl AuthProvider {
         match token.as_ref() {
             Some(t) => t.clone(),
             None => {
-                println!("Couldn't get an authentication token. You can try exiting Click and \
-                          running a kubectl command against the cluster to refresh it. Also please \
-                          report this error on the Click github page.");
+                println!(
+                    "Couldn't get an authentication token. You can try exiting Click and \
+                     running a kubectl command against the cluster to refresh it. Also please \
+                     report this error on the Click github page."
+                );
                 "".to_owned()
             }
         }
@@ -225,18 +221,13 @@ impl AuthProvider {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthProviderConfig {
-    #[serde(rename = "access-token")]
-    pub access_token: Option<String>,
+    #[serde(rename = "access-token")] pub access_token: Option<String>,
     expiry: Option<String>,
 
-    #[serde(rename = "cmd-args")]
-    cmd_args: Option<String>,
-    #[serde(rename = "cmd-path")]
-    cmd_path: Option<String>,
-    #[serde(rename = "expiry-key")]
-    expiry_key: Option<String>,
-    #[serde(rename = "token-key")]
-    token_key: Option<String>,
+    #[serde(rename = "cmd-args")] cmd_args: Option<String>,
+    #[serde(rename = "cmd-path")] cmd_path: Option<String>,
+    #[serde(rename = "expiry-key")] expiry_key: Option<String>,
+    #[serde(rename = "token-key")] token_key: Option<String>,
 }
 
 /// This represents what we can find in a user in the actual config file (note the Deserialize).
@@ -245,21 +236,16 @@ pub struct AuthProviderConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct IUserConf {
     pub token: Option<String>,
-    
-    #[serde(rename = "client-certificate")]
-    pub client_cert: Option<String>,
-    #[serde(rename = "client-key")]
-    pub client_key: Option<String>,
-    #[serde(rename = "client-certificate-data")]
-    pub client_cert_data: Option<String>,
-    #[serde(rename = "client-key-data")]
-    pub client_key_data: Option<String>,
+
+    #[serde(rename = "client-certificate")] pub client_cert: Option<String>,
+    #[serde(rename = "client-key")] pub client_key: Option<String>,
+    #[serde(rename = "client-certificate-data")] pub client_cert_data: Option<String>,
+    #[serde(rename = "client-key-data")] pub client_key_data: Option<String>,
 
     pub username: Option<String>,
     pub password: Option<String>,
 
-    #[serde(rename = "auth-provider")]
-    pub auth_provider: Option<AuthProvider>,
+    #[serde(rename = "auth-provider")] pub auth_provider: Option<AuthProvider>,
 }
 
 // These are the different kinds of authentication data  a user might have
@@ -282,12 +268,14 @@ impl From<IUserConf> for UserConf {
             UserConf::Token(token)
         } else if let (Some(username), Some(password)) = (iconf.username, iconf.password) {
             UserConf::UserPass(username, password)
-        } else if let
-            (Some(client_cert_path), Some(key_path)) = (iconf.client_cert, iconf.client_key) {
-              UserConf::KeyCertPath(client_cert_path, key_path)
-        } else if let
-            (Some(client_cert_data), Some(key_data)) = (iconf.client_cert_data, iconf.client_key_data) {
-              UserConf::KeyCertData(client_cert_data, key_data)
+        } else if let (Some(client_cert_path), Some(key_path)) =
+            (iconf.client_cert, iconf.client_key)
+        {
+            UserConf::KeyCertPath(client_cert_path, key_path)
+        } else if let (Some(client_cert_data), Some(key_data)) =
+            (iconf.client_cert_data, iconf.client_key_data)
+        {
+            UserConf::KeyCertData(client_cert_data, key_data)
         } else if let Some(auth_provider) = iconf.auth_provider {
             UserConf::AuthProvider(auth_provider)
         } else {
@@ -299,10 +287,12 @@ impl From<IUserConf> for UserConf {
 impl IConfig {
     fn from_file(path: &str) -> Result<IConfig, io::Error> {
         let f = File::open(path)?;
-        serde_yaml::from_reader(f).map_err(|e|
-                                           io::Error::new(io::ErrorKind::Other,
-                                                          format!("Couldn't read yaml: {}",
-                                                                  e.description())))
+        serde_yaml::from_reader(f).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Couldn't read yaml: {}", e.description()),
+            )
+        })
     }
 }
 
@@ -319,22 +309,22 @@ pub struct Config {
 // some utility functions
 fn get_full_path(path: String) -> Result<String, KubeError> {
     if path.is_empty() {
-        return Err(KubeError::ConfigFileError("Empty certificate/key path".to_owned()));
+        return Err(KubeError::ConfigFileError(
+            "Empty certificate/key path".to_owned(),
+        ));
     }
     // unwrap okay, validated above
     if path.chars().next().unwrap() == '/' {
         Ok(path)
     } else if let Some(home_dir) = env::home_dir() {
-        Ok(format!(
-            "{}/.kube/{}",
-            home_dir.as_path().display(),
-            path
-        ))
+        Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
-        return Err(KubeError::ConfigFileError("Could not get path kubernetes \
-                                               certificates/keys (not fully specified, and \
-                                               your home directory is not known."
-                                              .to_owned()));
+        return Err(KubeError::ConfigFileError(
+            "Could not get path kubernetes \
+             certificates/keys (not fully specified, and \
+             your home directory is not known."
+                .to_owned(),
+        ));
     }
 }
 
@@ -350,8 +340,10 @@ fn auth_from_paths(
         )));
     }
     if key_path.len() == 0 {
-        return Err(KubeError::ConfigFileError(
-            format!("Empty client key path for {}, can't continue", context)));
+        return Err(KubeError::ConfigFileError(format!(
+            "Empty client key path for {}, can't continue",
+            context
+        )));
     }
 
     let cert_full_path = get_full_path(client_cert_path)?;
@@ -363,7 +355,9 @@ fn auth_from_paths(
         Ok(KlusterAuth::with_cert_and_key(cert, private_key))
     } else {
         Err(KubeError::ConfigFileError(format!(
-            "Can't read/convert cert or private key for {}", context)))
+            "Can't read/convert cert or private key for {}",
+            context
+        )))
     }
 }
 
@@ -375,30 +369,35 @@ fn auth_from_data(
     if client_cert_data.len() == 0 {
         Err(KubeError::ConfigFileError(format!(
             "Empty client certificate data for {}, can't continue",
-            context)))
-    }
-    else if key_data.len() == 0 {
+            context
+        )))
+    } else if key_data.len() == 0 {
         Err(KubeError::ConfigFileError(format!(
-            "Empty client key data for {}, can't continue", context)))
+            "Empty client key data for {}, can't continue",
+            context
+        )))
     } else {
         let mut cert_enc = ::base64::decode(client_cert_data.as_str())?;
         cert_enc.retain(|&i| i != 0);
-        let cert_pem = String::from_utf8(cert_enc).
-            map_err(|e|
-                    KubeError::ConfigFileError(format!(
-                        "Invalid utf8 data in certificate: {}", e.description())))?;
+        let cert_pem = String::from_utf8(cert_enc).map_err(|e| {
+            KubeError::ConfigFileError(format!(
+                "Invalid utf8 data in certificate: {}",
+                e.description()
+            ))
+        })?;
         let cert = get_cert_from_pem(cert_pem.as_str());
         let mut key_enc = ::base64::decode(key_data.as_str())?;
         key_enc.retain(|&i| i != 0);
-        let key_str = String::from_utf8(key_enc).
-            map_err(|e|
-                    KubeError::ConfigFileError(format!(
-                        "Invalid utf8 data in key: {}", e.description())))?;
+        let key_str = String::from_utf8(key_enc).map_err(|e| {
+            KubeError::ConfigFileError(format!("Invalid utf8 data in key: {}", e.description()))
+        })?;
         let key = get_key_from_str(key_str.as_str());
         match (cert, key) {
             (Some(c), Some(k)) => Ok(KlusterAuth::with_cert_and_key(c, k)),
             _ => Err(KubeError::ConfigFileError(format!(
-                "Invalid certificate or key data for context: {}", context)))
+                "Invalid certificate or key data for context: {}",
+                context
+            ))),
         }
     }
 }
@@ -448,16 +447,15 @@ impl Config {
                 (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
                     Ok(mut cert) => {
                         cert.retain(|&i| i != 0);
-                        let cert_pem = String::from_utf8(cert).
-                            map_err(|e|
-                                    KubeError::ConfigFileError(format!(
-                                        "Invalid utf8 data in certificate: {}", e.description())))?;
+                        let cert_pem = String::from_utf8(cert).map_err(|e| {
+                            KubeError::ConfigFileError(format!(
+                                "Invalid utf8 data in certificate: {}",
+                                e.description()
+                            ))
+                        })?;
                         cluster_map.insert(
                             cluster.name.clone(),
-                            ClusterConf::new(
-                                Some(cert_pem),
-                                cluster.conf.server,
-                            ),
+                            ClusterConf::new(Some(cert_pem), cluster.conf.server),
                         );
                     }
                     Err(e) => {
@@ -474,7 +472,10 @@ impl Config {
                             cluster.name
                         );
                     } else {
-                        cluster_map.insert(cluster.name.clone(), ClusterConf::new(None, cluster.conf.server));
+                        cluster_map.insert(
+                            cluster.name.clone(),
+                            ClusterConf::new(None, cluster.conf.server),
+                        );
                     }
                 }
             }
@@ -518,9 +519,11 @@ impl Config {
                                         Ok(KlusterAuth::with_userpass(username, password))
                                     }
                                     &UserConf::KeyCertPath(ref cert_path, ref key_path) => {
-                                        auth_from_paths(cert_path.clone(),
-                                                        key_path.clone(),
-                                                        context)
+                                        auth_from_paths(
+                                            cert_path.clone(),
+                                            key_path.clone(),
+                                            context,
+                                        )
                                     }
                                     &UserConf::KeyCertData(ref cert_data, ref key_data) => {
                                         auth_from_data(cert_data, key_data, context)
@@ -529,18 +532,18 @@ impl Config {
                                         provider.copy_up();
                                         Ok(KlusterAuth::with_auth_provider(provider.clone()))
                                     }
-                                    _ => {
-                                        Err(KubeError::ConfigFileError(format!(
-                                            "Invalid context {}.  Each user must have either a token, \
-                                             a username AND password, or a client-certificate AND \
-                                             a client-key, or an auth-provider", context)))
-                                    }
+                                    _ => Err(KubeError::ConfigFileError(format!(
+                                        "Invalid context {}.  Each user must have either a token, \
+                                         a username AND password, or a client-certificate AND \
+                                         a client-key, or an auth-provider",
+                                        context
+                                    ))),
                                 }?;
                                 Kluster::new(
                                     context,
                                     cluster.cert.clone(),
                                     cluster.server.as_str(),
-                                    auth
+                                    auth,
                                 )
                             })
                             .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))

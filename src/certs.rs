@@ -27,6 +27,7 @@ use std::net::{IpAddr, TcpStream};
 use std::io::{self, BufReader, Read};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 // might need to convert to der format
 pub fn get_cert(path: &str) -> Option<Certificate> {
@@ -187,7 +188,8 @@ fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Err
     let config = ClientConfig::new();
     let ac = Arc::new(config);
     let mut session = ClientSession::new(&ac, format!("{}:{}", ip, port).as_str());
-    let mut sock = TcpStream::connect((*ip, port))?;
+    let sock_addr = (*ip, port).into();
+    let mut sock = TcpStream::connect_timeout(&sock_addr, Duration::new(2, 0))?;
     session.write_tls(&mut sock)?;
     let rc = session.read_tls(&mut sock)?;
 

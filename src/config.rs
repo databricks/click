@@ -110,9 +110,9 @@ impl AuthProvider {
     // Copy the token and expiry out of the config into the refcells
     fn copy_up(&self) {
         let mut token = self.token.borrow_mut();
-        *token = Some(self.config.access_token.clone().unwrap());
+        *token = self.config.access_token.clone();
         let mut expiry = self.expiry.borrow_mut();
-        *expiry = Some(self.config.expiry.clone().unwrap());
+        *expiry = self.config.expiry.clone();
     }
     
     // true if expiry is before now

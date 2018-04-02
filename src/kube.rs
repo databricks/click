@@ -23,7 +23,6 @@ use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
-use hyper::net::HttpsConnector;
 use hyper::status::StatusCode;
 use hyper_rustls::TlsClient;
 use serde::Deserialize;
@@ -381,8 +380,8 @@ pub struct Kluster {
     pub name: String,
     endpoint: Url,
     auth: KlusterAuth,
-    cert_opt: Option<String>,
     client: Client,
+    connector: ClickSslConnector<TlsClient>,
 }
 
 impl Kluster {
@@ -420,9 +419,7 @@ impl Kluster {
         tlsclient
     }
 
-    // We map ip addresses to a name in the certificate if needed, to keep hyper happy.  see
-    // comments on try_ip_to_name and in connector.rs.
-    fn make_connector(tlsclient: TlsClient, endpoint: &mut Url) -> ClickSslConnector<TlsClient> {
+    fn get_host_ip(endpoint: &mut Url) -> (Option<String>, Option<String>) {
         let mut dns_host: Option<String> = None;
         let mut ip: Option<String> = None;
         if let Some(host) = endpoint.host_str() {
@@ -431,9 +428,17 @@ impl Kluster {
                 ip = Some(host.to_owned());
             }
         };
-        if let (Some(host), Some(ip_addr)) = (dns_host, ip) {
+        if let (Some(ref host), Some(ref _ip_addr)) = (dns_host.as_ref(), ip.as_ref()) {
             // The cert has a matching IP and a host name, use that
             endpoint.set_host(Some(host.as_str())).unwrap();
+        }
+        (dns_host, ip)
+    }
+    
+    // We map ip addresses to a name in the certificate if needed, to keep hyper happy.  see
+    // comments on try_ip_to_name and in connector.rs.
+    fn make_connector(tlsclient: TlsClient, dns_host: Option<String>, ip: Option<String>) -> ClickSslConnector<TlsClient> {
+        if let (Some(host), Some(ip_addr)) = (dns_host, ip) {
             ClickSslConnector::new(tlsclient, Some((host, ip_addr)))
         } else {
             ClickSslConnector::new(tlsclient, None)
@@ -464,16 +469,20 @@ impl Kluster {
         auth: KlusterAuth,
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
+        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &auth); 
         let mut endpoint = try!(Url::parse(server));
-        let mut client = Client::with_connector(Kluster::make_connector(tlsclient, &mut endpoint));
+        let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
+        let mut client = Client::with_connector(Kluster::make_connector(tlsclient,
+                                                                        dns_host.clone(),
+                                                                        ip.clone()));
         client.set_read_timeout(Some(Duration::new(20, 0)));
         client.set_write_timeout(Some(Duration::new(20, 0)));
         Ok(Kluster {
             name: name.to_owned(),
             endpoint: endpoint,
             auth: auth,
-            cert_opt: cert_opt,
             client: client,
+            connector: Kluster::make_connector(tlsclient2, dns_host, ip),
         })
     }
 
@@ -517,7 +526,7 @@ impl Kluster {
             let mut req = try!(Request::with_connector(
                 Method::Get,
                 url,
-                &HttpsConnector::new(Kluster::make_tlsclient(&self.cert_opt, &self.auth))
+                &self.connector,
             ));
             {
                 // scope for mutable borrow of req

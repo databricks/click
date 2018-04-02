@@ -20,7 +20,6 @@ use duct::cmd;
 use serde_json::{self, Value};
 use serde_yaml;
 
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
@@ -503,21 +502,14 @@ impl Config {
                                         auth_from_data(cert_data, key_data, context)
                                     }
                                     &UserConf::AuthProvider(ref provider) => {
-                                        if let Some(ref token) = provider.config.access_token {
-                                            provider.copy_up();
-                                            Ok(KlusterAuth::with_auth_provider(provider.clone()))
-                                        } else {
-                                            Err(KubeError::ConfigFileError(
-                                                "No access token in provider, try running a kubectl \
-                                                 command against this cluster first, which will put \
-                                                 a token in your config.".to_owned()))
-                                        }
+                                        provider.copy_up();
+                                        Ok(KlusterAuth::with_auth_provider(provider.clone()))
                                     }
                                     _ => {
                                         Err(KubeError::ConfigFileError(format!(
                                             "Invalid context {}.  Each user must have either a token, \
                                              a username AND password, or a client-certificate AND \
-                                             a client-key.", context)))
+                                             a client-key, or an auth-provider", context)))
                                     }
                                 }?;
                                 Kluster::new(

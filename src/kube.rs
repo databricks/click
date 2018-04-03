@@ -28,7 +28,7 @@ use hyper_rustls::TlsClient;
 use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
-use rustls::{Certificate, PrivateKey};
+use rustls::{self, Certificate, PrivateKey};
 
 use std::fmt;
 use std::io::BufReader;
@@ -363,37 +363,56 @@ pub struct Kluster {
     connector: ClickSslConnector<TlsClient>,
 }
 
+// NoCertificateVerification struct/impl taken from the rustls example code
+struct NoCertificateVerification {}
+impl rustls::ServerCertVerifier for NoCertificateVerification {
+    fn verify_server_cert(
+        &self,
+        _roots: &rustls::RootCertStore,
+        _presented_certs: &[rustls::Certificate],
+        _dns_name: &str,
+    ) -> Result<(), rustls::TLSError> {
+        Ok(())
+    }
+}
+
 impl Kluster {
-    fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth) -> TlsClient {
+    fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth, insecure: bool) -> TlsClient {
         let mut tlsclient = TlsClient::new();
-        if let &Some(ref cert_data) = cert_opt {
-            // add the cert to the root store
-            if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
+        if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
+            if let &Some(ref cert_data) = cert_opt {
+                // add the cert to the root store
                 let mut br = BufReader::new(cert_data.as_bytes());
                 match cfg.root_store.add_pem_file(&mut br) {
                     Ok(added) => {
                         if added.1 > 0 {
                             println!(
-                                "[WARNING] Couldn't add your server cert, connection will probably fail"
+                                "[WARNING] Couldn't add your server cert, connection will probably \
+                                 fail"
                             );
                         }
                     }
-                    Err(e) => {
-                        println!(
-                            "[WARNING] Coudln't add your server cert, connection will probably fail. Error was: {:?}",
-                            e
-                        )
-                    }
+                    Err(e) => println!(
+                        "[WARNING] Coudln't add your server cert, connection will probably \
+                         fail. Error was: {:?}",
+                        e
+                    ),
                 }
-
-                if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
-                    cfg.set_single_client_cert(cert.clone(), key.clone());
-                }
-            } else {
-                println!(
-                    "[WARNING] Failed to configure tlsclient, connection will probably fail.  Please restart click"
-                );
             }
+
+            if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
+                cfg.set_single_client_cert(cert.clone(), key.clone());
+            }
+
+            if insecure {
+                cfg.dangerous()
+                    .set_certificate_verifier(Box::new(NoCertificateVerification {}));
+            }
+        } else {
+            println!(
+                "[WARNING] Failed to configure tlsclient, connection will probably fail.  \
+                 Please restart click"
+            );
         }
         tlsclient
     }
@@ -450,9 +469,10 @@ impl Kluster {
         cert_opt: Option<String>,
         server: &str,
         auth: KlusterAuth,
+        insecure: bool,
     ) -> Result<Kluster, KubeError> {
-        let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth);
-        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &auth);
+        let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth, insecure);
+        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &auth, insecure);
         let mut endpoint = try!(Url::parse(server));
         let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
         let mut client = Client::with_connector(Kluster::make_connector(

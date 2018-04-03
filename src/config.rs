@@ -58,6 +58,7 @@ struct IClusterConf {
 pub struct ClusterConf {
     pub cert: Option<String>,
     pub server: String,
+    pub insecure_skip_tls_verify: bool,
 }
 
 impl ClusterConf {
@@ -65,6 +66,15 @@ impl ClusterConf {
         ClusterConf {
             cert: cert,
             server: server,
+            insecure_skip_tls_verify: false,
+        }
+    }
+
+    fn new_insecure(cert: Option<String>, server: String) -> ClusterConf {
+        ClusterConf {
+            cert: cert,
+            server: server,
+            insecure_skip_tls_verify: true,
         }
     }
 }
@@ -466,17 +476,12 @@ impl Config {
                     }
                 },
                 (None, None) => {
-                    if cluster.conf.skip_tls.unwrap_or(false) {
-                        println!(
-                            "Can't do insecure-skip-tls-verify yet, ignoring cluster: {}",
-                            cluster.name
-                        );
+                    let conf = if cluster.conf.skip_tls.unwrap_or(false) {
+                        ClusterConf::new_insecure(None, cluster.conf.server)
                     } else {
-                        cluster_map.insert(
-                            cluster.name.clone(),
-                            ClusterConf::new(None, cluster.conf.server),
-                        );
-                    }
+                        ClusterConf::new(None, cluster.conf.server)
+                    };
+                    cluster_map.insert(cluster.name.clone(), conf);
                 }
             }
         }
@@ -544,6 +549,7 @@ impl Config {
                                     cluster.cert.clone(),
                                     cluster.server.as_str(),
                                     auth,
+                                    cluster.insecure_skip_tls_verify,
                                 )
                             })
                             .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))

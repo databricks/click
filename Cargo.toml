@@ -10,6 +10,9 @@ readme = "README.md"
 keywords = ["kubernetes", "repl", "click", "cli"]
 categories = ["command-line-interface", "command-line-utilities"]
 
+[badges]
+travis-ci = { repository = "databricks/click" }
+
 [dependencies]
 ansi_term = "0.9"
 base64 = "0.5"

@@ -39,6 +39,19 @@ The order of the prompt is \[context\]\[namespace\]\[object\].
 The object changes color depending on what type of object it is. (e.g yellow for pods, blue for
 nodes and so on)
 
+# Supported Authentication
+Click currently supports the following ways of authenticating to a Kubernetes clusters:
+
+* token
+* username / password
+* private key / certificate
+* gke style authentication provider
+
+## GKE Support
+For Google Kubernetes Engine, Click supports reading the token already in the kube config file.  If
+that token has expired, Click will request a new token and use that. It does not save the new token
+back into the config file (yet).
+
 # Why am I getting a BadDER error
 If your Kubernetes cluster is using Node Authorization
 (https://kubernetes.io/docs/admin/authorization/node/) your API Server may be using a certificate

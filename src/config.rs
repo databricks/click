@@ -506,6 +506,45 @@ impl Config {
         })
     }
 
+    pub fn from_files(paths: &Vec<String>) -> Result<Config, KubeError> {
+        let configs = paths
+            .into_iter()
+            .map(|config_path| {
+                Config::from_file(config_path.as_str())
+                    .map_err(|e| KubeError::ConfigFileError(format!(
+                        "Could not load {}, reason: {}",
+                        config_path, 
+                        e.description()))
+                    )
+            })
+            .collect::<Result<Vec<_>,_>>()?;
+
+        let empty_config = Config{
+            source_file: String::new(),
+            clusters: HashMap::new(),
+            contexts: HashMap::new(),
+            users: HashMap::new(),
+        };
+
+        let mut source_vector = Vec::new();
+        let mut merged_config: Config = configs
+            .into_iter()
+            .fold(empty_config, |mut resulting_config, item| {
+                source_vector.push(item.source_file);
+                resulting_config.clusters.extend(item.clusters);
+                resulting_config.contexts.extend(item.contexts);
+                resulting_config.users.extend(item.users);
+
+                resulting_config
+            });
+
+        let sources = env::join_paths(source_vector.into_iter())?.into_string()?;
+
+        merged_config.source_file = sources;
+
+        Ok(merged_config)
+    }
+
     pub fn cluster_for_context(&self, context: &str) -> Result<Kluster, KubeError> {
         self.contexts
             .get(context)

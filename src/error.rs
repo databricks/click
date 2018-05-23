@@ -17,7 +17,7 @@ use hyper;
 use serde_json;
 use serde_yaml;
 
-use std::{error, fmt, io};
+use std::{error, fmt, io, env, ffi};
 use std::convert::From;
 
 #[derive(Debug)]
@@ -74,6 +74,8 @@ pub enum KubeError {
     HyperErr(hyper::error::Error),
     SerdeJson(serde_json::Error),
     SerdeYaml(serde_yaml::Error),
+    JoinPathsError(env::JoinPathsError),
+    OsString(ffi::OsString),
 }
 
 impl fmt::Display for KubeError {
@@ -89,6 +91,8 @@ impl fmt::Display for KubeError {
             KubeError::HyperErr(ref err) => write!(f, "Hyper error: {}", err),
             KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
             KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
+            KubeError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
+            KubeError::OsString(_) => write!(f, "OsString convert error"),
         }
     }
 }
@@ -106,6 +110,8 @@ impl error::Error for KubeError {
             KubeError::HyperErr(ref err) => err.description(),
             KubeError::SerdeJson(ref err) => err.description(),
             KubeError::SerdeYaml(ref err) => err.description(),
+            KubeError::JoinPathsError(ref err) => err.description(),
+            KubeError::OsString(_) => "OsString contains invalid UTF-8 chars",
         }
     }
 
@@ -121,6 +127,8 @@ impl error::Error for KubeError {
             KubeError::HyperErr(ref err) => Some(err),
             KubeError::SerdeJson(ref err) => Some(err),
             KubeError::SerdeYaml(ref err) => Some(err),
+            KubeError::JoinPathsError(ref err) => Some(err),
+            KubeError::OsString(_) => None,
         }
     }
 }
@@ -158,5 +166,17 @@ impl From<serde_yaml::Error> for KubeError {
 impl From<base64::DecodeError> for KubeError {
     fn from(err: base64::DecodeError) -> KubeError {
         KubeError::DecodeError(err)
+    }
+}
+
+impl From<env::JoinPathsError> for KubeError {
+    fn from(err: env::JoinPathsError) -> KubeError {
+        KubeError::JoinPathsError(err)
+    }
+}
+
+impl From<ffi::OsString> for KubeError {
+    fn from(err: ffi::OsString) -> KubeError {
+        KubeError::OsString(err)
     }
 }

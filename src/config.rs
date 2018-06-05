@@ -506,7 +506,7 @@ impl Config {
         })
     }
 
-    pub fn from_files(paths: &Vec<String>) -> Result<Config, KubeError> {
+    pub fn from_files(paths: &[String]) -> Result<Config, KubeError> {
         let configs = paths
             .into_iter()
             .map(|config_path| {

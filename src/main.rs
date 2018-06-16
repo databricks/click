@@ -620,6 +620,7 @@ fn main() {
     commands.push(Box::new(cmd::Secrets::new()));
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
+    commands.push(Box::new(cmd::OneOff::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

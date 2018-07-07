@@ -1146,8 +1146,8 @@ command!(
 );
 
 command!(
-    OneOff,
-    "one-off",
+    Run,
+    "run",
     "exec specified command in a new container of the active pod",
     |clap: App<'static, 'static>| clap.arg(
         Arg::with_name("command")
@@ -1173,7 +1173,7 @@ command!(
                 .takes_value(true)
                 .min_values(0)
         ),
-    vec!["one-off"],
+    vec!["run"],
     |args: Vec<&str>, env: &Env| if args.len() <= 1 {
         let mut v = Vec::new();
         let argstart = args.get(0);
@@ -1217,7 +1217,7 @@ command!(
                     c
                 }
                 _ => {
-                    clickwrite!(writer, "Need an active pod to run one-off command.\n");
+                    clickwrite!(writer, "Need an active pod to run an one-off command.\n");
                     return;
                 }
             },
@@ -1239,7 +1239,7 @@ command!(
                     }
                 }
                 _ => {
-                    clickwrite!(writer, "Need an active pod to run one-off command.\n");
+                    clickwrite!(writer, "Need an active pod to run an one-off command.\n");
                     return;
                 }
             },
@@ -1275,6 +1275,7 @@ command!(
                 clickwrite!(writer, "Couldon't get container image\n");
                 return;
             };
+            let pod_name = format!("one-off-shell-{}", container_image.as_str());
 
             if matches.is_present("terminal") {
                 let terminal = if let Some(t) = matches.value_of("terminal") {
@@ -1292,7 +1293,7 @@ command!(
                     "--context",
                     &kluster.name,
                     "run",
-                    "one-off-shell",
+                    pod_name.as_str(),
                     "--restart=Never",
                     "-i",
                     "--rm",
@@ -1311,14 +1312,14 @@ command!(
                     );
                 }
             } else {
-                clickwrite!(writer, "Starting one-off container with image {:?}\n", container_image);
+                clickwrite!(writer, "Starting an one-off container with image {:?}\n", container_image);
                 let status = Command::new("kubectl")
                     .arg("--namespace")
                     .arg(ns)
                     .arg("--context")
                     .arg(&kluster.name)
                     .arg("run")
-                    .arg("one-off-shell")
+                    .arg(pod_name)
                     .arg("--restart=Never")
                     .arg("-i")
                     .arg("--rm")
@@ -1333,7 +1334,7 @@ command!(
                 }
             }
         } else {
-            clickwrite!(writer, "Need an active pod in order to run one-off command.\n");
+            clickwrite!(writer, "Need an active pod in order to run an one-off command.\n");
         }
     }
 );

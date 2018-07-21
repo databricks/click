@@ -84,7 +84,7 @@ use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
-           ServiceList};
+           ServiceList, JobList};
 use output::ClickWriter;
 use values::val_str_opt;
 use std::env;
@@ -102,6 +102,7 @@ enum KObj {
     ReplicaSet(String),
     ConfigMap(String),
     Secret(String),
+    Job(String),
 }
 
 enum LastList {
@@ -113,6 +114,7 @@ enum LastList {
     ReplicaSetList(ReplicaSetList),
     ConfigMapList(ConfigMapList),
     SecretList(SecretList),
+    JobList(JobList),
 }
 
 /// An ongoing port forward
@@ -202,6 +204,7 @@ impl Env {
                 KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
                 KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
                 KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
+                KObj::Job(ref name) => Purple.bold().paint(name.as_str()),
             }
         );
     }
@@ -353,6 +356,14 @@ impl Env {
                             self.current_object = KObj::None;
                         }
                     }
+                } else {
+                    self.current_object = KObj::None;
+                }
+            },
+            LastList::JobList(ref jl) => {
+                if let Some(dep) = jl.items.get(num) {
+                    self.current_object = KObj::Job(dep.metadata.name.clone());
+                    self.current_object_namespace = dep.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
                 }
@@ -620,6 +631,7 @@ fn main() {
     commands.push(Box::new(cmd::Secrets::new()));
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
+    commands.push(Box::new(cmd::Jobs::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

@@ -324,6 +324,20 @@ fn shorten_to(s: String, max_len: usize) -> String {
     }
 }
 
+/// Replace all characters that are not allowed as part of a pod name
+/// Regex for validation is:
+/// '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
+fn ensure_pod_name(s: String) -> String {
+    let pod_name_regex = Regex::new(r"[^a-z0-9-]").unwrap();
+    let result = pod_name_regex.replace_all(&s.to_ascii_lowercase().to_string(), "-").to_string();
+
+    if &result[0..1] == "-" || &result[58..59] == "-" {
+      format!("x{}x", &result[0..57])
+    } else {
+      format!("{}", &result[0..59])
+    }
+}
+
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(
     podlist: PodList,
@@ -1275,7 +1289,7 @@ command!(
                 clickwrite!(writer, "Couldon't get container image\n");
                 return;
             };
-            let pod_name = format!("one-off-shell-{}", container_image.as_str());
+            let pod_name = format!("run-{}", ensure_pod_name(container_image.to_string()));
 
             if matches.is_present("terminal") {
                 let terminal = if let Some(t) = matches.value_of("terminal") {

@@ -29,7 +29,7 @@ lazy_static = "0.2"
 os_pipe = "^0.5"
 prettytable-rs = "^0.6"
 regex = "0.2"
-ring = "^0.9"
+ring = "0.13.2"
 rustls = { version = "0.8", features = ["dangerous_configuration"] }
 rustyline = "1.0"
 serde = "1.0"

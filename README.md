@@ -1,6 +1,6 @@
 # Click
 
-Click is the Command Line Interactive Controller for Kubernetes.  
+Click is the Command Line Interactive Controller for Kubernetes.
 Its purpose is to manage a large number of Kubernetes clusters/objects quickly and efficiently.
 
 ## Code Status
@@ -15,7 +15,13 @@ includes the current Kubernetes context, and optionally a namespace
 and Kubernetes object. Commands are then applied to the active config
 so it's not necessary to keep specifying what objects to target.
 
-# Installing / Building
+# Installing
+
+## Arch Linux
+
+There is an [aur](https://aur.archlinux.org/packages/click/) available.
+
+# Building
 You'll need rust and cargo. See
 [here](https://doc.rust-lang.org/cargo/getting-started/installation.html) for instructions on how to
 get them.
@@ -61,7 +67,7 @@ If your Kubernetes cluster is using Node Authorization
 (https://kubernetes.io/docs/admin/authorization/node/) your API Server may be using a certificate
 with a DNS name like "system:something".  This is technically a bad cert as DNS names can't have a
 colon in them. Since the WebPKI crate is more strict than Go, Click will not accept the cert
-from the API Server even though kubectl will.  
+from the API Server even though kubectl will.
 
 To temporarily patch WebPKI to accept the cert:
 1. Build Click

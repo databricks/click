@@ -324,6 +324,20 @@ fn shorten_to(s: String, max_len: usize) -> String {
     }
 }
 
+/// Replace all characters that are not allowed as part of a pod name
+/// Regex for validation is:
+/// '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*'
+fn ensure_pod_name(s: String) -> String {
+    let pod_name_regex = Regex::new(r"[^a-z0-9-]").unwrap();
+    let result = pod_name_regex.replace_all(&s.to_ascii_lowercase().to_string(), "-").to_string();
+
+    if &result[0..1] == "-" || &result[58..59] == "-" {
+      format!("x{}x", &result[0..57])
+    } else {
+      format!("{}", &result[0..59])
+    }
+}
+
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(
     podlist: PodList,
@@ -1141,6 +1155,200 @@ command!(
             _ => {
                 clickwrite!(writer, "Need an active pod to get logs.\n");
             }
+        }
+    }
+);
+
+command!(
+    Run,
+    "run",
+    "exec specified command in a new container of the active pod",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("command")
+            .help("The command to execute")
+            .required(true)
+            .index(1)
+    ).arg(
+            Arg::with_name("container")
+                .short("c")
+                .long("container")
+                .help("Exec in the image of the specified container")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("terminal")
+                .short("t")
+                .long("terminal")
+                .help(
+                    "Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
+                     terminal command, otherwise the default is used ('set terminal <value>' to \
+                     specify default)"
+                )
+                .takes_value(true)
+                .min_values(0)
+        ),
+    vec!["run"],
+    |args: Vec<&str>, env: &Env| if args.len() <= 1 {
+        let mut v = Vec::new();
+        let argstart = args.get(0);
+        match env.current_object {
+            ::KObj::Pod {
+                name: _,
+                ref containers,
+            } => for cont in containers.iter() {
+                if argstart.is_none() || cont.starts_with(argstart.unwrap()) {
+                    v.push(cont.clone());
+                }
+            },
+            _ => {}
+        }
+        (
+            match argstart {
+                Some(line) => line.len(),
+                None => 0,
+            },
+            v,
+        )
+    } else {
+        (0, Vec::new())
+    },
+    |matches, env, writer| {
+        let cont = match matches.value_of("container") {
+            Some(c) => match env.current_object {
+                ::KObj::Pod {
+                    name: _,
+                    ref containers,
+                } => {
+                    if !containers.contains(&c.to_string()) {
+                        clickwrite!(
+                            writer,
+                            "Specified container not found. Please specify one of: \
+                             {:?}\n",
+                            containers
+                        );
+                        return;
+                    }
+                    c
+                }
+                _ => {
+                    clickwrite!(writer, "Need an active pod to run an one-off command.\n");
+                    return;
+                }
+            },
+            None => match env.current_object {
+                ::KObj::Pod {
+                    name: _,
+                    ref containers,
+                } => {
+                    if containers.len() == 1 {
+                        containers[0].as_str()
+                    } else {
+                        clickwrite!(
+                            writer,
+                            "Pod has multiple containers, please specify one of: \
+                             {:?}\n",
+                            containers
+                        );
+                        return;
+                    }
+                }
+                _ => {
+                    clickwrite!(writer, "Need an active pod to run an one-off command.\n");
+                    return;
+                }
+            },
+        };
+
+        let cmd = matches.value_of("command").unwrap(); // safe as required
+        if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (
+            env.kluster.as_ref(),
+            env.current_object_namespace.as_ref(),
+            env.current_pod(),
+        ) {
+            let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
+            let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
+            let container_image = if let Some(pod) = pod_opt {
+                let mut image = "";
+                if let Some(ref container_statuses) = pod.status.container_statuses {
+                    for container_status in container_statuses.iter() {
+                        if cont == container_status.name {
+                            image = &container_status.image;
+                        }
+                    }
+                    if image == "" {
+                        clickwrite!(writer, "Couldon't get container image\n");
+                        return;
+                    } else {
+                        String::from(image)
+                    }
+                } else {
+                    clickwrite!(writer, "Couldon't get container image\n");
+                    return;
+                }
+            } else {
+                clickwrite!(writer, "Couldon't get container image\n");
+                return;
+            };
+            let pod_name = format!("run-{}", ensure_pod_name(container_image.to_string()));
+
+            if matches.is_present("terminal") {
+                let terminal = if let Some(t) = matches.value_of("terminal") {
+                    t
+                } else if let Some(ref t) = env.click_config.terminal {
+                    t
+                } else {
+                    "xterm -e"
+                };
+                let mut targs: Vec<&str> = terminal.split_whitespace().collect();
+                let mut kubectl_args = vec![
+                    "kubectl",
+                    "--namespace",
+                    ns,
+                    "--context",
+                    &kluster.name,
+                    "run",
+                    pod_name.as_str(),
+                    "--restart=Never",
+                    "-i",
+                    "--rm",
+                    "--tty",
+                    "--image",
+                    container_image.as_str(),
+                ];
+                targs.append(&mut kubectl_args);
+                targs.push(cmd);
+                clickwrite!(writer, "Starting in terminal\n");
+                if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
+                    clickwrite!(
+                        writer,
+                        "Could not launch in terminal: {}\n",
+                        e.description()
+                    );
+                }
+            } else {
+                clickwrite!(writer, "Starting an one-off container with image {:?}\n", container_image);
+                let status = Command::new("kubectl")
+                    .arg("--namespace")
+                    .arg(ns)
+                    .arg("--context")
+                    .arg(&kluster.name)
+                    .arg("run")
+                    .arg(pod_name)
+                    .arg("--restart=Never")
+                    .arg("-i")
+                    .arg("--rm")
+                    .arg("--tty")
+                    .arg("--image")
+                    .arg(container_image.as_str())
+                    .arg(cmd)
+                    .status()
+                    .expect("failed to execute kubectl");
+                if !status.success() {
+                    clickwrite!(writer, "kubectl exited abnormally\n");
+                }
+            }
+        } else {
+            clickwrite!(writer, "Need an active pod in order to run an one-off command.\n");
         }
     }
 );

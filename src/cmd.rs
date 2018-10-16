@@ -19,7 +19,7 @@ use LastList;
 use describe;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
            NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
-           ServiceList};
+           ServiceList, JobList};
 use output::ClickWriter;
 use table::CellSpec;
 use values::{get_val_as, val_item_count, val_str, val_u64};
@@ -1268,6 +1268,22 @@ command!(
                     }
                 }
             }
+            ::KObj::Job(ref job) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!(
+                        "/apis/batch/v1/namespaces/{}/jobs/{}",
+                        ns, job
+                    );
+                    let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(dval) = dep_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&dval).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "Job not supported without -j yet\n");
+                        }
+                    }
+                }
+            }
         }
     }
 );
@@ -1440,6 +1456,13 @@ command!(
                 ::KObj::Node(ref node) => {
                     clickwrite!(writer, "Delete node {} [y/N]? ", node);
                     Some(format!("/api/v1/nodes/{}", node))
+                }
+                ::KObj::Job(ref dep) => {
+                    clickwrite!(writer, "Delete job {} [y/N]? ", dep);
+                    Some(format!(
+                        "/apis/batch/v1/namespaces/{}/jobs/{}",
+                        ns, dep
+                    ))
                 }
                 ::KObj::None => {
                     write!(stderr(), "No active object\n").unwrap_or(());
@@ -2343,3 +2366,97 @@ command!(
         }
     }
 );
+
+command!(
+    Jobs,
+    "jobs",
+    "Get jobs (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("label")
+            .short("l")
+            .long("label")
+            .help("Get jobs with specified label selector")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter jobs by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["job", "jobs"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
+
+        let mut urlstr = if let Some(ref ns) = env.namespace {
+            format!("/apis/batch/v1/namespaces/{}/jobs", ns)
+        } else {
+            "/apis/batch/v1/jobs".to_owned()
+        };
+
+        if let Some(label_selector) = matches.value_of("label") {
+            urlstr.push_str("?labelSelector=");
+            urlstr.push_str(label_selector);
+        }
+
+        let dl: Option<JobList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+        match dl {
+            Some(d) => {
+                let final_list = print_jobs(d, matches.is_present("labels"), regex, writer);
+                env.set_lastlist(LastList::JobList(final_list));
+            }
+            None => env.set_lastlist(LastList::None),
+        }
+    }
+);
+
+fn print_jobs(
+    joblist: JobList,
+    _show_labels: bool,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> JobList {
+    let mut table = Table::new();
+    table.set_titles(row![
+        "####",
+        "Name",
+        "Desired",
+        "Sucessful",
+        "Age"
+    ]);
+    let jobs_specs = joblist.items.into_iter().map(|job| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(job.metadata.name.clone()));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", job.spec.parallelism),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", job.spec.completions),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(job.metadata.creation_timestamp.unwrap())
+        )));
+        (job, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(jobs_specs, r),
+        None => jobs_specs.collect(),
+    };
+
+    ::table::print_table(&mut table, &filtered, writer);
+
+    let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
+    JobList { items: final_jobs }
+}

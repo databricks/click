@@ -84,7 +84,7 @@ use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
-           ServiceList};
+           ServiceList, JobList};
 use output::ClickWriter;
 use values::val_str_opt;
 use std::env;
@@ -102,6 +102,7 @@ enum KObj {
     ReplicaSet(String),
     ConfigMap(String),
     Secret(String),
+    Job(String),
 }
 
 enum LastList {
@@ -113,6 +114,7 @@ enum LastList {
     ReplicaSetList(ReplicaSetList),
     ConfigMapList(ConfigMapList),
     SecretList(SecretList),
+    JobList(JobList),
 }
 
 /// An ongoing port forward
@@ -202,6 +204,7 @@ impl Env {
                 KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
                 KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
                 KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
+                KObj::Job(ref name) => Purple.bold().paint(name.as_str()),
             }
         );
     }
@@ -353,6 +356,14 @@ impl Env {
                             self.current_object = KObj::None;
                         }
                     }
+                } else {
+                    self.current_object = KObj::None;
+                }
+            },
+            LastList::JobList(ref jl) => {
+                if let Some(dep) = jl.items.get(num) {
+                    self.current_object = KObj::Job(dep.metadata.name.clone());
+                    self.current_object_namespace = dep.metadata.namespace.clone();
                 } else {
                     self.current_object = KObj::None;
                 }
@@ -562,28 +573,29 @@ fn main() {
     click_path.push("click.config");
     let click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
 
-    let config_path = env::var_os("KUBECONFIG")
-        .map(|p| PathBuf::from(p))
+    let config_paths = env::var_os("KUBECONFIG")
+        .map(|paths| {
+            let split_paths = env::split_paths(&paths);
+            split_paths.collect::<Vec<PathBuf>>()
+        })
         .unwrap_or_else(|| {
             let mut config_path = conf_dir.clone();
             config_path.push("config");
-            config_path
-        });
-
-    let config = match Config::from_file(
-        config_path
+            vec!(config_path)
+        })
+        .into_iter()
+        .map(|config_file| config_file
             .as_path()
             .to_str()
-            .unwrap_or("[CONFIG_PATH_EMPTY"),
-    ) {
+            .unwrap_or("[CONFIG_PATH_EMPTY")
+            .to_owned())
+        .collect::<Vec<_>>();
+
+    let config = match Config::from_files(&config_paths) {
         Ok(c) => c,
         Err(e) => {
             println!(
-                "Could not load kubernetes config: '{}'. Cannot continue.  Error was: {}",
-                config_path
-                    .as_path()
-                    .to_str()
-                    .unwrap_or("[CONFIG_PATH_EMPTY"),
+                "Could not load kubernetes config. Cannot continue.  Error was: {}",
                 e.description()
             );
             return;
@@ -620,6 +632,7 @@ fn main() {
     commands.push(Box::new(cmd::Secrets::new()));
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
+    commands.push(Box::new(cmd::Jobs::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

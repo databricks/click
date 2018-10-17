@@ -2406,10 +2406,10 @@ command!(
             urlstr.push_str(label_selector);
         }
 
-        let dl: Option<JobList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
-        match dl {
-            Some(d) => {
-                let final_list = print_jobs(d, matches.is_present("labels"), regex, writer);
+        let jl: Option<JobList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+        match jl {
+            Some(j) => {
+                let final_list = print_jobs(j, matches.is_present("labels"), regex, writer);
                 env.set_lastlist(LastList::JobList(final_list));
             }
             None => env.set_lastlist(LastList::None),

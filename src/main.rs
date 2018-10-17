@@ -361,9 +361,18 @@ impl Env {
                 }
             },
             LastList::JobList(ref jl) => {
-                if let Some(dep) = jl.items.get(num) {
-                    self.current_object = KObj::Job(dep.metadata.name.clone());
-                    self.current_object_namespace = dep.metadata.namespace.clone();
+                if let Some(ref job) = jl.items.get(num) {
+                    match val_str_opt("/metadata/name", job) {
+                        Some(name) => {
+                            let namespace = val_str_opt("/metadata/namespace", job);
+                            self.current_object = KObj::Job(name);
+                            self.current_object_namespace = namespace;
+                        }
+                        None => {
+                            println!("Secret has no name in metadata");
+                            self.current_object = KObj::None;
+                        }
+                    }
                 } else {
                     self.current_object = KObj::None;
                 }

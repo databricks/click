@@ -2433,20 +2433,23 @@ fn print_jobs(
     ]);
     let jobs_specs = joblist.items.into_iter().map(|job| {
         let mut specs = Vec::new();
+        let metadata: Metadata = get_val_as("/metadata", &job).unwrap();
+
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(job.metadata.name.clone()));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", job.spec.parallelism),
-            format::Alignment::CENTER,
-        ));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", job.spec.completions),
-            format::Alignment::CENTER,
-        ));
+        specs.push(CellSpec::new_owned(metadata.name.clone()));
         specs.push(CellSpec::new_owned(format!(
             "{}",
-            time_since(job.metadata.creation_timestamp.unwrap())
+            get_val_as::<u32>("/spec/parallelism", &job).unwrap(),
         )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            get_val_as::<u32>("/spec/completions", &job).unwrap(),
+        )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            time_since(metadata.creation_timestamp.unwrap())
+        )));
+
         (job, specs)
     });
 

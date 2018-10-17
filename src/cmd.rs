@@ -1274,8 +1274,8 @@ command!(
                         "/apis/batch/v1/namespaces/{}/jobs/{}",
                         ns, job
                     );
-                    let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(dval) = dep_value {
+                    let job_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(dval) = job_value {
                         if matches.is_present("json") {
                             writer.pretty_color_json(&dval).unwrap_or(());
                         } else {
@@ -1457,11 +1457,11 @@ command!(
                     clickwrite!(writer, "Delete node {} [y/N]? ", node);
                     Some(format!("/api/v1/nodes/{}", node))
                 }
-                ::KObj::Job(ref dep) => {
-                    clickwrite!(writer, "Delete job {} [y/N]? ", dep);
+                ::KObj::Job(ref job) => {
+                    clickwrite!(writer, "Delete job {} [y/N]? ", job);
                     Some(format!(
                         "/apis/batch/v1/namespaces/{}/jobs/{}",
-                        ns, dep
+                        ns, job
                     ))
                 }
                 ::KObj::None => {

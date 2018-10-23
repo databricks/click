@@ -327,6 +327,12 @@ pub struct SecretList {
     pub items: Vec<Value>,
 }
 
+// Jobs
+#[derive(Debug, Deserialize)]
+pub struct JobList {
+    pub items: Vec<Value>,
+}
+
 // Kubernetes authentication data
 
 // Auth is either a token, a username/password, or a cert and key

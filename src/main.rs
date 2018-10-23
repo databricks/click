@@ -369,7 +369,7 @@ impl Env {
                             self.current_object_namespace = namespace;
                         }
                         None => {
-                            println!("Secret has no name in metadata");
+                            println!("Job has no name in metadata");
                             self.current_object = KObj::None;
                         }
                     }

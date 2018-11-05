@@ -14,12 +14,14 @@
 
 //! Handle reading .kube/config files
 
+use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
 use duct::cmd;
+use error::{KubeErrNo, KubeError};
+use kube::{Kluster, KlusterAuth};
 use serde_json::{self, Value};
 use serde_yaml;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
@@ -27,10 +29,7 @@ use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
-
-use error::{KubeErrNo, KubeError};
-use kube::{Kluster, KlusterAuth};
-use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+use std::process::Command;
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -106,6 +105,56 @@ pub struct AuthProvider {
     pub token: RefCell<Option<String>>,
     pub expiry: RefCell<Option<String>>,
     pub config: AuthProviderConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Exec {
+    apiVersion: String,
+    pub args: Option<Vec<String>>,
+    pub command: Option<String>,
+    pub env: Option<Vec<Env>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Env {
+    name: String,
+    value: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Spec {}
+
+#[derive(Serialize, Deserialize)]
+struct Status {
+    token: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AWSCredential {
+    kind: String,
+    apiVersion: String,
+    spec: Spec,
+    status: Status,
+}
+
+impl Exec {
+    pub fn generate_token(&self) -> String {
+        let mut filtered_env : HashMap<String, String> = HashMap::new();
+        for e in self.env.clone().unwrap(){
+            filtered_env.insert(e.name, e.value);
+        }
+
+        let output = Command::new(self.command.clone().unwrap())
+            .args(self.args.clone().unwrap())
+            .envs(filtered_env)
+            .output()
+            .expect("failed to execute process");
+
+        let out: String = String::from_utf8_lossy(&output.stdout).to_string();
+                let v: AWSCredential = serde_json::from_str(&out).unwrap();
+        let token = v.status.token;
+        return token;
+    }
 }
 
 impl AuthProvider {
@@ -254,6 +303,7 @@ pub struct IUserConf {
 
     pub username: Option<String>,
     pub password: Option<String>,
+    pub exec: Option<Exec>,
 
     #[serde(rename = "auth-provider")] pub auth_provider: Option<AuthProvider>,
 }
@@ -268,6 +318,7 @@ pub enum UserConf {
     KeyCertPath(String, String),
     KeyCertData(String, String),
     UserPass(String, String),
+    Exec(Exec),
     AuthProvider(AuthProvider),
     Unsupported,
 }
@@ -278,15 +329,17 @@ impl From<IUserConf> for UserConf {
             UserConf::Token(token)
         } else if let (Some(username), Some(password)) = (iconf.username, iconf.password) {
             UserConf::UserPass(username, password)
+        } else if let Some(exec) = iconf.exec {
+            UserConf::Exec(exec)
         } else if let (Some(client_cert_path), Some(key_path)) =
-            (iconf.client_cert, iconf.client_key)
-        {
-            UserConf::KeyCertPath(client_cert_path, key_path)
-        } else if let (Some(client_cert_data), Some(key_data)) =
-            (iconf.client_cert_data, iconf.client_key_data)
-        {
-            UserConf::KeyCertData(client_cert_data, key_data)
-        } else if let Some(auth_provider) = iconf.auth_provider {
+        (iconf.client_cert, iconf.client_key)
+            {
+                UserConf::KeyCertPath(client_cert_path, key_path)
+            } else if let (Some(client_cert_data), Some(key_data)) =
+        (iconf.client_cert_data, iconf.client_key_data)
+            {
+                UserConf::KeyCertData(client_cert_data, key_data)
+            } else if let Some(auth_provider) = iconf.auth_provider {
             UserConf::AuthProvider(auth_provider)
         } else {
             UserConf::Unsupported
@@ -522,6 +575,9 @@ impl Config {
                                     }
                                     &UserConf::UserPass(ref username, ref password) => {
                                         Ok(KlusterAuth::with_userpass(username, password))
+                                    }
+                                    &UserConf::Exec(ref exec) => {
+                                        Ok(KlusterAuth::with_exec(exec.clone()))
                                     }
                                     &UserConf::KeyCertPath(ref cert_path, ref key_path) => {
                                         auth_from_paths(

@@ -18,8 +18,8 @@ use Env;
 use LastList;
 use describe;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
-           NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
-           ServiceList, JobList};
+           NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, StatefulSetList,
+           SecretList, ServiceList, JobList};
 use output::ClickWriter;
 use table::CellSpec;
 use values::{get_val_as, val_item_count, val_str, val_u64};
@@ -1223,6 +1223,22 @@ command!(
                     }
                 }
             }
+            ::KObj::StatefulSet(ref statefulset) => {
+                if let Some(ref ns) = env.current_object_namespace {
+                    let url = format!(
+                        "/apis/apps/v1/namespaces/{}/statefulsets/{}",
+                        ns, statefulset
+                    );
+                    let statefulset_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
+                    if let Some(statefulset_val) = statefulset_value {
+                        if matches.is_present("json") {
+                            writer.pretty_color_json(&statefulset_val).unwrap_or(());
+                        } else {
+                            clickwrite!(writer, "StatefulSet not supported without -j yet\n");
+                        }
+                    }
+                }
+            }
             ::KObj::ConfigMap(ref config_map) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
@@ -1438,6 +1454,13 @@ command!(
                     Some(format!(
                         "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
                         ns, repset
+                    ))
+                }
+                ::KObj::StatefulSet(ref statefulset) => {
+                    clickwrite!(writer, "Delete stateful set {} [y/N]? ", statefulset);
+                    Some(format!(
+                        "/apis/apps/v1/namespaces/{}/statefulsets/{}",
+                        ns, statefulset
                     ))
                 }
                 ::KObj::Service(ref service) => {
@@ -1911,6 +1934,97 @@ command!(
             Some(l) => {
                 let final_list = print_replicasets(l, regex, writer);
                 env.set_lastlist(LastList::ReplicaSetList(final_list));
+            }
+            None => {
+                env.set_lastlist(LastList::None);
+            }
+        }
+    }
+);
+
+fn print_statefulsets(
+    list: StatefulSetList,
+    regex: Option<Regex>,
+    writer: &mut ClickWriter,
+) -> StatefulSetList {
+    let mut table = Table::new();
+    table.set_titles(row!["####", "Name", "Desired", "Current", "Ready"]);
+    let statefulsets_specs = list.items.into_iter().map(|statefulset| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(
+            val_str("/metadata/name", &statefulset, "<none>").into_owned(),
+        ));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/spec/replicas", &statefulset, 0)
+        )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/status/currentReplicas", &statefulset, 0)
+        )));
+        specs.push(CellSpec::new_owned(format!(
+            "{}",
+            val_u64("/status/readyReplicas", &statefulset, 0)
+        )));
+        (statefulset, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => ::table::filter(statefulsets_specs, r),
+        None => statefulsets_specs.collect(),
+    };
+
+    ::table::print_table(&mut table, &filtered, writer);
+
+    let final_statefulsets = filtered
+        .into_iter()
+        .map(|statefulset_spec| statefulset_spec.0)
+        .collect();
+
+    StatefulSetList { items: final_statefulsets }
+}
+
+command!(
+    StatefulSets,
+    "statefulsets",
+    "Get statefulsets (in current namespace if set)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("show_label")
+            .short("L")
+            .long("labels")
+            .help("Show statefulsets labels")
+            .takes_value(true)
+    ).arg(
+        Arg::with_name("regex")
+            .short("r")
+            .long("regex")
+            .help("Filter statefulsets by the specified regex")
+            .takes_value(true)
+    ),
+    vec!["rs", "statefulsets"],
+    noop_complete,
+    |matches, env, writer| {
+        let regex = match ::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
+
+        let urlstr = if let Some(ref ns) = env.namespace {
+            format!("/apis/apps/v1/namespaces/{}/statefulsets", ns)
+        } else {
+            "/apis/apps/v1/statefulsets".to_owned()
+        };
+
+        let statefulset_list: Option<StatefulSetList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+
+        match statefulset_list {
+            Some(l) => {
+                let final_list = print_statefulsets(l, regex, writer);
+                env.set_lastlist(LastList::StatefulSetList(final_list));
             }
             None => {
                 env.set_lastlist(LastList::None);

@@ -83,8 +83,8 @@ use cmd::Cmd;
 use completer::ClickCompleter;
 use config::{ClickConfig, Config};
 use error::KubeError;
-use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
-           ServiceList, JobList};
+use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, StatefulSetList,
+           SecretList, ServiceList, JobList};
 use output::ClickWriter;
 use values::val_str_opt;
 use std::env;
@@ -100,6 +100,7 @@ enum KObj {
     Deployment(String),
     Service(String),
     ReplicaSet(String),
+    StatefulSet(String),
     ConfigMap(String),
     Secret(String),
     Job(String),
@@ -112,6 +113,7 @@ enum LastList {
     DeploymentList(DeploymentList),
     ServiceList(ServiceList),
     ReplicaSetList(ReplicaSetList),
+    StatefulSetList(StatefulSetList),
     ConfigMapList(ConfigMapList),
     SecretList(SecretList),
     JobList(JobList),
@@ -202,6 +204,7 @@ impl Env {
                 KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
                 KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
                 KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
+                KObj::StatefulSet(ref name) => Green.bold().paint(name.as_str()),
                 KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
                 KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
                 KObj::Job(ref name) => Purple.bold().paint(name.as_str()),
@@ -319,6 +322,23 @@ impl Env {
                         }
                         None => {
                             println!("ReplicaSet has no name in metadata");
+                            self.current_object = KObj::None;
+                        }
+                    }
+                } else {
+                    self.current_object = KObj::None;
+                }
+            }
+            LastList::StatefulSetList(ref stfs) => {
+                if let Some(ref statefulset) = stfs.items.get(num) {
+                    match val_str_opt("/metadata/name", statefulset) {
+                        Some(name) => {
+                            let namespace = val_str_opt("/metadata/namespace", statefulset);
+                            self.current_object = KObj::StatefulSet(name);
+                            self.current_object_namespace = namespace;
+                        }
+                        None => {
+                            println!("StatefulSet has no name in metadata");
                             self.current_object = KObj::None;
                         }
                     }
@@ -624,6 +644,7 @@ fn main() {
     commands.push(Box::new(cmd::Deployments::new()));
     commands.push(Box::new(cmd::Services::new()));
     commands.push(Box::new(cmd::ReplicaSets::new()));
+    commands.push(Box::new(cmd::StatefulSets::new()));
     commands.push(Box::new(cmd::ConfigMaps::new()));
     commands.push(Box::new(cmd::Namespace::new()));
     commands.push(Box::new(cmd::Logs::new()));

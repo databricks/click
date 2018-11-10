@@ -425,7 +425,7 @@ impl fmt::Display for Env {
             "Env {{
   Current Context: {}
   Availble Contexts: {:?}
-  Kubernetes Config File: {}
+  Kubernetes Config File(s): {}
   Editor: {}
   Terminal: {}
 }}",
@@ -576,7 +576,7 @@ fn main() {
         .map(|config_file| config_file
             .as_path()
             .to_str()
-            .unwrap_or("[CONFIG_PATH_EMPTY")
+            .unwrap_or("[CONFIG_PATH_EMPTY]")
             .to_owned())
         .collect::<Vec<_>>();
 

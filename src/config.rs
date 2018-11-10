@@ -507,7 +507,10 @@ impl Config {
             }
         }
 
-        let sources = env::join_paths(paths.into_iter())?.into_string()?;
+        let sources = match env::join_paths(paths.into_iter())?.into_string() {
+            Ok(srcs) => srcs,
+            Err(_) => "[config paths contain non-utf8 characters, cannot be displayed]".to_string(),
+        };
 
         Ok(Config {
             source_file: sources,

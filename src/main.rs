@@ -49,6 +49,7 @@ extern crate tempdir;
 extern crate term;
 extern crate untrusted;
 extern crate webpki;
+extern crate dirs;
 
 mod certs;
 mod cmd;
@@ -567,7 +568,7 @@ fn main() {
     let conf_dir = if let Some(dir) = matches.value_of("config_dir") {
         PathBuf::from(dir)
     } else {
-        match std::env::home_dir() {
+        match dirs::home_dir() {
             Some(mut path) => {
                 path.push(".kube");
                 path

@@ -23,7 +23,6 @@ use serde_yaml;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
-use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -31,6 +30,7 @@ use std::io::{self, BufReader, Read};
 use error::{KubeErrNo, KubeError};
 use kube::{Kluster, KlusterAuth};
 use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+use dirs::home_dir;
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -326,7 +326,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     // unwrap okay, validated above
     if path.chars().next().unwrap() == '/' {
         Ok(path)
-    } else if let Some(home_dir) = env::home_dir() {
+    } else if let Some(home_dir) = home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
         return Err(KubeError::ConfigFileError(

@@ -17,6 +17,10 @@
 use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::Utc;
+use config::AuthProvider;
+use config::Exec;
+use connector::ClickSslConnector;
+use error::{KubeErrNo, KubeError};
 use hyper::{Client, Url};
 use hyper::client::{Body, RequestBuilder};
 use hyper::client::request::Request;
@@ -25,21 +29,16 @@ use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper_rustls::TlsClient;
+use rustls::{self, Certificate, PrivateKey};
 use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
-use rustls::{self, Certificate, PrivateKey};
-
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-
-use config::AuthProvider;
-use connector::ClickSslConnector;
-use error::{KubeErrNo, KubeError};
 
 // Various things we can return from the kubernetes api
 
@@ -339,6 +338,7 @@ pub struct JobList {
 pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
+    Exec(Exec),
     CertKey(Vec<Certificate>, PrivateKey),
     AuthProvider(AuthProvider),
 }
@@ -350,6 +350,10 @@ impl KlusterAuth {
 
     pub fn with_userpass(user: &str, pass: &str) -> KlusterAuth {
         KlusterAuth::UserPass(user.to_owned(), pass.to_owned())
+    }
+
+    pub fn with_exec(exec: Exec) -> KlusterAuth {
+        KlusterAuth::Exec(exec.to_owned())
     }
 
     pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> KlusterAuth {
@@ -371,6 +375,7 @@ pub struct Kluster {
 
 // NoCertificateVerification struct/impl taken from the rustls example code
 struct NoCertificateVerification {}
+
 impl rustls::ServerCertVerifier for NoCertificateVerification {
     fn verify_server_cert(
         &self,
@@ -466,6 +471,10 @@ impl Kluster {
                 username: user.clone(),
                 password: Some(pass.clone()),
             })),
+            KlusterAuth::Exec(ref exec) => req.header(Authorization(Bearer {
+                //TODO
+                token: exec.generate_token(),
+            })),
             KlusterAuth::CertKey(..) => req,
         }
     }
@@ -521,8 +530,8 @@ impl Kluster {
 
     /// Get a resource and deserialize it as a T
     pub fn get<T>(&self, path: &str) -> Result<T, KubeError>
-    where
-        for<'de> T: Deserialize<'de>,
+        where
+                for<'de> T: Deserialize<'de>,
     {
         let resp = try!(self.send_req(path));
         let resp = try!(self.check_resp(resp));
@@ -534,7 +543,7 @@ impl Kluster {
     pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
         if timeout.is_some() {
             let url = try!(self.endpoint.join(path));
-            let mut req = try!(Request::with_connector(Method::Get, url, &self.connector,));
+            let mut req = try!(Request::with_connector(Method::Get, url, &self.connector));
             {
                 // scope for mutable borrow of req
                 let headers = req.headers_mut();
@@ -555,6 +564,12 @@ impl Kluster {
                         headers.set(Authorization(Basic {
                             username: user.clone(),
                             password: Some(pass.clone()),
+                        }));
+                    }
+                    KlusterAuth::Exec(ref exec) => {
+                        headers.set(Authorization(Bearer {
+                            //TODO
+                            token: exec.generate_token(),
                         }));
                     }
                     KlusterAuth::CertKey(..) => {}

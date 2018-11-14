@@ -413,93 +413,107 @@ fn auth_from_data(
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Result<Config, KubeError> {
-        let iconf = IConfig::from_file(path)?;
+    pub fn from_files(paths: &[String]) -> Result<Config, KubeError> {
+        let iconfs = paths
+            .into_iter()
+            .map(|config_path| IConfig::from_file(config_path))
+            .collect::<Result<Vec<_>,_>>()?;
 
         // copy over clusters
         let mut cluster_map = HashMap::new();
-        for cluster in iconf.clusters.into_iter() {
-            // make sure we've specified one of:
-            //  - a cert file
-            //  - cert data
-            //  - insecure-skip-tls-verify
-            let has_cd = cluster.conf.cert_data.is_some();
-            match (cluster.conf.cert, cluster.conf.cert_data) {
-                (Some(cert_config_path), _) => {
-                    if has_cd {
-                        println!(
-                            "Cluster {} specifies a certificate path and certificate data, \
-                             ignoring data and using the path",
-                            cluster.name
-                        );
+        for iconf in iconfs.iter() {
+            for cluster in iconf.clusters.iter() {
+                // make sure we've specified one of:
+                //  - a cert file
+                //  - cert data
+                //  - insecure-skip-tls-verify
+                let has_cd = cluster.conf.cert_data.is_some();
+                match (&cluster.conf.cert, &cluster.conf.cert_data) {
+                    (Some(cert_config_path), _) => {
+                        if has_cd {
+                            println!(
+                                "Cluster {} specifies a certificate path and certificate data, \
+                                ignoring data and using the path",
+                                cluster.name
+                            );
+                        }
+                        let cert_path = get_full_path(cert_config_path.to_owned())?;
+                        match File::open(cert_path) {
+                            Ok(f) => {
+                                let mut br = BufReader::new(f);
+                                let mut s = String::new();
+                                br.read_to_string(&mut s).expect("Couldn't read cert");
+                                cluster_map.insert(
+                                    cluster.name.clone(),
+                                    ClusterConf::new(Some(s), cluster.conf.server.clone()),
+                                );
+                            }
+                            Err(e) => {
+                                println!(
+                                    "Invalid server cert path for cluster {}: {}.\nAny contexts using \
+                                    this cluster will be unavailable.",
+                                    cluster.name,
+                                    e.description()
+                                );
+                            }
+                        }
                     }
-                    let cert_path = get_full_path(cert_config_path)?;
-                    match File::open(cert_path) {
-                        Ok(f) => {
-                            let mut br = BufReader::new(f);
-                            let mut s = String::new();
-                            br.read_to_string(&mut s).expect("Couldn't read cert");
+                    (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
+                        Ok(mut cert) => {
+                            cert.retain(|&i| i != 0);
+                            let cert_pem = String::from_utf8(cert).map_err(|e| {
+                                KubeError::ConfigFileError(format!(
+                                    "Invalid utf8 data in certificate: {}",
+                                    e.description()
+                                ))
+                            })?;
                             cluster_map.insert(
                                 cluster.name.clone(),
-                                ClusterConf::new(Some(s), cluster.conf.server),
+                                ClusterConf::new(Some(cert_pem), cluster.conf.server.clone()),
                             );
                         }
                         Err(e) => {
                             println!(
-                                "Invalid server cert path for cluster {}: {}.\nAny contexts using \
-                                 this cluster will be unavailable.",
-                                cluster.name,
+                                "Invalid certificate data, could not base64 decode: {}",
                                 e.description()
                             );
                         }
+                    },
+                    (None, None) => {
+                        let conf = if cluster.conf.skip_tls.unwrap_or(false) {
+                            ClusterConf::new_insecure(None, cluster.conf.server.clone())
+                        } else {
+                            ClusterConf::new(None, cluster.conf.server.clone())
+                        };
+                        cluster_map.insert(cluster.name.clone(), conf);
                     }
-                }
-                (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
-                    Ok(mut cert) => {
-                        cert.retain(|&i| i != 0);
-                        let cert_pem = String::from_utf8(cert).map_err(|e| {
-                            KubeError::ConfigFileError(format!(
-                                "Invalid utf8 data in certificate: {}",
-                                e.description()
-                            ))
-                        })?;
-                        cluster_map.insert(
-                            cluster.name.clone(),
-                            ClusterConf::new(Some(cert_pem), cluster.conf.server),
-                        );
-                    }
-                    Err(e) => {
-                        println!(
-                            "Invalid certificate data, could not base64 decode: {}",
-                            e.description()
-                        );
-                    }
-                },
-                (None, None) => {
-                    let conf = if cluster.conf.skip_tls.unwrap_or(false) {
-                        ClusterConf::new_insecure(None, cluster.conf.server)
-                    } else {
-                        ClusterConf::new(None, cluster.conf.server)
-                    };
-                    cluster_map.insert(cluster.name.clone(), conf);
                 }
             }
         }
 
         // copy over contexts
         let mut context_map = HashMap::new();
-        for context in iconf.contexts.iter() {
-            context_map.insert(context.name.clone(), context.conf.clone());
+        for iconf in iconfs.iter() {
+            for context in iconf.contexts.iter() {
+                context_map.insert(context.name.clone(), context.conf.clone());
+            }
         }
 
         // copy over users
         let mut user_map = HashMap::new();
-        for user in iconf.users.into_iter() {
-            user_map.insert(user.name.clone(), user.conf.into());
+        for iconf in iconfs.iter() {
+            for user in iconf.users.iter() {
+                user_map.insert(user.name.clone(), user.conf.clone().into());
+            }
         }
 
+        let sources = match env::join_paths(paths.into_iter())?.into_string() {
+            Ok(srcs) => srcs,
+            Err(_) => "[config paths contain non-utf8 characters, cannot be displayed]".to_string(),
+        };
+
         Ok(Config {
-            source_file: path.to_owned(),
+            source_file: sources,
             clusters: cluster_map,
             contexts: context_map,
             users: user_map,

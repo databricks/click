@@ -300,7 +300,7 @@ impl IConfig {
         serde_yaml::from_reader(f).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("Couldn't read yaml: {}", e.description()),
+                format!("Couldn't read yaml in '{}': {}", path, e.description()),
             )
         })
     }

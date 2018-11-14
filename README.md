@@ -33,13 +33,12 @@ Alternatively, to build it yourself, clone the click repository and run `cargo b
 # Running
 If you used `cargo install`, you can just run `click` (assuming `~/.cargo/bin` is in your PATH).
 
-If you built from source, run `./target/debug/click`. It's not recommended to use `cargo run`
-as that messes with Ctrl-C handling. (see:
-https://github.com/rust-lang-nursery/rustup.rs/issues/806)
+If you built from source, run `./target/debug/click`, or do `cargo run`.
 
 Click looks in ~/.kube/config by default for your Kubernetes
 configuration. It also stores its own config in the .kube dir. You
-can change this with the --config option.
+can change this with the --config option. If `KUBECONFIG` is set, it will use any files found there
+as the kubernetes config files.
 
 Once you're in the REPL, type `help` to see what you can do.
 

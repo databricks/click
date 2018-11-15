@@ -465,7 +465,7 @@ impl fmt::Display for Env {
             "Env {{
   Current Context: {}
   Availble Contexts: {:?}
-  Kubernetes Config File: {}
+  Kubernetes Config File(s): {}
   Editor: {}
   Terminal: {}
 }}",
@@ -602,28 +602,29 @@ fn main() {
     click_path.push("click.config");
     let click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
 
-    let config_path = env::var_os("KUBECONFIG")
-        .map(|p| PathBuf::from(p))
+    let config_paths = env::var_os("KUBECONFIG")
+        .map(|paths| {
+            let split_paths = env::split_paths(&paths);
+            split_paths.collect::<Vec<PathBuf>>()
+        })
         .unwrap_or_else(|| {
             let mut config_path = conf_dir.clone();
             config_path.push("config");
-            config_path
-        });
-
-    let config = match Config::from_file(
-        config_path
+            vec!(config_path)
+        })
+        .into_iter()
+        .map(|config_file| config_file
             .as_path()
             .to_str()
-            .unwrap_or("[CONFIG_PATH_EMPTY"),
-    ) {
+            .unwrap_or("[CONFIG_PATH_EMPTY]")
+            .to_owned())
+        .collect::<Vec<_>>();
+
+    let config = match Config::from_files(&config_paths) {
         Ok(c) => c,
         Err(e) => {
             println!(
-                "Could not load kubernetes config: '{}'. Cannot continue.  Error was: {}",
-                config_path
-                    .as_path()
-                    .to_str()
-                    .unwrap_or("[CONFIG_PATH_EMPTY"),
+                "Could not load kubernetes config. Cannot continue.  Error was: {}",
                 e.description()
             );
             return;

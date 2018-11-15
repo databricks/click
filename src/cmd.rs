@@ -2002,7 +2002,7 @@ command!(
             .help("Filter statefulsets by the specified regex")
             .takes_value(true)
     ),
-    vec!["rs", "statefulsets"],
+    vec!["ss", "statefulsets"],
     noop_complete,
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {

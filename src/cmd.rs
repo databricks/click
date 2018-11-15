@@ -1226,7 +1226,7 @@ command!(
             ::KObj::StatefulSet(ref statefulset) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!(
-                        "/apis/apps/v1/namespaces/{}/statefulsets/{}",
+                        "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
                         ns, statefulset
                     );
                     let statefulset_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1459,7 +1459,7 @@ command!(
                 ::KObj::StatefulSet(ref statefulset) => {
                     clickwrite!(writer, "Delete stateful set {} [y/N]? ", statefulset);
                     Some(format!(
-                        "/apis/apps/v1/namespaces/{}/statefulsets/{}",
+                        "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
                         ns, statefulset
                     ))
                 }
@@ -2014,9 +2014,9 @@ command!(
         };
 
         let urlstr = if let Some(ref ns) = env.namespace {
-            format!("/apis/apps/v1/namespaces/{}/statefulsets", ns)
+            format!("/apis/apps/v1beta1/namespaces/{}/statefulsets", ns)
         } else {
-            "/apis/apps/v1/statefulsets".to_owned()
+            "/apis/apps/v1beta1/statefulsets".to_owned()
         };
 
         let statefulset_list: Option<StatefulSetList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));

@@ -24,7 +24,7 @@ use hyper::client::response::Response;
 use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
-use hyper_rustls::TlsClient;
+use hyper_sync_rustls::TlsClient;
 use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
@@ -376,9 +376,10 @@ impl rustls::ServerCertVerifier for NoCertificateVerification {
         &self,
         _roots: &rustls::RootCertStore,
         _presented_certs: &[rustls::Certificate],
-        _dns_name: &str,
-    ) -> Result<(), rustls::TLSError> {
-        Ok(())
+        _dns_name: webpki::DNSNameRef,
+        _ocsp_response: &[u8],
+    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+        Ok(rustls::ServerCertVerified::assertion())
     }
 }
 
@@ -412,7 +413,7 @@ impl Kluster {
 
             if insecure {
                 cfg.dangerous()
-                    .set_certificate_verifier(Box::new(NoCertificateVerification {}));
+                    .set_certificate_verifier(Arc::new(NoCertificateVerification {}));
             }
         } else {
             println!(

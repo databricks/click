@@ -37,7 +37,7 @@ extern crate der_parser;
 extern crate duct_sh;
 extern crate humantime;
 extern crate hyper;
-extern crate hyper_rustls;
+extern crate hyper_sync_rustls;
 extern crate os_pipe;
 extern crate regex;
 extern crate ring;
@@ -48,6 +48,7 @@ extern crate serde_yaml;
 extern crate tempdir;
 extern crate term;
 extern crate untrusted;
+extern crate webpki;
 
 mod certs;
 mod cmd;

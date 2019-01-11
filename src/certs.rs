@@ -18,7 +18,7 @@ use der_parser;
 use regex::Regex;
 use rustls::{ClientConfig, ClientSession, Session};
 use rustls::{Certificate, PrivateKey};
-use rustls::sign::RSASigner;
+use rustls::sign::RSASigningKey;
 use untrusted::{Input, Reader};
 
 use std::error::Error;
@@ -63,7 +63,7 @@ pub fn get_private_key(path: &str) -> Option<PrivateKey> {
 
     let key = PrivateKey(key_buf.clone());
 
-    match RSASigner::new(&key) {
+    match RSASigningKey::new(&key) {
         Ok(_) => Some(key), // it worked, just return it
         Err(_) => {
             // failed, so try and convert
@@ -98,7 +98,7 @@ fn is_pkcs8(s: &str) -> bool {
 
 /// Make sure the key is valid, to avoid panics when trying to use it
 fn validate_private_key(key: PrivateKey) -> Option<PrivateKey> {
-    match RSASigner::new(&key) {
+    match RSASigningKey::new(&key) {
         Ok(_) => Some(key),
         Err(e) => {
             println!("Private key data was invalid: {:?}", e);
@@ -187,7 +187,9 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
 fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Error> {
     let config = ClientConfig::new();
     let ac = Arc::new(config);
-    let mut session = ClientSession::new(&ac, format!("{}:{}", ip, port).as_str());
+    let dns_name_str = format!("{}:{}", ip, port);
+    let dns_name_ref = webpki::DNSNameRef::try_from_ascii_str(&dns_name_str).unwrap();
+    let mut session = ClientSession::new(&ac, dns_name_ref);
     let sock_addr = (*ip, port).into();
     let mut sock = TcpStream::connect_timeout(&sock_addr, Duration::new(2, 0))?;
     session.write_tls(&mut sock)?;

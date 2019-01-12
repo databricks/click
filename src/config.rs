@@ -326,7 +326,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     // unwrap okay, validated above
     if path.chars().next().unwrap() == '/' {
         Ok(path)
-    } else if let Some(home_dir) = env::home_dir() {
+    } else if let Some(home_dir) = dirs::home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
         return Err(KubeError::ConfigFileError(

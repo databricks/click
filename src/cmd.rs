@@ -330,6 +330,7 @@ fn print_podlist(
     podlist: PodList,
     show_labels: bool,
     show_annot: bool,
+    show_node: bool,
     show_namespace: bool,
     regex: Option<Regex>,
     writer: &mut ClickWriter,
@@ -341,6 +342,9 @@ fn print_podlist(
     }
     if show_annot {
         title_row.add_cell(Cell::new("Annotations"));
+    }
+    if show_node {
+        title_row.add_cell(Cell::new("Node"));
     }
     if show_namespace {
         title_row.add_cell(Cell::new("Namespace"));
@@ -381,6 +385,13 @@ fn print_podlist(
             specs.push(CellSpec::new_owned(keyval_string(
                 &pod.metadata.annotations,
             )));
+        }
+
+        if show_node {
+            specs.push(CellSpec::new_owned(match pod.spec.node_name {
+                Some(ref nn) => nn.clone(),
+                None => "[Unknown]".to_owned()
+            }));
         }
 
         if show_namespace {
@@ -839,6 +850,13 @@ command!(
                 .long("show-annotations")
                 .help("Show pod annotations as column in output")
                 .takes_value(false)
+        )
+        .arg(
+            Arg::with_name("shownode")
+                .short("n")
+                .long("show-node")
+                .help("Show node pod is on as column in output")
+                .takes_value(false)
         ),
     vec!["pods"],
     noop_complete,
@@ -882,6 +900,7 @@ command!(
                     l,
                     matches.is_present("showlabels"),
                     matches.is_present("showannot"),
+                    matches.is_present("shownode"),
                     env.namespace.is_none(),
                     regex,
                     writer,

@@ -17,6 +17,7 @@
 use Env;
 use LastList;
 use describe;
+use config;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
            NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
            ServiceList, JobList};
@@ -2463,3 +2464,85 @@ fn print_jobs(
     let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
     JobList { items: final_jobs }
 }
+
+command!(
+    Alias,
+    "alias",
+    "Define or display aliases",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("alias")
+            .help("the short version of the command.\nCannot be 'alias', 'unalias', or a number.")
+            .validator(|s: String| {
+                if s == "alias" || s == "unalias" || s.parse::<usize>().is_ok() {
+                    Err("alias cannot be \"alias\", \"unalias\", or a number".to_owned())
+                } else {
+                    Ok(())
+                }
+            })
+            .required(false)
+            .requires("expanded")
+    ).arg(
+        Arg::with_name("expanded")
+            .help("what the short version of the command should expand to")
+            .required(false)
+            .requires("alias")
+    ) .after_help(
+        "An alias is a substitution rule.  When click encounters an alias at the start of a
+command, it will substitue the expanded version for what was typed.
+
+As with Bash: The first word of the expansion is tested for aliases, but a word that is identical to
+an alias being expanded is not expanded a second time.  So one can alias logs to \"logs -e\", for
+instance, without causing infinite expansion.
+
+Examples:
+  # Display current aliases
+  alias
+
+  # alias p to pods
+  alias p pods
+
+  # alias pn to get pods with nginx in the name
+  alias pn \"pods -r nginx\"
+
+  # alias el to run logs and grep for ERROR
+  alias el \"logs | grep ERROR\""
+    ),
+    vec!["alias", "aliases"],
+    noop_complete,
+    |matches, env, writer| {
+        if matches.is_present("alias") {
+            let alias = matches.value_of("alias").unwrap(); // safe, checked above
+            let expanded = matches.value_of("expanded").unwrap(); // safe, required with alias
+            env.add_alias(config::Alias {
+                alias: alias.to_owned(),
+                expanded: expanded.to_owned(),
+            });
+            clickwrite!(writer, "aliased {} = '{}'\n", alias, expanded);
+        } else {
+            for alias in env.click_config.aliases.iter() {
+                clickwrite!(writer, "alias {} = '{}'\n", alias.alias, alias.expanded);
+            }
+        }
+    }
+);
+
+command!(
+    Unalias,
+    "unalias",
+    "Remove an alias",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("alias")
+            .help("Short version of alias to remove")
+            .required(true)
+    ),
+    vec!["unalias"],
+    noop_complete,
+    |matches, env, writer| {
+        let alias = matches.value_of("alias").unwrap(); // safe, required
+        if env.remove_alias(alias) {
+            clickwrite!(writer, "unaliased: {}\n", alias);
+        } else {
+            clickwrite!(writer, "no such alias: {}\n", alias);
+        }
+    }
+);

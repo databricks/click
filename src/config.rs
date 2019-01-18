@@ -578,12 +578,20 @@ impl Config {
 }
 
 /// Click config
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Alias {
+    pub alias: String,
+    pub expanded: String,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
     pub editor: Option<String>,
     pub terminal: Option<String>,
+    #[serde(default = "Vec::new")]
+    pub aliases: Vec<Alias>,
 }
 
 impl ClickConfig {

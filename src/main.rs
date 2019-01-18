@@ -257,8 +257,26 @@ impl Env {
         self.click_config.terminal = terminal.clone();
     }
 
+    // Return the current position of the specified alias in the Vec, or None if it's not there
+    fn alias_position(&self, alias: &str) -> Option<usize> {
+        self.click_config.aliases.iter().position(|a| {
+            a.alias == *alias
+        })
+    }
+
     fn add_alias(&mut self, alias: Alias) {
+        self.remove_alias(&alias.alias);
         self.click_config.aliases.push(alias);
+    }
+
+    fn remove_alias(&mut self, alias: &str) -> bool {
+        match self.alias_position(alias) {
+            Some(p) => {
+                self.click_config.aliases.remove(p);
+                true
+            }
+            None => false
+        }
     }
 
     fn set_lastlist(&mut self, list: LastList) {
@@ -702,6 +720,7 @@ fn main() {
     commands.push(Box::new(cmd::PortForwards::new()));
     commands.push(Box::new(cmd::Jobs::new()));
     commands.push(Box::new(cmd::Alias::new()));
+    commands.push(Box::new(cmd::Unalias::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();

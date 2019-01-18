@@ -83,7 +83,7 @@ use std::sync::{Arc, Mutex};
 
 use cmd::Cmd;
 use completer::ClickCompleter;
-use config::{ClickConfig, Config};
+use config::{Alias, ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
            ServiceList, JobList};
@@ -255,6 +255,10 @@ impl Env {
 
     fn set_terminal(&mut self, terminal: &Option<String>) {
         self.click_config.terminal = terminal.clone();
+    }
+
+    fn add_alias(&mut self, alias: Alias) {
+        self.click_config.aliases.push(alias);
     }
 
     fn set_lastlist(&mut self, list: LastList) {
@@ -438,6 +442,33 @@ impl Env {
         }
         self.port_forwards = Vec::new();
     }
+
+    /// Try and expand alias.
+    /// FFIX Returns Some(expanded) if the alias expands, or None if no such alias
+    /// is found
+    fn try_expand_alias<'a>(&'a self,
+                            line: &'a str,
+                            prev_word: Option<&'a str>) -> ExpandedAlias<'a> {
+        let pos = line.find(char::is_whitespace).unwrap_or(line.len());
+        let word = &line[0..pos];
+        // don't expand if prev_word is Some, and is equal to my word
+        // this means an alias maps to itself, and we want to stop expanding
+        // to avoid an infinite loop
+        if prev_word.filter(|pw| *pw == word).is_none() {
+            for alias in self.click_config.aliases.iter() {
+                if word == alias.alias.as_str() {
+                    return ExpandedAlias {
+                        expansion: Some(alias),
+                        rest: &line[pos..],
+                    };
+                }
+            }
+        }
+        ExpandedAlias {
+            expansion: None,
+            rest: line,
+        }
+    }
 }
 
 impl fmt::Display for Env {
@@ -524,6 +555,32 @@ fn build_parser_expr<'a>(
         };
         Ok((click_cmd, right))
     }
+}
+
+
+#[derive(Debug)]
+struct ExpandedAlias<'a> {
+    expansion: Option<&'a Alias>,
+    rest: &'a str,
+}
+
+fn alias_expand_line(env: &Env, line: &str) -> String {
+    let expa = env.try_expand_alias(line, None);
+    let mut alias_stack = vec![expa];
+    loop {
+        let expa = match alias_stack.last().unwrap().expansion {
+            Some(ref prev) => {
+                // previous thing expanded an alias, so try and expand that too
+                env.try_expand_alias(prev.expanded.as_str(), Some(prev.alias.as_str()))
+            }
+            None => break
+        };
+        alias_stack.push(expa);
+    }
+    // At this point, all the "real" stuff is in the chain of "rest" memebers of the
+    // alias_stack, let's gather them up
+    let rests: Vec<&str> = alias_stack.iter().rev().map(|ea| ea.rest).collect();
+    rests.concat()
 }
 
 fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> {
@@ -644,6 +701,7 @@ fn main() {
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
     commands.push(Box::new(cmd::Jobs::new()));
+    commands.push(Box::new(cmd::Alias::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();
@@ -657,8 +715,26 @@ fn main() {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                match parse_line(&line) {
+                if line.is_empty() {
+                    continue;
+                }
+                let mut first_non_whitespace = 0;
+                for c in line.chars() {
+                    if !c.is_whitespace() {
+                        break;
+                    }
+                    first_non_whitespace+=1;
+                }
+                let lstr =
+                    if first_non_whitespace == 0 {
+                        // bash semantics: don't add to history if start with space
+                        rl.add_history_entry(line.as_str());
+                        line.as_str()
+                    } else {
+                        &line[first_non_whitespace..]
+                    };
+                let expanded_line = alias_expand_line(&env, lstr);
+                match parse_line(&expanded_line) {
                     Ok((left, right)) => {
                         // set up output
                         match right {

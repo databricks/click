@@ -17,6 +17,7 @@
 use Env;
 use LastList;
 use describe;
+use config;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
            NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
            ServiceList, JobList};
@@ -2463,3 +2464,50 @@ fn print_jobs(
     let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
     JobList { items: final_jobs }
 }
+
+command!(
+    Alias,
+    "alias",
+    "Define or display aliases",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("alias")
+            .help("the sort version of the command")
+            .required(false)
+            .requires("expanded")
+    ).arg(
+        Arg::with_name("expanded")
+            .help("what the short version of the command should expand to")
+            .required(false)
+            .requires("alias")
+    ) .after_help(
+        "Examples:
+  # Display current aliases
+  alias
+
+  # alias p to pods
+  alias p pods
+
+  # alias pn to get pods with nginx in the name
+  alias pn \"pods -r nginx\"
+
+  # alias el to run logs and grep for ERROR
+  alias el \"logs | grep ERROR\""
+    ),
+    vec!["alias", "aliases"],
+    noop_complete,
+    |matches, env, writer| {
+        if matches.is_present("alias") {
+            let alias = matches.value_of("alias").unwrap(); // safe, checked above
+            let expanded = matches.value_of("expanded").unwrap(); // safe, required with alias
+            env.add_alias(config::Alias {
+                alias: alias.to_owned(),
+                expanded: expanded.to_owned(),
+            });
+            clickwrite!(writer, "aliased {} = '{}'\n", alias, expanded);
+        } else {
+            for alias in env.click_config.aliases.iter() {
+                clickwrite!(writer, "alias {} = '{}'\n", alias.alias, alias.expanded);
+            }
+        }
+    }
+);

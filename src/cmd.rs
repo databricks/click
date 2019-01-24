@@ -22,7 +22,7 @@ use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Meta
            NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
            ServiceList, JobList};
 use output::ClickWriter;
-use table::CellSpec;
+use table::{CellSpec, opt_sort};
 use values::{get_val_as, val_item_count, val_str, val_u64};
 
 use ansi_term::Colour::Yellow;
@@ -41,6 +41,7 @@ use regex::Regex;
 
 use std;
 use std::cell::RefCell;
+use std::cmp;
 use std::error::Error;
 use std::iter::Iterator;
 use std::io::{self, stderr, BufRead, BufReader, Read, Write};
@@ -257,21 +258,19 @@ fn phase_str(pod: &Pod) -> String {
 }
 
 // get the number of ready containers and total containers
-fn ready_str(pod: &Pod) -> String {
-    match pod.status.container_statuses {
-        Some(ref statuses) => {
-            let mut count = 0;
-            let mut ready = 0;
-            for ref stat in statuses.iter() {
-                count += 1;
-                if stat.ready {
-                    ready += 1;
-                }
+// or None if that cannot be determined
+fn ready_counts(pod: &Pod) -> Option<(u32, u32)> {
+    pod.status.container_statuses.as_ref().map(|statuses| {
+        let mut count = 0;
+        let mut ready = 0;
+        for ref stat in statuses.iter() {
+            count += 1;
+            if stat.ready {
+                ready += 1;
             }
-            format!("{}/{}", ready, count)
         }
-        None => "unknown".to_owned(),
-    }
+        (ready, count)
+    })
 }
 
 fn phase_style(phase: &String) -> &'static str {
@@ -325,18 +324,88 @@ fn shorten_to(s: String, max_len: usize) -> String {
     }
 }
 
+fn create_podlist_specs<'a>(
+    pod: Pod,
+    show_labels: bool,
+    show_annot: bool,
+    show_node: bool,
+    show_namespace: bool) -> (Pod, Vec<CellSpec<'a>>) {
+
+    let mut specs = Vec::new();
+    specs.push(CellSpec::new_index());
+    specs.push(CellSpec::new_owned(pod.metadata.name.clone()));
+
+    let ready_str = match ready_counts(&pod) {
+        Some((ready, count)) => format!("{}/{}", ready, count),
+        None => "Unknown".to_owned()
+    };
+    specs.push(CellSpec::new_owned(ready_str));
+
+    {
+        let ps = phase_str(&pod);
+        let ss = phase_style(&ps);
+        specs.push(CellSpec::with_style_owned(ps, ss));
+    }
+
+    if let Some(ts) = pod.metadata.creation_timestamp {
+        specs.push(CellSpec::new_owned(time_since(ts)));
+    } else {
+        specs.push(CellSpec::new("unknown"));
+    }
+
+    let restarts =  pod.status.container_statuses.as_ref().map(|stats| {
+        stats.iter().fold(0, |acc, ref x| acc + x.restart_count)
+    }).unwrap_or(0);
+    specs.push(CellSpec::new_owned(format!("{}", restarts)));
+
+    if show_labels {
+        specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.labels)));
+    }
+
+    if show_annot {
+        specs.push(CellSpec::new_owned(keyval_string(
+            &pod.metadata.annotations,
+        )));
+    }
+
+    if show_node {
+        specs.push(CellSpec::new_owned(match pod.spec.node_name {
+            Some(ref nn) => nn.clone(),
+            None => "[Unknown]".to_owned()
+        }));
+    }
+
+    if show_namespace {
+        specs.push(CellSpec::new_owned(match pod.metadata.namespace {
+            Some(ref ns) => ns.clone(),
+            None => "[Unknown]".to_owned(),
+        }));
+    }
+    (pod, specs)
+}
+
 /// Print out the specified list of pods in a pretty format
 fn print_podlist(
-    podlist: PodList,
+    mut podlist: PodList,
     show_labels: bool,
     show_annot: bool,
     show_node: bool,
     show_namespace: bool,
     regex: Option<Regex>,
+    sort: Option<&str>,
+    reverse: bool,
     writer: &mut ClickWriter,
 ) -> PodList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "Ready", "Phase", "Age", "Restarts"];
+
+    let show_labels = show_labels || sort.map(|s| s == "Lables" || s == "labels").unwrap_or(false);
+    let show_annot = show_annot ||
+        sort.map(|s| s == "Annotations" || s == "annotations").unwrap_or(false);
+    let show_node = show_node || sort.map(|s| s == "Node" || s == "node").unwrap_or(false);
+    let show_namespace = show_namespace ||
+        sort.map(|s| s == "Namespace" || s == "namespace").unwrap_or(false);
+
     if show_labels {
         title_row.add_cell(Cell::new("Labels"));
     }
@@ -351,59 +420,94 @@ fn print_podlist(
     }
     table.set_titles(title_row);
 
-    let pods_specs = podlist.items.into_iter().map(|pod| {
-        let mut specs = Vec::new();
-        specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(pod.metadata.name.clone()));
-
-        specs.push(CellSpec::new_owned(ready_str(&pod)));
-
-        {
-            let ps = phase_str(&pod);
-            let ss = phase_style(&ps);
-            specs.push(CellSpec::with_style_owned(ps, ss));
+    match sort {
+        Some(sortcol) => {
+            match sortcol {
+                "Name" | "name" => {}, // already sorted by name
+                "Ready" | "ready" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        opt_sort(ready_counts(p1), ready_counts(p2),
+                                 |(r1, c1), (r2, c2)| {
+                                     if c1 < c2 {
+                                         cmp::Ordering::Less
+                                     } else if c1 > c2 {
+                                         cmp::Ordering::Greater
+                                     } else if r1 < r2 {
+                                         cmp::Ordering::Less
+                                     } else if r1 > r2 {
+                                         cmp::Ordering::Greater
+                                     } else {
+                                         cmp::Ordering::Equal
+                                     }
+                                 })
+                    })
+                }
+                "Age" | "age" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        opt_sort(p1.metadata.creation_timestamp,
+                                 p2.metadata.creation_timestamp,
+                                 |a1, a2| a1.partial_cmp(a2).unwrap())
+                    })
+                }
+                "Restarts" | "restarts" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        let p1r = p1.status.container_statuses.as_ref().map(|stats| {
+                            stats.iter().fold(0, |acc, ref x| acc + x.restart_count)
+                        }).unwrap_or(0);
+                        let p2r = p2.status.container_statuses.as_ref().map(|stats| {
+                            stats.iter().fold(0, |acc, ref x| acc + x.restart_count)
+                        }).unwrap_or(0);
+                        p1r.partial_cmp(&p2r).unwrap()
+                    })
+                }
+                "Labels" | "labels" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        let p1s = keyval_string(&p1.metadata.labels);
+                        let p2s = keyval_string(&p2.metadata.labels);
+                        p1s.partial_cmp(&p2s).unwrap()
+                    })
+                }
+                "Annotations" | "annotations" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        let p1s = keyval_string(&p1.metadata.annotations);
+                        let p2s = keyval_string(&p2.metadata.annotations);
+                        p1s.partial_cmp(&p2s).unwrap()
+                    })
+                }
+                "Node" | "node" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        opt_sort(p1.spec.node_name.as_ref(),
+                                 p2.spec.node_name.as_ref(),
+                                 |p1n, p2n| p1n.partial_cmp(p2n).unwrap())
+                    })
+                }
+                "Namespace" | "namespace" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        opt_sort(p1.metadata.namespace.as_ref(),
+                                 p2.metadata.namespace.as_ref(),
+                                 |p1n, p2n| p1n.partial_cmp(p2n).unwrap())
+                    })
+                }
+                _ => {
+                    clickwrite!(writer,
+                                "Invalid sort col: {}, this is a bug, please report it", sortcol);
+                }
+            }
         }
+        None => {}
+    }
 
-        if let Some(ts) = pod.metadata.creation_timestamp {
-            specs.push(CellSpec::new_owned(time_since(ts)));
-        } else {
-            specs.push(CellSpec::new("unknown"));
-        }
+    let to_map: Box<Iterator<Item=Pod>> = if reverse {
+        Box::new(podlist.items.into_iter().rev())
+    } else {
+        Box::new(podlist.items.into_iter())
+    };
 
-        let restarts = if let Some(ref stats) = pod.status.container_statuses {
-            stats.iter().fold(0, |acc, ref x| acc + x.restart_count)
-        } else {
-            0
-        };
-        specs.push(CellSpec::new_owned(format!("{}", restarts)));
-
-        if show_labels {
-            specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.labels)));
-        }
-
-        if show_annot {
-            specs.push(CellSpec::new_owned(keyval_string(
-                &pod.metadata.annotations,
-            )));
-        }
-
-        if show_node {
-            specs.push(CellSpec::new_owned(match pod.spec.node_name {
-                Some(ref nn) => nn.clone(),
-                None => "[Unknown]".to_owned()
-            }));
-        }
-
-        if show_namespace {
-            specs.push(CellSpec::new_owned(match pod.metadata.namespace {
-                Some(ref ns) => ns.clone(),
-                None => "[Unknown]".to_owned(),
-            }));
-        }
-        (pod, specs)
+    let pods_specs =  to_map.map(|pod| {
+        create_podlist_specs(pod, show_labels, show_annot, show_node, show_namespace)
     });
 
-    let filtered = match regex {
+    let filtered =  match regex {
         Some(r) => ::table::filter(pods_specs, r),
         None => pods_specs.collect(),
     };
@@ -830,7 +934,7 @@ command!(
             .long("label")
             .help("Get pods with specified label selector (example: app=kinesis2prom)")
             .takes_value(true)
-    ).arg(
+        ).arg(
             Arg::with_name("regex")
                 .short("r")
                 .long("regex")
@@ -856,6 +960,30 @@ command!(
                 .short("n")
                 .long("show-node")
                 .help("Show node pod is on as column in output")
+                .takes_value(false)
+        )
+        .arg(
+            Arg::with_name("sort")
+                .short("s")
+                .long("sort")
+                .help("Sort by specified column (if column isn't shown by default, it will \
+ be shown)")
+                .takes_value(true)
+                .possible_values(&["Name", "name",
+                                   "Ready", "ready",
+                                   "Phase", "phase",
+                                   "Age", "age",
+                                   "Restarts", "restarts",
+                                   "Labels", "labels",
+                                   "Annotations", "annotations",
+                                   "Node", "node",
+                                   "Namespace", "namespace"])
+        )
+        .arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
                 .takes_value(false)
         ),
     vec!["pods"],
@@ -903,6 +1031,8 @@ command!(
                     matches.is_present("shownode"),
                     env.namespace.is_none(),
                     regex,
+                    matches.value_of("sort"),
+                    matches.is_present("reverse"),
                     writer,
                 );
                 env.set_lastlist(LastList::PodList(end_list));

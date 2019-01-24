@@ -24,6 +24,8 @@ use prettytable::{format, Table};
 use regex::Regex;
 use term::terminfo::TerminfoTerminal;
 
+use std::cmp::Ordering;
+
 lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
@@ -159,6 +161,16 @@ where
             }
         })
         .collect()
+}
+
+pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
+    where F: Fn(&T, &T) -> Ordering {
+    match (o1, o2) {
+        (Some(ref v1), Some(ref v2)) => f(v1, v2),
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
 }
 
 fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {

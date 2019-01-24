@@ -15,11 +15,13 @@ travis-ci = { repository = "databricks/click" }
 
 [dependencies]
 ansi_term = "0.9"
+atomicwrites = "0.2.2"
 base64 = "0.5"
 chrono = { version = "0.4", features = ["serde"] }
 clap = "2.22"
 ctrlc = "3.0"
 der-parser = "0.3"
+dirs = "1.0.4"
 duct = "^0.11"
 duct_sh = "^0.1"
 humantime = "1.0"
@@ -40,4 +42,3 @@ tempdir = "^0.3"
 term = "^0.4"
 untrusted = "^0.6"
 webpki = "^0.18"
-dirs = "1.0.4"

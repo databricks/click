@@ -28,12 +28,14 @@ extern crate serde_json;
 mod output;
 
 extern crate ansi_term;
+extern crate atomicwrites;
 extern crate base64;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate ctrlc;
 extern crate der_parser;
+extern crate dirs;
 extern crate duct_sh;
 extern crate humantime;
 extern crate hyper;
@@ -49,7 +51,6 @@ extern crate tempdir;
 extern crate term;
 extern crate untrusted;
 extern crate webpki;
-extern crate dirs;
 
 mod certs;
 mod cmd;
@@ -131,6 +132,7 @@ struct PortForward {
 pub struct Env {
     config: Config,
     click_config: ClickConfig,
+    click_config_path: PathBuf,
     quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
@@ -144,7 +146,7 @@ pub struct Env {
 }
 
 impl Env {
-    fn new(config: Config, click_config: ClickConfig) -> Env {
+    fn new(config: Config, click_config: ClickConfig, click_config_path: PathBuf) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
         ctrlc::set_handler(move || {
@@ -155,6 +157,7 @@ impl Env {
         let mut env = Env {
             config: config,
             click_config: click_config,
+            click_config_path: click_config_path,
             quit: false,
             kluster: None,
             namespace: namespace,
@@ -175,11 +178,11 @@ impl Env {
         env
     }
 
-    fn save_click_config(&mut self, click_path: PathBuf) {
+    fn save_click_config(&mut self) {
         self.click_config.namespace = self.namespace.clone();
         self.click_config.context = self.kluster.as_ref().map(|k| k.name.clone());
         self.click_config
-            .save_to_file(click_path.as_path().to_str().unwrap())
+            .save_to_file(self.click_config_path.as_path().to_str().unwrap())
             .unwrap();
     }
 
@@ -222,13 +225,15 @@ impl Env {
                     Ok(k) => Some(k),
                     Err(e) => {
                         println!(
-                            "[Warning] Couldn't find/load context {}, now no current context.  Error: {}",
+                            "[WARN] Couldn't find/load context {}, now no current context. \
+                             Error: {}",
                             cname,
                             e
                         );
                         None
                     }
                 };
+                self.save_click_config();
                 self.set_prompt();
             }
             None => {} // no-op
@@ -267,12 +272,14 @@ impl Env {
     fn add_alias(&mut self, alias: Alias) {
         self.remove_alias(&alias.alias);
         self.click_config.aliases.push(alias);
+        self.save_click_config();
     }
 
     fn remove_alias(&mut self, alias: &str) -> bool {
         match self.alias_position(alias) {
             Some(p) => {
                 self.click_config.aliases.remove(p);
+                self.save_click_config();
                 true
             }
             None => false
@@ -691,7 +698,7 @@ fn main() {
     let mut hist_path = conf_dir.clone();
     hist_path.push("click.history");
 
-    let mut env = Env::new(config, click_conf);
+    let mut env = Env::new(config, click_conf, click_path);
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
@@ -855,7 +862,7 @@ fn main() {
         }
     }
 
-    env.save_click_config(click_path);
+    env.save_click_config();
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);
     }

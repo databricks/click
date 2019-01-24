@@ -14,6 +14,7 @@
 
 //! Handle reading .kube/config files
 
+use atomicwrites::{AtomicFile, AllowOverwrite};
 use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
 use duct::cmd;
@@ -614,9 +615,15 @@ impl ClickConfig {
         }
     }
 
+    /// Save this config to specified path.  It's safe to call this from multiple running instances
+    /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
-        let mut file = try!(File::create(path));
-        try!(serde_yaml::to_writer(&mut file, &self));
+        let af = AtomicFile::new(path, AllowOverwrite);
+        try!(af.write(|mut f| {
+            serde_yaml::to_writer(&mut f, &self)
+        }).map_err(|e| KubeError::ConfigFileError(
+            format!("Failed to write config file: {}", e.description())
+        )));
         Ok(())
     }
 }

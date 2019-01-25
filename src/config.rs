@@ -14,6 +14,7 @@
 
 //! Handle reading .kube/config files
 
+use atomicwrites::{AtomicFile, AllowOverwrite};
 use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
 use duct::cmd;
@@ -326,7 +327,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     // unwrap okay, validated above
     if path.chars().next().unwrap() == '/' {
         Ok(path)
-    } else if let Some(home_dir) = env::home_dir() {
+    } else if let Some(home_dir) = dirs::home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
         return Err(KubeError::ConfigFileError(
@@ -578,12 +579,20 @@ impl Config {
 }
 
 /// Click config
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Alias {
+    pub alias: String,
+    pub expanded: String,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
     pub editor: Option<String>,
     pub terminal: Option<String>,
+    #[serde(default = "Vec::new")]
+    pub aliases: Vec<Alias>,
 }
 
 impl ClickConfig {
@@ -606,9 +615,15 @@ impl ClickConfig {
         }
     }
 
+    /// Save this config to specified path.  It's safe to call this from multiple running instances
+    /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
-        let mut file = try!(File::create(path));
-        try!(serde_yaml::to_writer(&mut file, &self));
+        let af = AtomicFile::new(path, AllowOverwrite);
+        try!(af.write(|mut f| {
+            serde_yaml::to_writer(&mut f, &self)
+        }).map_err(|e| KubeError::ConfigFileError(
+            format!("Failed to write config file: {}", e.description())
+        )));
         Ok(())
     }
 }

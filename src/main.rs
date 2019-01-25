@@ -28,16 +28,18 @@ extern crate serde_json;
 mod output;
 
 extern crate ansi_term;
+extern crate atomicwrites;
 extern crate base64;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate ctrlc;
 extern crate der_parser;
+extern crate dirs;
 extern crate duct_sh;
 extern crate humantime;
 extern crate hyper;
-extern crate hyper_rustls;
+extern crate hyper_sync_rustls;
 extern crate os_pipe;
 extern crate regex;
 extern crate ring;
@@ -48,6 +50,7 @@ extern crate serde_yaml;
 extern crate tempdir;
 extern crate term;
 extern crate untrusted;
+extern crate webpki;
 
 mod certs;
 mod cmd;
@@ -81,7 +84,7 @@ use std::sync::{Arc, Mutex};
 
 use cmd::Cmd;
 use completer::ClickCompleter;
-use config::{ClickConfig, Config};
+use config::{Alias, ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, StatefulSetList,
            SecretList, ServiceList, JobList};
@@ -131,6 +134,7 @@ struct PortForward {
 pub struct Env {
     config: Config,
     click_config: ClickConfig,
+    click_config_path: PathBuf,
     quit: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
@@ -144,7 +148,7 @@ pub struct Env {
 }
 
 impl Env {
-    fn new(config: Config, click_config: ClickConfig) -> Env {
+    fn new(config: Config, click_config: ClickConfig, click_config_path: PathBuf) -> Env {
         let cbool = Arc::new(AtomicBool::new(false));
         let r = cbool.clone();
         ctrlc::set_handler(move || {
@@ -155,6 +159,7 @@ impl Env {
         let mut env = Env {
             config: config,
             click_config: click_config,
+            click_config_path: click_config_path,
             quit: false,
             kluster: None,
             namespace: namespace,
@@ -175,11 +180,11 @@ impl Env {
         env
     }
 
-    fn save_click_config(&mut self, click_path: PathBuf) {
+    fn save_click_config(&mut self) {
         self.click_config.namespace = self.namespace.clone();
         self.click_config.context = self.kluster.as_ref().map(|k| k.name.clone());
         self.click_config
-            .save_to_file(click_path.as_path().to_str().unwrap())
+            .save_to_file(self.click_config_path.as_path().to_str().unwrap())
             .unwrap();
     }
 
@@ -223,13 +228,15 @@ impl Env {
                     Ok(k) => Some(k),
                     Err(e) => {
                         println!(
-                            "[Warning] Couldn't find/load context {}, now no current context.  Error: {}",
+                            "[WARN] Couldn't find/load context {}, now no current context. \
+                             Error: {}",
                             cname,
                             e
                         );
                         None
                     }
                 };
+                self.save_click_config();
                 self.set_prompt();
             }
             None => {} // no-op
@@ -256,6 +263,30 @@ impl Env {
 
     fn set_terminal(&mut self, terminal: &Option<String>) {
         self.click_config.terminal = terminal.clone();
+    }
+
+    // Return the current position of the specified alias in the Vec, or None if it's not there
+    fn alias_position(&self, alias: &str) -> Option<usize> {
+        self.click_config.aliases.iter().position(|a| {
+            a.alias == *alias
+        })
+    }
+
+    fn add_alias(&mut self, alias: Alias) {
+        self.remove_alias(&alias.alias);
+        self.click_config.aliases.push(alias);
+        self.save_click_config();
+    }
+
+    fn remove_alias(&mut self, alias: &str) -> bool {
+        match self.alias_position(alias) {
+            Some(p) => {
+                self.click_config.aliases.remove(p);
+                self.save_click_config();
+                true
+            }
+            None => false
+        }
     }
 
     fn set_lastlist(&mut self, list: LastList) {
@@ -456,6 +487,33 @@ impl Env {
         }
         self.port_forwards = Vec::new();
     }
+
+    /// Try and expand alias.
+    /// FFIX Returns Some(expanded) if the alias expands, or None if no such alias
+    /// is found
+    fn try_expand_alias<'a>(&'a self,
+                            line: &'a str,
+                            prev_word: Option<&'a str>) -> ExpandedAlias<'a> {
+        let pos = line.find(char::is_whitespace).unwrap_or(line.len());
+        let word = &line[0..pos];
+        // don't expand if prev_word is Some, and is equal to my word
+        // this means an alias maps to itself, and we want to stop expanding
+        // to avoid an infinite loop
+        if prev_word.filter(|pw| *pw == word).is_none() {
+            for alias in self.click_config.aliases.iter() {
+                if word == alias.alias.as_str() {
+                    return ExpandedAlias {
+                        expansion: Some(alias),
+                        rest: &line[pos..],
+                    };
+                }
+            }
+        }
+        ExpandedAlias {
+            expansion: None,
+            rest: line,
+        }
+    }
 }
 
 impl fmt::Display for Env {
@@ -544,6 +602,32 @@ fn build_parser_expr<'a>(
     }
 }
 
+
+#[derive(Debug)]
+struct ExpandedAlias<'a> {
+    expansion: Option<&'a Alias>,
+    rest: &'a str,
+}
+
+fn alias_expand_line(env: &Env, line: &str) -> String {
+    let expa = env.try_expand_alias(line, None);
+    let mut alias_stack = vec![expa];
+    loop {
+        let expa = match alias_stack.last().unwrap().expansion {
+            Some(ref prev) => {
+                // previous thing expanded an alias, so try and expand that too
+                env.try_expand_alias(prev.expanded.as_str(), Some(prev.alias.as_str()))
+            }
+            None => break
+        };
+        alias_stack.push(expa);
+    }
+    // At this point, all the "real" stuff is in the chain of "rest" memebers of the
+    // alias_stack, let's gather them up
+    let rests: Vec<&str> = alias_stack.iter().rev().map(|ea| ea.rest).collect();
+    rests.concat()
+}
+
 fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
@@ -586,7 +670,7 @@ fn main() {
     let conf_dir = if let Some(dir) = matches.value_of("config_dir") {
         PathBuf::from(dir)
     } else {
-        match std::env::home_dir() {
+        match dirs::home_dir() {
             Some(mut path) => {
                 path.push(".kube");
                 path
@@ -634,7 +718,7 @@ fn main() {
     let mut hist_path = conf_dir.clone();
     hist_path.push("click.history");
 
-    let mut env = Env::new(config, click_conf);
+    let mut env = Env::new(config, click_conf, click_path);
 
     let mut commands: Vec<Box<Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
@@ -663,6 +747,8 @@ fn main() {
     commands.push(Box::new(cmd::PortForward::new()));
     commands.push(Box::new(cmd::PortForwards::new()));
     commands.push(Box::new(cmd::Jobs::new()));
+    commands.push(Box::new(cmd::Alias::new()));
+    commands.push(Box::new(cmd::Unalias::new()));
 
     let mut rl = Editor::<ClickCompleter>::new();
     rl.load_history(hist_path.as_path()).unwrap_or_default();
@@ -676,8 +762,26 @@ fn main() {
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                match parse_line(&line) {
+                if line.is_empty() {
+                    continue;
+                }
+                let mut first_non_whitespace = 0;
+                for c in line.chars() {
+                    if !c.is_whitespace() {
+                        break;
+                    }
+                    first_non_whitespace+=1;
+                }
+                let lstr =
+                    if first_non_whitespace == 0 {
+                        // bash semantics: don't add to history if start with space
+                        rl.add_history_entry(line.as_str());
+                        line.as_str()
+                    } else {
+                        &line[first_non_whitespace..]
+                    };
+                let expanded_line = alias_expand_line(&env, lstr);
+                match parse_line(&expanded_line) {
                     Ok((left, right)) => {
                         // set up output
                         match right {
@@ -779,7 +883,7 @@ fn main() {
         }
     }
 
-    env.save_click_config(click_path);
+    env.save_click_config();
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);
     }

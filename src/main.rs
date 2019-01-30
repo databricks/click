@@ -69,6 +69,7 @@ use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::{App, Arg};
 use parser::Parser;
 use rustyline::error::ReadlineError;
+use rustyline::config as rustyconfig;
 use rustyline::Editor;
 use tempdir::TempDir;
 
@@ -83,7 +84,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cmd::Cmd;
-use completer::ClickCompleter;
+use completer::ClickHelper;
 use config::{Alias, ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
@@ -729,12 +730,13 @@ fn main() {
     commands.push(Box::new(cmd::Alias::new()));
     commands.push(Box::new(cmd::Unalias::new()));
 
-    let mut rl = Editor::<ClickCompleter>::new();
+    let config = rustyconfig::Builder::new().completion_type(rustyconfig::CompletionType::List).build();
+    let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.load_history(hist_path.as_path()).unwrap_or_default();
 
     // see comment on ClickCompleter::new for why a raw pointer is needed
     let raw_env: *const Env = &env;
-    rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
+    rl.set_helper(Some(ClickHelper::new(&commands, raw_env)));
 
     while !env.quit {
         let mut writer = ClickWriter::new();

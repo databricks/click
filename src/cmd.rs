@@ -216,14 +216,14 @@ macro_rules! command {
                 let flags = parser.flags.iter().filter(|fb| {
                     completer::long_matches(&fb.s.long, prefix)
                 }).map(|fb| RustlinePair {
-                    display: fb.s.long.unwrap().to_string(),
+                    display: format!("--{}", fb.s.long.unwrap()),
                     replacement: fb.s.long.unwrap()[repoff..].to_string(),
                 });
 
                 let opts = parser.opts.iter().filter(|ob| {
                     completer::long_matches(&ob.s.long, prefix)
                 }).map(|ob| RustlinePair {
-                    display: ob.s.long.unwrap().to_string(),
+                    display: format!("--{}", ob.s.long.unwrap()),
                     replacement: ob.s.long.unwrap()[repoff..].to_string(),
                 });
 
@@ -1872,13 +1872,13 @@ command!(
 command!(
     SetCmd,
     "set",
-    "Set click options",
+    "Set click options. (See 'help completion' and 'help edit_mode' for more information",
     |clap: App<'static, 'static>| clap.arg(
         Arg::with_name("option")
             .help("The click option to set")
             .required(true)
             .index(1)
-            .possible_values(&["editor", "terminal"])
+            .possible_values(&["completion_type", "edit_mode", "editor", "terminal"])
     ).arg(
         Arg::with_name("value")
             .help("The value to set the option to")
@@ -1892,6 +1892,30 @@ command!(
         let value = matches.value_of("value").unwrap(); // safe, required
         let mut failed = false;
         match option {
+            "completion_type" => {
+                match value {
+                    "circular" => env.set_completion_type(config::CompletionType::Circular),
+                    "list" => env.set_completion_type(config::CompletionType::List),
+                    _ => {
+                        write!(stderr(),
+                               "Invalid completion type.  Possible values are: [circular, list]\n")
+                            .unwrap_or(());
+                        failed = true;
+                    }
+                }
+            }
+            "edit_mode" => {
+                match value {
+                    "vi" => env.set_edit_mode(config::EditMode::Vi),
+                    "emacs" => env.set_edit_mode(config::EditMode::Emacs),
+                    _ => {
+                        write!(stderr(),
+                               "Invalid edit_mode.  Possible values are: [emacs, vi]\n")
+                            .unwrap_or(());
+                        failed = true;
+                    }
+                }
+            }
             "editor" => {
                 env.set_editor(&Some(value.to_owned()));
             }

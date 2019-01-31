@@ -117,7 +117,7 @@ impl<'a> Completer for ClickHelper<'a> {
                                 if "--help".starts_with(back) {
                                     // add in help completion
                                     opts.push(Pair {
-                                        display: "help".to_owned(),
+                                        display: "--help".to_owned(),
                                         replacement: "help"[(back.len()-2)..].to_owned(),
                                     });
                                 }
@@ -136,17 +136,7 @@ impl<'a> Completer for ClickHelper<'a> {
                     // here the last thing typed wasn't a '-' option, so we ask the command to
                     // do completion
                     let opts = cmd.try_complete(pos, prefix, self.env);
-                    if pos == linecmd.len() && opts.len() > 1 {
-                        // user as pressed tab with no space after the command,
-                        // and we have completions, so add a space in
-                        // let space_opts = opts.iter().map(|o| Pair{
-                        //     display: o.clone(),
-                        //     replacement: format!(" {}", o),
-                        // }).collect();
-                        return Ok((line.len(), opts));
-                    } else {
-                        return Ok((line.len(), opts));
-                    }
+                    return Ok((line.len(), opts));
                 } else {
                     for cmd in self.commands.iter() {
                         if cmd.get_name().starts_with(linecmd) {
@@ -225,5 +215,7 @@ macro_rules! possible_values_completer {
     }
 }
 
-possible_values_completer!(setoptions_values_completer, ["editor", "terminal"]);
+possible_values_completer!(
+    setoptions_values_completer, ["completion_type", "edit_mode", "editor", "terminal"]
+);
 possible_values_completer!(portforwardaction_values_completer, ["list", "output", "stop"]);

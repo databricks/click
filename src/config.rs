@@ -20,12 +20,14 @@ use chrono::offset::Utc;
 use duct::cmd;
 use serde_json::{self, Value};
 use serde_yaml;
+use rustyline::config as rustyconfig;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::From;
 use std::env;
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 
@@ -585,12 +587,66 @@ pub struct Alias {
     pub expanded: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub enum EditMode {
+    Emacs,
+    Vi,
+}
+
+impl Default for EditMode {
+    fn default() -> Self { EditMode::Emacs }
+}
+
+impl fmt::Display for EditMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            EditMode::Emacs => "Emacs",
+            EditMode::Vi => "Vi",
+        })
+    }
+}
+
+impl Into<String> for &EditMode {
+    fn into(self) -> String {
+        format!("{}", self)
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum CompletionType {
+    Circular,
+    List,
+}
+
+impl Default for CompletionType {
+    fn default() -> Self { CompletionType::Circular }
+}
+
+impl fmt::Display for CompletionType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            CompletionType::Circular => "Circular",
+            CompletionType::List => "List",
+        })
+    }
+}
+
+impl Into<String> for &CompletionType {
+    fn into(self) -> String {
+        format!("{}", self)
+    }
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
     pub editor: Option<String>,
     pub terminal: Option<String>,
+    #[serde(default = "EditMode::default")]
+    pub editmode: EditMode,
+    #[serde(default = "CompletionType::default")]
+    pub completiontype: CompletionType,
     #[serde(default = "Vec::new")]
     pub aliases: Vec<Alias>,
 }
@@ -613,6 +669,21 @@ impl ClickConfig {
                 ClickConfig::default()
             }
         }
+    }
+
+    pub fn get_rustyline_conf(&self) -> rustyconfig::Config {
+        let mut config = rustyconfig::Builder::new();
+        config = match self.editmode {
+            EditMode::Emacs => config.edit_mode(rustyconfig::EditMode::Emacs),
+            EditMode::Vi => config.edit_mode(rustyconfig::EditMode::Vi),
+        };
+        config = match self.completiontype {
+            CompletionType::Circular =>
+                config.completion_type(rustyconfig::CompletionType::Circular),
+            CompletionType::List =>
+                config.completion_type(rustyconfig::CompletionType::List),
+        };
+        config.build()
     }
 
     /// Save this config to specified path.  It's safe to call this from multiple running instances

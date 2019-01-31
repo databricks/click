@@ -68,6 +68,7 @@ mod values;
 use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::{App, Arg};
 use parser::Parser;
+use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use tempdir::TempDir;
@@ -83,7 +84,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cmd::Cmd;
-use completer::ClickCompleter;
+use completer::ClickHelper;
 use config::{Alias, ClickConfig, Config};
 use error::KubeError;
 use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, StatefulSetList,
@@ -136,6 +137,7 @@ pub struct Env {
     click_config: ClickConfig,
     click_config_path: PathBuf,
     quit: bool,
+    need_new_editor: bool,
     kluster: Option<Kluster>,
     namespace: Option<String>,
     current_object: KObj,
@@ -161,6 +163,7 @@ impl Env {
             click_config: click_config,
             click_config_path: click_config_path,
             quit: false,
+            need_new_editor: false,
             kluster: None,
             namespace: namespace,
             current_object: KObj::None,
@@ -217,6 +220,10 @@ impl Env {
         );
     }
 
+    fn get_rustyline_conf(&self) -> rustyconfig::Config {
+        self.click_config.get_rustyline_conf()
+    }
+
     fn get_contexts(&self) -> &HashMap<String, ::config::ContextConf> {
         &self.config.contexts
     }
@@ -263,6 +270,16 @@ impl Env {
 
     fn set_terminal(&mut self, terminal: &Option<String>) {
         self.click_config.terminal = terminal.clone();
+    }
+
+    fn set_completion_type(&mut self, comptype: config::CompletionType) {
+        self.click_config.completiontype = comptype;
+        self.need_new_editor = true;
+    }
+
+    fn set_edit_mode(&mut self, editmode: config::EditMode) {
+        self.click_config.editmode = editmode;
+        self.need_new_editor = true;
     }
 
     // Return the current position of the specified alias in the Vec, or None if it's not there
@@ -524,24 +541,34 @@ impl fmt::Display for Env {
   Current Context: {}
   Availble Contexts: {:?}
   Kubernetes Config File(s): {}
+  Completion Type: {}
+  Edit Mode: {}
   Editor: {}
   Terminal: {}
 }}",
             if let Some(ref k) = self.kluster {
-                Red.bold().paint(k.name.as_str())
+                Green.bold().paint(k.name.as_str())
             } else {
-                Red.paint("none")
+                Green.paint("none")
             },
             self.config.contexts.keys(),
-            self.config.source_file,
-            self.click_config
+            Green.paint(&self.config.source_file),
+            {
+                let ctstr: String = (&self.click_config.completiontype).into();
+                Green.paint(ctstr)
+            },
+            {
+                let emstr: String = (&self.click_config.editmode).into();
+                Green.paint(emstr)
+            },
+            Green.paint(self.click_config
                 .editor
                 .as_ref()
-                .unwrap_or(&"<unset, will use $EDITOR>".to_owned()),
-            self.click_config
+                .unwrap_or(&"<unset, will use $EDITOR>".to_owned())),
+            Green.paint(self.click_config
                 .terminal
                 .as_ref()
-                .unwrap_or(&"<unset, will use xterm>".to_owned()),
+                .unwrap_or(&"<unset, will use xterm>".to_owned())),
         )
     }
 }
@@ -639,6 +666,17 @@ fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> 
     Ok((line, RightExpr::None))
 }
 
+// see comment on ClickCompleter::new for why a raw pointer is needed
+fn get_editor<'a>(config: rustyconfig::Config,
+                  raw_env: *const Env,
+                  hist_path: &PathBuf,
+                  commands: &'a Vec<Box<Cmd>>) -> Editor<ClickHelper<'a>> {
+    let mut rl = Editor::<ClickHelper>::with_config(config);
+    rl.load_history(hist_path.as_path()).unwrap_or_default();
+    rl.set_helper(Some(ClickHelper::new(commands, raw_env)));
+    rl
+}
+
 static SHELLP: &'static str = "Shell syntax can be used to redirect or pipe the output of click \
 commands to files or other commands (like grep).\n
 Examples:\n\
@@ -650,6 +688,17 @@ Examples:\n\
  logs my-cont > /tmp/logs.txt\n\n\
  # Append log lines that contain \"foo bar\" to logs.txt\n\
  logs the-cont | grep \"foo bar\" >> /tmp/logs.txt";
+
+static COMPLETIONHELP: &'static str = "There are two completion types: list or circular.
+- 'list' will complete the next full match (like in Vim by default) (do: 'set completion list)
+- circular will complete until the longest match. If there is more than one match, \
+it will list all matches (like in Bash/Readline). (do: set completion circular)";
+
+static EDITMODEHELP: &'static str = "There are two edit modes: vi or emacs.
+This controls the style of editing and the standard keymaps to the mode used by the \
+associated editor.
+- 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
+- 'emacs' Use standard readline/bash/emacs keybindings (do: 'set edit_mode emacs')";
 
 fn main() {
     // Command line arg paring for click itself
@@ -750,15 +799,19 @@ fn main() {
     commands.push(Box::new(cmd::Alias::new()));
     commands.push(Box::new(cmd::Unalias::new()));
 
-    let mut rl = Editor::<ClickCompleter>::new();
-    rl.load_history(hist_path.as_path()).unwrap_or_default();
-
-    // see comment on ClickCompleter::new for why a raw pointer is needed
     let raw_env: *const Env = &env;
-    rl.set_completer(Some(ClickCompleter::new(&commands, raw_env)));
+    let mut rl = get_editor(env.get_rustyline_conf(),
+                            raw_env,
+                            &hist_path,
+                            &commands);
 
     while !env.quit {
         let mut writer = ClickWriter::new();
+        if env.need_new_editor {
+            rl = get_editor(env.get_rustyline_conf(),
+                            raw_env, &hist_path, &commands);
+            env.need_new_editor = false;
+        }
         let readline = rl.readline(env.prompt.as_str());
         match readline {
             Ok(line) => {
@@ -834,6 +887,12 @@ fn main() {
                                             "pipes" | "redirection" | "shell" => {
                                                 println!("{}", SHELLP);
                                             }
+                                            "completion" => {
+                                                println!("{}", COMPLETIONHELP);
+                                            }
+                                            "edit_mode" => {
+                                                println!("{}", EDITMODEHELP);
+                                            }
                                             _ => {
                                                 println!(
                                                     "I don't know anything about {}, sorry",
@@ -857,6 +916,14 @@ fn main() {
                                     }
                                     println!(
                                         "\nOther help topics (type 'help [TOPIC]' for details)"
+                                    );
+                                    println!(
+                                        "  completion          Available completion_type values \
+                                         for the 'set' command, and what they mean"
+                                    );
+                                    println!(
+                                        "  edit_mode           Available edit_mode values for \
+                                         the 'set' command, and what they mean"
                                     );
                                     println!(
                                         "  shell               Redirecting and piping click \

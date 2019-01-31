@@ -33,7 +33,7 @@ prettytable-rs = "^0.6"
 regex = "0.2"
 ring = "^0.13"
 rustls = { version = "0.14", features = ["dangerous_configuration"] }
-rustyline = "1.0"
+rustyline = "3.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"

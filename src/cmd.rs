@@ -17,6 +17,7 @@
 use Env;
 use LastList;
 use describe;
+use completer;
 use config;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
            NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, StatefulSetList,
@@ -38,6 +39,7 @@ use prettytable::row::Row;
 use serde_json;
 use serde_json::Value;
 use regex::Regex;
+use rustyline::completion::Pair as RustlinePair;
 
 use std;
 use std::cell::RefCell;
@@ -66,7 +68,8 @@ pub trait Cmd {
     fn exec(&self, &mut Env, &mut Iterator<Item = &str>, &mut ClickWriter) -> bool;
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
-    fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>);
+    fn try_complete(&self, index: usize, prefix:&str, env: &Env) -> Vec<RustlinePair>;
+    fn complete_option(&self, prefix: &str) -> Vec<RustlinePair>;
     fn print_help(&self);
     fn about(&self) -> &'static str;
 }
@@ -112,6 +115,12 @@ where
     }
 }
 
+macro_rules! noop_complete {
+    () => {
+        vec!()
+    }
+}
+
 /// Macro for defining a command
 ///
 /// # Args
@@ -130,18 +139,20 @@ where
 /// command!(Quit,
 ///         "quit",
 ///         "Quit click",
-///         |clap| {clap},
-///         vec!("q", "quit"),
+///         identity,
+///         vec!["q", "quit", "exit"],
+///         noop_complete!,
 ///         |matches, env, writer| {env.quit = true;}
 /// );
 /// # }
 /// ```
 macro_rules! command {
-    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplt_expr: expr,
+    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplters: expr,
      $cmd_expr:expr) => {
         pub struct $cmd_name {
             aliases: Vec<&'static str>,
             clap: RefCell<App<'static, 'static>>,
+            completers: Vec<&'static Fn(&str, &Env) -> Vec<RustlinePair>>,
         }
 
         impl $cmd_name {
@@ -155,6 +166,7 @@ macro_rules! command {
                 $cmd_name {
                     aliases: $aliases,
                     clap: RefCell::new(extra),
+                    completers: $cmplters,
                 }
             }
         }
@@ -184,8 +196,38 @@ macro_rules! command {
                 $about
             }
 
-            fn try_complete(&self, args: Vec<&str>, env: &Env) -> (usize, Vec<String>) {
-                $cmplt_expr(args, env)
+            fn try_complete(&self, index: usize, prefix:&str, env: &Env) -> Vec<RustlinePair> {
+                match self.completers.get(index) {
+                    Some(completer) => completer(prefix, env),
+                    None => vec![],
+                }
+            }
+
+            /**
+             *  Completes all possible long options for this command, with the given prefix.
+             *  This is rather gross as we have to do everything inside this method.
+             *  clap::arg is private, so we can't define methods that take the traits
+             *  that all args implement, and have to handle each individually
+             */
+            fn complete_option(&self, prefix: &str) -> Vec<RustlinePair> {
+                let repoff = prefix.len();
+                let parser = &self.clap.borrow().p;
+
+                let flags = parser.flags.iter().filter(|fb| {
+                    completer::long_matches(&fb.s.long, prefix)
+                }).map(|fb| RustlinePair {
+                    display: format!("--{}", fb.s.long.unwrap()),
+                    replacement: fb.s.long.unwrap()[repoff..].to_string(),
+                });
+
+                let opts = parser.opts.iter().filter(|ob| {
+                    completer::long_matches(&ob.s.long, prefix)
+                }).map(|ob| RustlinePair {
+                    display: format!("--{}", ob.s.long.unwrap()),
+                    replacement: ob.s.long.unwrap()[repoff..].to_string(),
+                });
+
+                flags.chain(opts).collect()
             }
         }
     }
@@ -195,11 +237,6 @@ macro_rules! command {
 /// command! macro invocation
 fn identity<T>(t: T) -> T {
     t
-}
-
-/// A completer that does nothing, used for commands that don't do completion
-fn noop_complete(_: Vec<&str>, _: &Env) -> (usize, Vec<String>) {
-    (0, Vec::new())
 }
 
 /// a clap validator for u32
@@ -789,7 +826,7 @@ command!(
     "Quit click",
     identity,
     vec!["q", "quit", "exit"],
-    noop_complete,
+    noop_complete!(),
     |_, env, _| {
         env.quit = true;
     }
@@ -807,24 +844,7 @@ command!(
             .index(1)
     ),
     vec!["ctx", "context"],
-    |args: Vec<&str>, env: &Env| if args.len() <= 1 {
-        let mut v = Vec::new();
-        let argstart = args.get(0);
-        for context in env.config.contexts.keys() {
-            if argstart.is_none() || context.starts_with(argstart.unwrap()) {
-                v.push(context.clone());
-            }
-        }
-        (
-            match argstart {
-                Some(line) => line.len(),
-                None => 0,
-            },
-            v,
-        )
-    } else {
-        (0, Vec::new())
-    },
+    vec![&completer::context_complete],
     |matches, env, writer| {
         if matches.is_present("context") {
             let context = matches.value_of("context");
@@ -863,7 +883,7 @@ command!(
     "List available contexts",
     identity,
     vec!["contexts", "ctxs"],
-    noop_complete,
+    noop_complete!(),
     |_, env, writer| {
         let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
         contexts.sort();
@@ -879,7 +899,7 @@ command!(
     "Clear the currently selected kubernetes object",
     identity,
     vec!["clear"],
-    noop_complete,
+    noop_complete!(),
     |_, env, _| {
         env.clear_current();
     }
@@ -896,28 +916,7 @@ command!(
             .index(1)
     ),
     vec!["ns", "namespace"],
-    |args: Vec<&str>, env: &Env| {
-        if args.len() <= 1 {
-            // no args yet, suggest all namespaces
-            let v_opt = env.run_on_kluster(|k| k.namespaces_for_context());
-            if let Some(v) = v_opt {
-                match args.get(0) {
-                    Some(line) => (
-                        line.len(),
-                        v.iter()
-                            .filter(|ns| ns.starts_with(line))
-                            .map(|ns| ns.clone())
-                            .collect(),
-                    ),
-                    None => (0, v),
-                }
-            } else {
-                (0, Vec::new())
-            }
-        } else {
-            (0, Vec::new())
-        }
-    },
+    vec![&completer::namespace_completer],
     |matches, env, _| {
         let ns = matches.value_of("namespace");
         env.set_namespace(ns);
@@ -987,7 +986,7 @@ command!(
                 .takes_value(false)
         ),
     vec!["pods"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -1071,13 +1070,15 @@ command!(
                       .long("since")
                       .conflicts_with("sinceTime")
                       .validator(valid_duration)
-                      .help("Only return logs newer than specified relative duration, e.g. 5s, 2m, 3m5s, 1h2min5sec")
+                      .help("Only return logs newer than specified relative duration,
+ e.g. 5s, 2m, 3m5s, 1h2min5sec")
                       .takes_value(true))
                  .arg(Arg::with_name("sinceTime")
                       .long("since-time")
                       .conflicts_with("since")
                       .validator(valid_date)
-                      .help("Only return logs newer than specified RFC3339 date. Eg: 1996-12-19T16:39:57-08:00")
+                      .help("Only return logs newer than specified RFC3339 date. Eg:
+ 1996-12-19T16:39:57-08:00")
                       .takes_value(true))
                  .arg(Arg::with_name("editor")
                       .long("editor")
@@ -1090,30 +1091,7 @@ command!(
                       .min_values(0))
     },
     vec!["logs"],
-    |args: Vec<&str>, env: &Env| if args.len() <= 1 {
-        let mut v = Vec::new();
-        let argstart = args.get(0);
-        match env.current_object {
-            ::KObj::Pod {
-                name: _,
-                ref containers,
-            } => for cont in containers.iter() {
-                if argstart.is_none() || cont.starts_with(argstart.unwrap()) {
-                    v.push(cont.clone());
-                }
-            },
-            _ => {}
-        }
-        (
-            match argstart {
-                Some(line) => line.len(),
-                None => 0,
-            },
-            v,
-        )
-    } else {
-        (0, Vec::new())
-    },
+    vec![&completer::container_completer],
     |matches, env, writer| {
         let cont = match matches.value_of("container") {
             Some(c) => c,
@@ -1169,8 +1147,12 @@ command!(
                     let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
                     url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
                 }
-                let logs_reader =
-                    env.run_on_kluster(|k| k.get_read(url.as_str(), Some(Duration::new(1, 0))));
+                let timeout = if matches.is_present("follow") {
+                    None
+                } else {
+                    Some(Duration::new(1, 0))
+                };
+                let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
                 if let Some(lreader) = logs_reader {
                     let mut reader = BufReader::new(lreader);
                     let mut line = String::new();
@@ -1307,7 +1289,7 @@ command!(
             .takes_value(false)
     ),
     vec!["describe"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         match env.current_object {
             ::KObj::None => {
@@ -1483,7 +1465,7 @@ command!(
                 .min_values(0)
         ),
     vec!["exec"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
         if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (
@@ -1583,7 +1565,7 @@ command!(
     )
     },
     vec!["delete"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
@@ -1759,7 +1741,7 @@ command!(
     "List containers on the active pod",
     identity,
     vec!["conts", "containers"],
-    noop_complete,
+    noop_complete!(),
     |_matches, env, writer| {
         if let Some(ref ns) = env.current_object_namespace {
             if let Some(ref pod) = env.current_pod() {
@@ -1793,7 +1775,7 @@ command!(
     "Get events for the active pod",
     identity,
     vec!["events"],
-    noop_complete,
+    noop_complete!(),
     |_matches, env, writer| if let Some(ref ns) = env.current_object_namespace {
         if let Some(ref pod) = env.current_pod() {
             let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
@@ -1836,7 +1818,7 @@ command!(
             .takes_value(true)
     ),
     vec!["nodes"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -1876,7 +1858,7 @@ command!(
             .takes_value(true)
     ),
     vec!["services"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -1908,7 +1890,7 @@ command!(
     "Print information about the current environment",
     identity,
     vec!["env"],
-    noop_complete,
+    noop_complete!(),
     |_matches, env, writer| {
         clickwrite!(writer, "{}\n", env);
     }
@@ -1917,13 +1899,13 @@ command!(
 command!(
     SetCmd,
     "set",
-    "Set click options",
+    "Set click options. (See 'help completion' and 'help edit_mode' for more information",
     |clap: App<'static, 'static>| clap.arg(
         Arg::with_name("option")
             .help("The click option to set")
             .required(true)
             .index(1)
-            .possible_values(&["editor", "terminal"])
+            .possible_values(&["completion_type", "edit_mode", "editor", "terminal"])
     ).arg(
         Arg::with_name("value")
             .help("The value to set the option to")
@@ -1931,12 +1913,36 @@ command!(
             .index(2)
     ),
     vec!["set"],
-    noop_complete,
+    vec![&completer::setoptions_values_completer],
     |matches, env, writer| {
         let option = matches.value_of("option").unwrap(); // safe, required
         let value = matches.value_of("value").unwrap(); // safe, required
         let mut failed = false;
         match option {
+            "completion_type" => {
+                match value {
+                    "circular" => env.set_completion_type(config::CompletionType::Circular),
+                    "list" => env.set_completion_type(config::CompletionType::List),
+                    _ => {
+                        write!(stderr(),
+                               "Invalid completion type.  Possible values are: [circular, list]\n")
+                            .unwrap_or(());
+                        failed = true;
+                    }
+                }
+            }
+            "edit_mode" => {
+                match value {
+                    "vi" => env.set_edit_mode(config::EditMode::Vi),
+                    "emacs" => env.set_edit_mode(config::EditMode::Emacs),
+                    _ => {
+                        write!(stderr(),
+                               "Invalid edit_mode.  Possible values are: [emacs, vi]\n")
+                            .unwrap_or(());
+                        failed = true;
+                    }
+                }
+            }
             "editor" => {
                 env.set_editor(&Some(value.to_owned()));
             }
@@ -1973,7 +1979,7 @@ command!(
             .takes_value(true)
     ),
     vec!["deps", "deployments"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2062,7 +2068,7 @@ command!(
             .takes_value(true)
     ),
     vec!["rs", "replicasets"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2233,7 +2239,7 @@ command!(
             .takes_value(true)
     ),
     vec!["cm", "configmaps"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2316,7 +2322,7 @@ command!(
             .takes_value(true)
     ),
     vec!["secrets"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2358,7 +2364,7 @@ command!(
             .takes_value(true)
     ),
     vec!["namespaces"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2382,7 +2388,7 @@ command!(
     "Print current time in UTC",
     identity,
     vec!["utc"],
-    noop_complete,
+    noop_complete!(),
     |_, _, writer| {
         clickwrite!(writer, "{}\n", Utc::now());
     }
@@ -2432,7 +2438,7 @@ Examples:
   port-forward :3456"
     ),
     vec!["pf", "port-forward"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
 
@@ -2576,7 +2582,7 @@ command!(
   pfs stop 3"
         ),
     vec!["pfs", "port-forwards"],
-    noop_complete,
+    vec![&completer::portforwardaction_values_completer],
     |matches, env, writer| {
         let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
         let output =
@@ -2649,7 +2655,7 @@ command!(
             .takes_value(true)
     ),
     vec!["job", "jobs"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2771,7 +2777,7 @@ Examples:
   alias el \"logs | grep ERROR\""
     ),
     vec!["alias", "aliases"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         if matches.is_present("alias") {
             let alias = matches.value_of("alias").unwrap(); // safe, checked above
@@ -2799,7 +2805,7 @@ command!(
             .required(true)
     ),
     vec!["unalias"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let alias = matches.value_of("alias").unwrap(); // safe, required
         if env.remove_alias(alias) {

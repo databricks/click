@@ -20,9 +20,10 @@ use duct_sh::sh_dangerous;
 use duct::Handle;
 use os_pipe::{pipe, PipeWriter};
 use serde::ser::Serialize;
-use serde_json::to_writer;
+use serde_json;
 use serde_json::Error as JsonError;
 use serde_json::ser::{CharEscape, Formatter, PrettyFormatter, Serializer};
+use serde_yaml;
 
 use std::fs::File;
 use std::io;
@@ -119,8 +120,15 @@ impl ClickWriter {
             value.serialize(&mut ser)
         } else {
             // don't do color if we're piping/redirecting
-            to_writer(self, value)
+            serde_json::to_writer(self, value)
         }
+    }
+
+    pub fn print_yaml<T: ?Sized>(&mut self, value: &T) -> Result<(), serde_yaml::Error>
+    where
+        T: Serialize,
+    {
+        serde_yaml::to_writer(self, value)
     }
 }
 

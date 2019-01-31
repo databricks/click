@@ -2159,7 +2159,7 @@ command!(
             .takes_value(true)
     ),
     vec!["ss", "statefulsets"],
-    noop_complete,
+    noop_complete!(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,

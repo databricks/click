@@ -1147,8 +1147,12 @@ command!(
                     let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
                     url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
                 }
-                let logs_reader =
-                    env.run_on_kluster(|k| k.get_read(url.as_str(), Some(Duration::new(1, 0))));
+                let timeout = if matches.is_present("follow") {
+                    None
+                } else {
+                    Some(Duration::new(1, 0))
+                };
+                let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
                 if let Some(lreader) = logs_reader {
                     let mut reader = BufReader::new(lreader);
                     let mut line = String::new();

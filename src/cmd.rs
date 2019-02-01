@@ -19,9 +19,19 @@ use LastList;
 use describe;
 use completer;
 use config;
-use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
-           NamespaceList, NodeCondition, NodeList, Node, Pod, PodList, ReplicaSetList,
-           StatefulSetList, SecretList, ServiceList, JobList};
+use kube::{ConfigMapList,
+           ContainerState,
+           Deployment, DeploymentList,
+           Event, EventList,
+           Metadata,
+           NamespaceList,
+           Node, NodeCondition, NodeList,
+           Pod, PodList,
+           ReplicaSetList,
+           StatefulSetList,
+           SecretList,
+           ServiceList,
+           JobList};
 use output::ClickWriter;
 use table::{CellSpec, opt_sort};
 use values::{get_val_as, val_item_count, val_str, val_u64};
@@ -698,13 +708,15 @@ fn print_nodelist(
 
 /// Print out the specified list of deployments in a pretty format
 fn print_deployments(
-    deplist: DeploymentList,
-    _show_labels: bool,
+    mut deplist: DeploymentList,
+    show_labels: bool,
     regex: Option<Regex>,
+    sort: Option<&str>,
+    reverse: bool,
     writer: &mut ClickWriter,
 ) -> DeploymentList {
     let mut table = Table::new();
-    table.set_titles(row![
+    let mut title_row = row![
         "####",
         "Name",
         "Desired",
@@ -712,8 +724,66 @@ fn print_deployments(
         "Up To Date",
         "Available",
         "Age"
-    ]);
-    let deps_specs = deplist.items.into_iter().map(|dep| {
+    ];
+    let show_labels = show_labels || sort.map(|s| s == "Labels" || s == "labels").unwrap_or(false);
+    if show_labels {
+        title_row.add_cell(Cell::new("Labels"));
+    }
+    table.set_titles(title_row);
+
+    match sort {
+        Some(sortcol) => {
+            match sortcol {
+                "Name" | "name" => {}, // already sorted by name
+                "Desired" | "desired" => {
+                    deplist.items.sort_by(|d1, d2|
+                                          d1.spec.replicas.partial_cmp(&d2.spec.replicas).unwrap())
+                }
+                "Current" | "current" => {
+                    deplist.items.sort_by(|d1, d2|
+                                          d1.status.replicas.partial_cmp(
+                                              &d2.status.replicas).unwrap())
+                }
+                "UpToDate" |  "uptodate" => {
+                    deplist.items.sort_by(|d1, d2|
+                                          d1.status.updated.partial_cmp(
+                                              &d2.status.updated).unwrap())
+                }
+                "Available" | "available" => {
+                    deplist.items.sort_by(|d1, d2|
+                                          d1.status.available.partial_cmp(
+                                              &d2.status.available).unwrap())
+                }
+                "Age" | "age" => {
+                    deplist.items.sort_by(|p1, p2| {
+                        opt_sort(p1.metadata.creation_timestamp,
+                                 p2.metadata.creation_timestamp,
+                                 |a1, a2| a1.partial_cmp(a2).unwrap())
+                    })
+                }
+                "Labels" | "labels" => {
+                    deplist.items.sort_by(|p1, p2| {
+                        let p1s = keyval_string(&p1.metadata.labels);
+                        let p2s = keyval_string(&p2.metadata.labels);
+                        p1s.partial_cmp(&p2s).unwrap()
+                    })
+                }
+                _ => {
+                    clickwrite!(writer,
+                                "Invalid sort col: {}, this is a bug, please report it", sortcol);
+                }
+            }
+        }
+        None => {}
+    }
+
+    let to_map: Box<Iterator<Item=Deployment>> = if reverse {
+        Box::new(deplist.items.into_iter().rev())
+    } else {
+        Box::new(deplist.items.into_iter())
+    };
+
+    let deps_specs = to_map.map(|dep| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
         specs.push(CellSpec::new_owned(dep.metadata.name.clone()));
@@ -737,6 +807,9 @@ fn print_deployments(
             "{}",
             time_since(dep.metadata.creation_timestamp.unwrap())
         )));
+        if show_labels {
+            specs.push(CellSpec::new_owned(keyval_string(&dep.metadata.labels)));
+        }
         (dep, specs)
     });
 
@@ -2060,6 +2133,32 @@ command!(
             .long("regex")
             .help("Filter deployments by the specified regex")
             .takes_value(true)
+    ).arg(
+        Arg::with_name("showlabels")
+            .short("L")
+            .long("labels")
+            .help("Show labels as column in output")
+            .takes_value(false)
+    ).arg(
+        Arg::with_name("sort")
+            .short("s")
+            .long("sort")
+            .help("Sort by specified column (if column isn't shown by default, it will \
+                   be shown)")
+            .takes_value(true)
+            .possible_values(&["Name", "name",
+                               "Desired", "desired",
+                               "Current", "current",
+                               "UpToDate", "uptodate",
+                               "Available", "available",
+                               "Age", "age",
+                               "Labels", "labels"])
+    ).arg(
+        Arg::with_name("reverse")
+            .short("R")
+            .long("reverse")
+            .help("Reverse the order of the returned list")
+            .takes_value(false)
     ),
     vec!["deps", "deployments"],
     noop_complete!(),
@@ -2086,7 +2185,12 @@ command!(
         let dl: Option<DeploymentList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
         match dl {
             Some(d) => {
-                let final_list = print_deployments(d, matches.is_present("labels"), regex, writer);
+                let final_list = print_deployments(d,
+                                                   matches.is_present("showlabels"),
+                                                   regex,
+                                                   matches.value_of("sort"),
+                                                   matches.is_present("reverse"),
+                                                   writer);
                 env.set_lastlist(LastList::DeploymentList(final_list));
             }
             None => env.set_lastlist(LastList::None),

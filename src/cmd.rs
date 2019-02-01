@@ -36,6 +36,7 @@ use humantime::parse_duration;
 use prettytable::{format, Table};
 use prettytable::cell::Cell;
 use prettytable::row::Row;
+use serde::ser::Serialize;
 use serde_json;
 use serde_json::Value;
 use regex::Regex;
@@ -1277,6 +1278,23 @@ command!(
     }
 );
 
+fn maybe_full_output<T: ?Sized>(matches: ArgMatches, value: &T, writer: &mut ClickWriter) -> bool
+where
+    T: Serialize,
+{
+    if matches.is_present("json") {
+        writer.pretty_color_json(value).unwrap_or(());
+        true
+    } else if matches.is_present("yaml") {
+        writer.print_yaml(value).unwrap_or(());
+        true
+    } else {
+        false
+    }
+}
+
+static NOTSUPPORTED: &'static str = "not supported without -j or -y yet\n";
+
 command!(
     Describe,
     "describe",
@@ -1285,7 +1303,13 @@ command!(
         Arg::with_name("json")
             .short("j")
             .long("json")
-            .help("output full json")
+            .help("Print the full description in json")
+            .takes_value(false)
+    ).arg(
+        Arg::with_name("yaml")
+            .short("y")
+            .long("yaml")
+            .help("Print the full description in yaml")
             .takes_value(false)
     ),
     vec!["describe"],
@@ -1301,9 +1325,7 @@ command!(
                     let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
                     let pod_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(pval) = pod_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&pval).unwrap_or(());
-                        } else {
+                        if !maybe_full_output(matches, &pval, writer) {
                             clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
                         }
                     }
@@ -1316,9 +1338,7 @@ command!(
                 let url = format!("/api/v1/nodes/{}", node);
                 let node_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                 if let Some(nval) = node_value {
-                    if matches.is_present("json") {
-                        writer.pretty_color_json(&nval).unwrap_or(());
-                    } else {
+                    if !maybe_full_output(matches, &nval, writer) {
                         clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
                     }
                 }
@@ -1331,10 +1351,8 @@ command!(
                     );
                     let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(dval) = dep_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&dval).unwrap_or(());
-                        } else {
-                            clickwrite!(writer, "Deployment not supported without -j yet\n");
+                        if !maybe_full_output(matches, &dval, writer) {
+                            clickwrite!(writer, "{} {}", "Deployment", NOTSUPPORTED);
                         }
                     }
                 }
@@ -1347,10 +1365,8 @@ command!(
                     );
                     let rs_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(rsval) = rs_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&rsval).unwrap_or(());
-                        } else {
-                            clickwrite!(writer, "ReplicaSet not supported without -j yet\n");
+                        if !maybe_full_output(matches, &rsval, writer) {
+                            clickwrite!(writer, "{} {}", "ReplicaSet", NOTSUPPORTED);
                         }
                     }
                 }
@@ -1363,10 +1379,8 @@ command!(
                     );
                     let statefulset_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(statefulset_val) = statefulset_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&statefulset_val).unwrap_or(());
-                        } else {
-                            clickwrite!(writer, "StatefulSet not supported without -j yet\n");
+                        if !maybe_full_output(matches, &statefulset_val, writer) {
+                            clickwrite!(writer, "{} {}", "StatefulSet", NOTSUPPORTED);
                         }
                     }
                 }
@@ -1376,10 +1390,8 @@ command!(
                     let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
                     let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(cval) = cm_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&cval).unwrap_or(());
-                        } else {
-                            clickwrite!(writer, "ConfigMap not supported without -j yet\n");
+                        if !maybe_full_output(matches, &cval, writer) {
+                            clickwrite!(writer, "{} {}", "ConfigMap", NOTSUPPORTED);
                         }
                     }
                 }
@@ -1389,9 +1401,7 @@ command!(
                     let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
                     let s_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(sval) = s_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&sval).unwrap_or(());
-                        } else {
+                        if !maybe_full_output(matches, &sval, writer) {
                             clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
                         }
                     }
@@ -1402,9 +1412,7 @@ command!(
                     let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
                     let service_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
                     if let Some(sval) = service_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&sval).unwrap_or(());
-                        } else {
+                        if !maybe_full_output(matches, &sval, writer) {
                             let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
                             let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
                             clickwrite!(
@@ -1423,11 +1431,9 @@ command!(
                         ns, job
                     );
                     let job_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(dval) = job_value {
-                        if matches.is_present("json") {
-                            writer.pretty_color_json(&dval).unwrap_or(());
-                        } else {
-                            clickwrite!(writer, "Job not supported without -j yet\n");
+                    if let Some(jobval) = job_value {
+                        if !maybe_full_output(matches, &jobval, writer) {
+                            clickwrite!(writer, "{} {}", "Job", NOTSUPPORTED);
                         }
                     }
                 }

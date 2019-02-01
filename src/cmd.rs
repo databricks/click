@@ -20,8 +20,8 @@ use describe;
 use completer;
 use config;
 use kube::{ConfigMapList, ContainerState, DeploymentList, Event, EventList, Metadata,
-           NamespaceList, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, StatefulSetList,
-           SecretList, ServiceList, JobList};
+           NamespaceList, NodeCondition, NodeList, Node, Pod, PodList, ReplicaSetList,
+           StatefulSetList, SecretList, ServiceList, JobList};
 use output::ClickWriter;
 use table::{CellSpec, opt_sort};
 use values::{get_val_as, val_item_count, val_str, val_u64};
@@ -576,27 +576,82 @@ fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
 
 /// Print out the specified list of nodes in a pretty format
 fn print_nodelist(
-    nodelist: NodeList,
+    mut nodelist: NodeList,
     labels: bool,
     regex: Option<Regex>,
+    sort: Option<&str>,
+    reverse: bool,
     writer: &mut ClickWriter,
 ) -> NodeList {
     let mut table = Table::new();
     let mut title_row = row!["####", "Name", "State", "Age"];
-    if labels {
+    let show_labels = labels || sort.map(|s| s == "Labels" || s == "labels").unwrap_or(false);
+    if show_labels {
         title_row.add_cell(Cell::new("Labels"));
     }
     table.set_titles(title_row);
-    let nodes_specs = nodelist.items.into_iter().map(|node| {
+
+    match sort {
+        Some(sortcol) => {
+            match sortcol {
+                "Name" | "name" => {} // already sorted by name
+                "State" | "state" => {
+                    nodelist.items.sort_by(|n1, n2| {
+                        let orn1 = n1.status.conditions.iter().filter(|c| c.typ == "Ready").next();
+                        let orn2 = n2.status.conditions.iter().filter(|c| c.typ == "Ready").next();
+                        opt_sort(orn1, orn2, |rn1, rn2| {
+                            let sort_key1 = if rn1.status == "True" {
+                                "Ready"
+                            } else {
+                                "Not Ready"
+                            };
+                            let sort_key2 = if rn2.status == "True" {
+                                "Ready"
+                            } else {
+                                "Not Ready"
+                            };
+                            sort_key1.partial_cmp(sort_key2).unwrap()
+                        })
+                    })
+                }
+                "Age" | "age" => {
+                    nodelist.items.sort_by(|n1, n2| {
+                        opt_sort(n1.metadata.creation_timestamp,
+                                 n2.metadata.creation_timestamp,
+                                 |a1, a2| a1.partial_cmp(a2).unwrap())
+                    })
+                }
+                "Labels" | "labels" => {
+                    nodelist.items.sort_by(|n1, n2| {
+                        let n1s = keyval_string(&n1.metadata.labels);
+                        let n2s = keyval_string(&n2.metadata.labels);
+                        n1s.partial_cmp(&n2s).unwrap()
+                    })
+                }
+                _ => {
+                    clickwrite!(writer,
+                                "Invalid sort col: {}, this is a bug, please report it", sortcol);
+                }
+            }
+        }
+        None => {}
+    }
+    let to_map: Box<Iterator<Item=Node>> = if reverse {
+        Box::new(nodelist.items.into_iter().rev())
+    } else {
+        Box::new(nodelist.items.into_iter())
+    };
+
+    let nodes_specs = to_map.map(|node| {
         let mut specs = Vec::new();
         {
             // scope borrows
-            let readycond: Vec<&NodeCondition> = node.status
+            let readycond: Option<&NodeCondition> = node.status
                 .conditions
                 .iter()
                 .filter(|c| c.typ == "Ready")
-                .collect();
-            let (state, state_style) = if let Some(cond) = readycond.get(0) {
+                .next();
+            let (state, state_style) = if let Some(cond) = readycond {
                 if cond.status == "True" {
                     ("Ready", "Fg")
                 } else {
@@ -623,7 +678,7 @@ fn print_nodelist(
                 "{}",
                 time_since(node.metadata.creation_timestamp.unwrap())
             )));
-            if labels {
+            if show_labels {
                 specs.push(CellSpec::new_owned(keyval_string(&node.metadata.labels)));
             }
         }
@@ -1822,7 +1877,24 @@ command!(
             .long("regex")
             .help("Filter pods by the specified regex")
             .takes_value(true)
-    ),
+    ).arg(
+        Arg::with_name("sort")
+            .short("s")
+            .long("sort")
+            .help("Sort by specified column (if column isn't shown by default, it will \
+ be shown)")
+            .takes_value(true)
+            .possible_values(&["Name", "name",
+                               "State", "state",
+                               "Age", "age",
+                               "Labels", "labels",])
+    ).arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
+                .takes_value(false)
+        ),
     vec!["nodes"],
     noop_complete!(),
     |matches, env, writer| {
@@ -1838,7 +1910,12 @@ command!(
         let nl: Option<NodeList> = env.run_on_kluster(|k| k.get(url));
         match nl {
             Some(n) => {
-                let final_list = print_nodelist(n, matches.is_present("labels"), regex, writer);
+                let final_list = print_nodelist(n,
+                                                matches.is_present("labels"),
+                                                regex,
+                                                matches.value_of("sort"),
+                                                matches.is_present("reverse"),
+                                                writer);
                 env.set_lastlist(LastList::NodeList(final_list));
             }
             None => env.set_lastlist(LastList::None),

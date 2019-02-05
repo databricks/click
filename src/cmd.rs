@@ -30,7 +30,7 @@ use kube::{ConfigMapList,
            ReplicaSetList,
            StatefulSetList,
            SecretList,
-           ServiceList,
+           Service, ServiceList,
            JobList};
 use output::ClickWriter;
 use table::{CellSpec, opt_sort};
@@ -471,7 +471,11 @@ fn print_podlist(
     match sort {
         Some(sortcol) => {
             match sortcol {
-                "Name" | "name" => {}, // already sorted by name
+                "Name" | "name" => {
+                    podlist.items.sort_by(|p1, p2| {
+                        p1.metadata.name.partial_cmp(&p2.metadata.name).unwrap()
+                    })
+                },
                 "Ready" | "ready" => {
                     podlist.items.sort_by(|p1, p2| {
                         opt_sort(ready_counts(p1), ready_counts(p2),
@@ -604,7 +608,11 @@ fn print_nodelist(
     match sort {
         Some(sortcol) => {
             match sortcol {
-                "Name" | "name" => {} // already sorted by name
+                "Name" | "name" => {
+                    nodelist.items.sort_by(|n1, n2| {
+                        n1.metadata.name.partial_cmp(&n2.metadata.name).unwrap()
+                    })
+                }
                 "State" | "state" => {
                     nodelist.items.sort_by(|n1, n2| {
                         let orn1 = n1.status.conditions.iter().filter(|c| c.typ == "Ready").next();
@@ -734,7 +742,11 @@ fn print_deployments(
     match sort {
         Some(sortcol) => {
             match sortcol {
-                "Name" | "name" => {}, // already sorted by name
+                "Name" | "name" => {
+                    deplist.items.sort_by(|d1, d2| {
+                        d1.metadata.name.partial_cmp(&d2.metadata.name).unwrap()
+                    })
+                }
                 "Desired" | "desired" => {
                     deplist.items.sort_by(|d1, d2|
                                           d1.spec.replicas.partial_cmp(&d2.spec.replicas).unwrap())
@@ -824,23 +836,154 @@ fn print_deployments(
     DeploymentList { items: final_deps }
 }
 
-/// Print out the specified list of deployments in a pretty format
+// service utility functions
+fn get_external_ip(service: &Service) -> String {
+    if let Some(ref eips) = service.spec.external_ips {
+        shorten_to(eips.join(", "), 18)
+    } else {
+        // look in the status for the elb name
+        if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
+            if let Some(ing_arry) = ing_val.as_array() {
+                let strs: Vec<&str> = ing_arry
+                    .iter()
+                    .map(|v| {
+                        if let Some(hv) = v.get("hostname") {
+                            hv.as_str().unwrap_or("")
+                        } else if let Some(ipv) = v.get("ip") {
+                            ipv.as_str().unwrap_or("")
+                        } else {
+                            ""
+                        }
+                    })
+                    .collect();
+                let s = strs.join(", ");
+                shorten_to(s, 18)
+            } else {
+                "<none>".to_owned()
+            }
+        } else {
+            "<none>".to_owned()
+        }
+    }
+}
+
+fn get_ports(service: &Service) -> String {
+    let port_strs: Vec<String> = if let Some(ref ports) = service.spec.ports {
+        ports
+            .iter()
+            .map(|p| {
+                if let Some(np) = p.node_port {
+                    format!("{}:{}/{}", p.port, np, p.protocol)
+                } else {
+                    format!("{}/{}", p.port, p.protocol)
+                }
+            })
+            .collect()
+    } else {
+        vec!["<none>".to_owned()]
+    };
+    port_strs.join(",")
+}
+
+/// Print out the specified list of services in a pretty format
 fn print_servicelist(
     servlist: ServiceList,
     regex: Option<Regex>,
-    _show_labels: bool,
+    show_labels: bool,
+    show_namespace: bool,
+    sort: Option<&str>,
+    reverse: bool,
     writer: &mut ClickWriter,
 ) -> ServiceList {
     let mut table = Table::new();
-    table.set_titles(row![
+    let mut title_row = row![
         "####",
         "Name",
         "ClusterIP",
         "External IPs",
         "Port(s)",
         "Age"
-    ]);
-    let service_specs = servlist.items.into_iter().map(|service| {
+    ];
+
+    let show_labels = show_labels || sort.map(|s| s == "Labels" || s == "labels").unwrap_or(false);
+    let show_namespace = show_namespace ||
+        sort.map(|s| s == "Namespace" || s == "namespace").unwrap_or(false);
+
+    if show_labels {
+        title_row.add_cell(Cell::new("Labels"));
+    }
+    if show_namespace {
+        title_row.add_cell(Cell::new("Namespace"));
+    }
+    table.set_titles(title_row);
+
+    let extipsandports:Vec<(String, String)> =
+        servlist.items.iter().map(|s| (get_external_ip(s), get_ports(s))).collect();
+    let mut servswithipportss:Vec<(Service, (String, String))>
+        = servlist.items.into_iter().zip(extipsandports).collect();
+
+    match sort {
+        Some(sortcol) => {
+            match sortcol {
+                "Name" | "name" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        s1.0.metadata.name.partial_cmp(&s2.0.metadata.name).unwrap()
+                    })
+                }
+                "Age" | "age" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        opt_sort(s1.0.metadata.creation_timestamp,
+                                 s2.0.metadata.creation_timestamp,
+                                 |a1, a2| a1.partial_cmp(a2).unwrap())
+                    })
+                }
+                "Labels" | "labels" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        let s1s = keyval_string(&s1.0.metadata.labels);
+                        let s2s = keyval_string(&s2.0.metadata.labels);
+                        s1s.partial_cmp(&s2s).unwrap()
+                    })
+                }
+                "Namespace" | "namespace" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        opt_sort(s1.0.metadata.namespace.as_ref(),
+                                 s2.0.metadata.namespace.as_ref(),
+                                 |s1n, s2n| s1n.partial_cmp(s2n).unwrap())
+                    })
+                }
+                "ClusterIP" | "clusterip" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        opt_sort(s1.0.spec.cluster_ip.as_ref(),
+                                 s2.0.spec.cluster_ip.as_ref(),
+                                 |s1cip, s2cip| s1cip.partial_cmp(s2cip).unwrap())
+                    })
+                }
+                "ExternalIP" | "externalip" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        (s1.1).0.partial_cmp(&(s2.1).0).unwrap()
+                    })
+                }
+                "Ports" | "ports" => {
+                    servswithipportss.sort_by(|s1, s2| {
+                        (s1.1).1.partial_cmp(&(s2.1).1).unwrap()
+                    })
+                }
+                _ => {
+                    clickwrite!(writer,
+                                "Invalid sort col: {}, this is a bug, please report it", sortcol);
+                }
+            }
+        }
+        None => {}
+    }
+
+    let to_map: Box<Iterator<Item=(Service, (String, String))>> = if reverse {
+        Box::new(servswithipportss.into_iter().rev())
+    } else {
+        Box::new(servswithipportss.into_iter())
+    };
+
+    let service_specs = to_map.map(|(service,eipp)| {
         let mut specs = Vec::new();
 
         specs.push(CellSpec::new_index());
@@ -854,53 +997,25 @@ fn print_servicelist(
                 .as_ref()
                 .unwrap_or(&"<none>".to_owned())
         )));
-        if let Some(ref eips) = service.spec.external_ips {
-            specs.push(CellSpec::new_owned(shorten_to(eips.join(", "), 18)));
-        } else {
-            // look in the status for the elb name
-            if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
-                if let Some(ing_arry) = ing_val.as_array() {
-                    let strs: Vec<&str> = ing_arry
-                        .iter()
-                        .map(|v| {
-                            if let Some(hv) = v.get("hostname") {
-                                hv.as_str().unwrap_or("")
-                            } else if let Some(ipv) = v.get("ip") {
-                                ipv.as_str().unwrap_or("")
-                            } else {
-                                ""
-                            }
-                        })
-                        .collect();
-                    let s = strs.join(", ");
-                    specs.push(CellSpec::new_owned(shorten_to(s, 18)));
-                } else {
-                    specs.push(CellSpec::new("<none>"));
-                }
-            } else {
-                specs.push(CellSpec::new("<none>"));
-            }
-        }
 
-        let port_strs: Vec<String> = if let Some(ref ports) = service.spec.ports {
-            ports
-                .iter()
-                .map(|p| {
-                    if let Some(np) = p.node_port {
-                        format!("{}:{}/{}", p.port, np, p.protocol)
-                    } else {
-                        format!("{}/{}", p.port, p.protocol)
-                    }
-                })
-                .collect()
-        } else {
-            vec!["<none>".to_owned()]
-        };
-        specs.push(CellSpec::new_owned(port_strs.join(",")));
+        specs.push(CellSpec::new_owned(eipp.0));
+        specs.push(CellSpec::new_owned(eipp.1));
+
         specs.push(CellSpec::new_owned(format!(
             "{}",
             time_since(service.metadata.creation_timestamp.unwrap())
         )));
+
+        if show_labels {
+            specs.push(CellSpec::new_owned(keyval_string(&service.metadata.labels)));
+        }
+
+        if show_namespace {
+            specs.push(CellSpec::new_owned(match service.metadata.namespace {
+                Some(ref ns) => ns.clone(),
+                None => "[Unknown]".to_owned(),
+            }));
+        }
 
         (service, specs)
     });
@@ -2012,6 +2127,26 @@ command!(
             .long("regex")
             .help("Filter services by the specified regex")
             .takes_value(true)
+    ).arg(
+        Arg::with_name("sort")
+            .short("s")
+            .long("sort")
+            .help("Sort by specified column (if column isn't shown by default, it will \
+ be shown)")
+            .takes_value(true)
+            .possible_values(&["Name", "name",
+                               "ClusterIP", "clusterip",
+                               "ExternalIP", "externalip",
+                               "Age", "age",
+                               "Ports", "ports",
+                               "Labels", "labels",
+                               "Namespace", "namespace"])
+    ).arg(
+        Arg::with_name("reverse")
+            .short("R")
+            .long("reverse")
+            .help("Reverse the order of the returned list")
+            .takes_value(false)
     ),
     vec!["services"],
     noop_complete!(),
@@ -2031,7 +2166,13 @@ command!(
         };
         let sl: Option<ServiceList> = env.run_on_kluster(|k| k.get(url.as_str()));
         if let Some(s) = sl {
-            let filtered = print_servicelist(s, regex, matches.is_present("labels"), writer);
+            let filtered = print_servicelist(s,
+                                             regex,
+                                             matches.is_present("labels"),
+                                             env.namespace.is_none(),
+                                             matches.value_of("sort"),
+                                             matches.is_present("reverse"),
+                                             writer);
             env.set_lastlist(LastList::ServiceList(filtered));
         } else {
             clickwrite!(writer, "no services\n");

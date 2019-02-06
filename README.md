@@ -1,10 +1,14 @@
 # Click
-
+-----
 Click is the Command Line Interactive Controller for Kubernetes.
 Its purpose is to manage a large number of Kubernetes clusters/objects quickly and efficiently.
 
 ## Code Status
 [![Build Status](https://travis-ci.org/databricks/click.svg?branch=master)](https://travis-ci.org/databricks/click)
+
+## CHANGELOG
+See the [CHANGELOG](CHANGELOG.md) for a release history.
+
 
 ## Demo Screencast
 ![A demo gif that shows a few features](https://imgur.com/ft4WHcL.gif)
@@ -16,12 +20,6 @@ and Kubernetes object. Commands are then applied to the active config
 so it's not necessary to keep specifying what objects to target.
 
 # Installing
-
-## Arch Linux
-
-There is an [aur](https://aur.archlinux.org/packages/click/) available.
-
-# Building
 You'll need rust and cargo. See
 [here](https://doc.rust-lang.org/cargo/getting-started/installation.html) for instructions on how to
 get them.
@@ -29,6 +27,10 @@ get them.
 Click is on crates.io, so you can just run `cargo install` to install it.
 
 Alternatively, to build it yourself, clone the click repository and run `cargo build`.
+
+## Arch Linux
+
+There is an [aur](https://aur.archlinux.org/packages/click/) available.
 
 # Running
 If you used `cargo install`, you can just run `click` (assuming `~/.cargo/bin` is in your PATH).
@@ -61,7 +63,7 @@ For Google Kubernetes Engine, Click supports reading the token already in the ku
 that token has expired, Click will request a new token and use that. It does not save the new token
 back into the config file (yet).
 
-# Why am I getting a BadDER error
+## Why am I getting a BadDER error
 If your Kubernetes cluster is using Node Authorization
 (https://kubernetes.io/docs/admin/authorization/node/) your API Server may be using a certificate
 with a DNS name like "system:something".  This is technically a bad cert as DNS names can't have a

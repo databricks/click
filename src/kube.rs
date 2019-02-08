@@ -341,11 +341,10 @@ pub struct JobList {
 
 // Kubernetes authentication data
 
-// Auth is either a token, a username/password, or a cert and key
+// Auth is either a token, a username/password, or an auth provider
 pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
-    CertKey(Vec<Certificate>, PrivateKey),
     AuthProvider(AuthProvider),
 }
 
@@ -358,19 +357,30 @@ impl KlusterAuth {
         KlusterAuth::UserPass(user.to_owned(), pass.to_owned())
     }
 
-    pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> KlusterAuth {
-        KlusterAuth::CertKey(vec![cert], private_key)
-    }
-
     pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
         KlusterAuth::AuthProvider(auth_provider)
+    }
+}
+
+// Hold the client cert and key for talking to the cluster
+pub struct ClientCertKey {
+    certs: Vec<Certificate>,
+    key: PrivateKey,
+}
+
+impl ClientCertKey {
+    pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> ClientCertKey {
+        ClientCertKey {
+            certs: vec![cert],
+            key: private_key
+        }
     }
 }
 
 pub struct Kluster {
     pub name: String,
     endpoint: Url,
-    auth: KlusterAuth,
+    auth: Option<KlusterAuth>,
     client: Client,
     connector: ClickSslConnector<TlsClient>,
 }
@@ -390,7 +400,9 @@ impl rustls::ServerCertVerifier for NoCertificateVerification {
 }
 
 impl Kluster {
-    fn make_tlsclient(cert_opt: &Option<String>, auth: &KlusterAuth, insecure: bool) -> TlsClient {
+    fn make_tlsclient(cert_opt: &Option<String>,
+                      client_cert_key: &Option<ClientCertKey>,
+                      insecure: bool) -> TlsClient {
         let mut tlsclient = TlsClient::new();
         if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
             if let &Some(ref cert_data) = cert_opt {
@@ -413,8 +425,9 @@ impl Kluster {
                 }
             }
 
-            if let &KlusterAuth::CertKey(ref cert, ref key) = auth {
-                cfg.set_single_client_cert(cert.clone(), key.clone());
+            if let Some(client_cert_key) = client_cert_key {
+                cfg.set_single_client_cert(client_cert_key.certs.clone(),
+                                           client_cert_key.key.clone());
             }
 
             if insecure {
@@ -462,18 +475,23 @@ impl Kluster {
 
     fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
         match self.auth {
-            KlusterAuth::Token(ref token) => req.header(Authorization(Bearer {
+            Some(KlusterAuth::Token(ref token)) => req.header(Authorization(Bearer {
                 token: token.clone(),
             })),
-            KlusterAuth::AuthProvider(ref auth_provider) => {
-                let token = auth_provider.ensure_token();
-                req.header(Authorization(Bearer { token: token }))
+            Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
+                match auth_provider.ensure_token() {
+                    Some(token) => req.header(Authorization(Bearer { token: token })),
+                    None => {
+                        print_token_err();
+                        req
+                    }
+                }
             }
-            KlusterAuth::UserPass(ref user, ref pass) => req.header(Authorization(Basic {
+            Some(KlusterAuth::UserPass(ref user, ref pass)) => req.header(Authorization(Basic {
                 username: user.clone(),
                 password: Some(pass.clone()),
             })),
-            KlusterAuth::CertKey(..) => req,
+            None => req,
         }
     }
 
@@ -481,11 +499,12 @@ impl Kluster {
         name: &str,
         cert_opt: Option<String>,
         server: &str,
-        auth: KlusterAuth,
+        auth: Option<KlusterAuth>,
+        client_cert_key: Option<ClientCertKey>,
         insecure: bool,
     ) -> Result<Kluster, KubeError> {
-        let tlsclient = Kluster::make_tlsclient(&cert_opt, &auth, insecure);
-        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &auth, insecure);
+        let tlsclient = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
+        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
         let mut endpoint = try!(Url::parse(server));
         let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
         let mut client = Client::with_connector(Kluster::make_connector(
@@ -547,24 +566,25 @@ impl Kluster {
                 let headers = req.headers_mut();
                 // we should clean this up to use add_auth_header
                 match self.auth {
-                    KlusterAuth::Token(ref token) => {
+                    Some(KlusterAuth::Token(ref token)) => {
                         headers.set(Authorization(Bearer {
                             token: token.clone(),
                         }));
                     }
-                    KlusterAuth::AuthProvider(ref auth_provider) => {
-                        let token = auth_provider.ensure_token();
-                        headers.set(Authorization(Bearer {
-                            token: token.clone(),
-                        }));
+                    Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
+                        match auth_provider.ensure_token() {
+                            Some(token) => headers.set(
+                                Authorization(Bearer { token: token })),
+                            None => print_token_err(),
+                        }
                     }
-                    KlusterAuth::UserPass(ref user, ref pass) => {
+                    Some(KlusterAuth::UserPass(ref user, ref pass)) => {
                         headers.set(Authorization(Basic {
                             username: user.clone(),
                             password: Some(pass.clone()),
                         }));
                     }
-                    KlusterAuth::CertKey(..) => {}
+                    None => {},
                 }
             }
             try!(req.set_read_timeout(timeout));
@@ -608,4 +628,12 @@ impl Kluster {
         }
         Ok(vec)
     }
+}
+
+fn print_token_err() {
+    println!(
+        "Couldn't get an authentication token. You can try exiting Click and \
+         running a kubectl command against the cluster to refresh it. \
+         Also please report this error on the Click github page."
+    );
 }

@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Code to handle reading and representing .kube/config files.  The code here is mostly just
-//! deserialization, and conversion to the actual structs used elsewhere in code
+//! Code to handle reading and representing .kube/config files.
 
 use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
@@ -214,7 +213,7 @@ impl AuthProvider {
     }
 
     /// Checks that we have a valid token, and if not, attempts to update it based on the config
-    pub fn ensure_token(&self) -> String {
+    pub fn ensure_token(&self) -> Option<String> {
         let mut token = self.token.borrow_mut();
         if token.is_none() || self.is_expired() {
             // update
@@ -222,17 +221,7 @@ impl AuthProvider {
             *token = None;
             self.update_token(&mut token, &mut expiry)
         }
-        match token.as_ref() {
-            Some(t) => t.clone(),
-            None => {
-                println!(
-                    "Couldn't get an authentication token. You can try exiting Click and \
-                     running a kubectl command against the cluster to refresh it. Also please \
-                     report this error on the Click github page."
-                );
-                "".to_owned()
-            }
-        }
+        token.clone()
     }
 }
 

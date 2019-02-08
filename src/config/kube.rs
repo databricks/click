@@ -23,7 +23,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 
 use error::{KubeErrNo, KubeError};
-use kube::{Kluster, KlusterAuth};
+use kube::{ClientCertKey, Kluster, KlusterAuth};
 use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
 use super::kubefile::AuthProvider;
@@ -59,7 +59,7 @@ impl ClusterConf {
 /// KeyCert can be either raw data from a "client-*-data" field, or a path to a file with the data
 /// from a "client-*" field.
 #[derive(Debug)]
-pub enum UserConf {
+pub enum UserAuth {
     Token(String),
     KeyCertPath(String, String),
     KeyCertData(String, String),
@@ -68,24 +68,37 @@ pub enum UserConf {
     Unsupported,
 }
 
+#[derive(Debug)]
+pub struct UserConf {
+    auths: Vec<UserAuth>,
+}
+
 impl From<super::kubefile::UserConf> for UserConf {
-    fn from(iconf: super::kubefile::UserConf) -> UserConf {
-        if let Some(token) = iconf.token {
-            UserConf::Token(token)
-        } else if let (Some(username), Some(password)) = (iconf.username, iconf.password) {
-            UserConf::UserPass(username, password)
-        } else if let (Some(client_cert_path), Some(key_path)) =
-            (iconf.client_cert, iconf.client_key)
+    fn from(conf: super::kubefile::UserConf) -> UserConf {
+        let mut auth_vec = vec![];
+
+        if let Some(token) = conf.token {
+            auth_vec.push(UserAuth::Token(token))
+        }
+        if let (Some(username), Some(password)) = (conf.username, conf.password) {
+            auth_vec.push(UserAuth::UserPass(username, password))
+        }
+        if let (Some(client_cert_path), Some(key_path)) =
+            (conf.client_cert, conf.client_key)
         {
-            UserConf::KeyCertPath(client_cert_path, key_path)
-        } else if let (Some(client_cert_data), Some(key_data)) =
-            (iconf.client_cert_data, iconf.client_key_data)
+            auth_vec.push(UserAuth::KeyCertPath(client_cert_path, key_path))
+        }
+        if let (Some(client_cert_data), Some(key_data)) =
+            (conf.client_cert_data, conf.client_key_data)
         {
-            UserConf::KeyCertData(client_cert_data, key_data)
-        } else if let Some(auth_provider) = iconf.auth_provider {
-            UserConf::AuthProvider(auth_provider)
+            auth_vec.push(UserAuth::KeyCertData(client_cert_data, key_data))
+        } if let Some(auth_provider) = conf.auth_provider {
+            auth_vec.push(UserAuth::AuthProvider(auth_provider))
         } else {
-            UserConf::Unsupported
+            auth_vec.push(UserAuth::Unsupported)
+        }
+        UserConf {
+            auths: auth_vec,
         }
     }
 }
@@ -123,11 +136,11 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     }
 }
 
-fn auth_from_paths(
+fn cert_key_from_paths(
     client_cert_path: String,
     key_path: String,
     context: &str,
-) -> Result<KlusterAuth, KubeError> {
+) -> Result<ClientCertKey, KubeError> {
     if client_cert_path.len() == 0 {
         return Err(KubeError::ConfigFileError(format!(
             "Empty client certificate path for {}, can't continue",
@@ -147,7 +160,7 @@ fn auth_from_paths(
         get_cert(cert_full_path.as_str()),
         get_private_key(key_full_path.as_str()),
     ) {
-        Ok(KlusterAuth::with_cert_and_key(cert, private_key))
+        Ok(ClientCertKey::with_cert_and_key(cert, private_key))
     } else {
         Err(KubeError::ConfigFileError(format!(
             "Can't read/convert cert or private key for {}",
@@ -156,11 +169,11 @@ fn auth_from_paths(
     }
 }
 
-fn auth_from_data(
+fn cert_key_from_data(
     client_cert_data: &String,
     key_data: &String,
     context: &str,
-) -> Result<KlusterAuth, KubeError> {
+) -> Result<ClientCertKey, KubeError> {
     if client_cert_data.len() == 0 {
         Err(KubeError::ConfigFileError(format!(
             "Empty client certificate data for {}, can't continue",
@@ -188,7 +201,7 @@ fn auth_from_data(
         })?;
         let key = get_key_from_str(key_str.as_str());
         match (cert, key) {
-            (Some(c), Some(k)) => Ok(KlusterAuth::with_cert_and_key(c, k)),
+            (Some(c), Some(k)) => Ok(ClientCertKey::with_cert_and_key(c, k)),
             _ => Err(KubeError::ConfigFileError(format!(
                 "Invalid certificate or key data for context: {}",
                 context
@@ -315,39 +328,57 @@ impl Config {
                         self.users
                             .get(&ctx.user)
                             .map(|user| {
-                                let auth = match user {
-                                    &UserConf::Token(ref token) => {
-                                        Ok(KlusterAuth::with_token(token.as_str()))
-                                    }
-                                    &UserConf::UserPass(ref username, ref password) => {
-                                        Ok(KlusterAuth::with_userpass(username, password))
-                                    }
-                                    &UserConf::KeyCertPath(ref cert_path, ref key_path) => {
-                                        auth_from_paths(
-                                            cert_path.clone(),
-                                            key_path.clone(),
-                                            context,
-                                        )
-                                    }
-                                    &UserConf::KeyCertData(ref cert_data, ref key_data) => {
-                                        auth_from_data(cert_data, key_data, context)
-                                    }
-                                    &UserConf::AuthProvider(ref provider) => {
-                                        provider.copy_up();
-                                        Ok(KlusterAuth::with_auth_provider(provider.clone()))
-                                    }
-                                    _ => Err(KubeError::ConfigFileError(format!(
-                                        "Invalid context {}.  Each user must have either a token, \
-                                         a username AND password, or a client-certificate AND \
-                                         a client-key, or an auth-provider",
-                                        context
-                                    ))),
-                                }?;
+                                let mut client_cert_key_res = None;
+                                let mut auth = None;
+                                for user_auth in user.auths.iter().rev() {
+                                    match user_auth {
+                                        &UserAuth::Token(ref token) => {
+                                            auth = Some(KlusterAuth::with_token(token.as_str()))
+                                        }
+                                        &UserAuth::UserPass(ref username, ref password) => {
+                                            auth = Some(
+                                                KlusterAuth::with_userpass(username, password)
+                                            )
+                                        }
+                                        &UserAuth::AuthProvider(ref provider) => {
+                                            provider.copy_up();
+                                            auth =
+                                                Some(KlusterAuth::with_auth_provider
+                                                     (provider.clone())
+                                                )
+                                        }
+                                        &UserAuth::KeyCertData(ref cert_data, ref key_data) => {
+                                            client_cert_key_res =
+                                                Some(cert_key_from_data(
+                                                    cert_data, key_data, context))
+                                        }
+                                        &UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
+                                            client_cert_key_res =
+                                                Some(cert_key_from_paths(
+                                                    cert_path.clone(),
+                                                    key_path.clone(),
+                                                    context,
+                                                ))
+                                        }
+                                        &UserAuth::Unsupported => {}
+                                        //  Err(KubeError::ConfigFileError(
+                                            // format!("Invalid context {}.  Each user must have \
+                                            //          either a token, a username AND password, \
+                                            //          or a client-certificate AND \
+                                            //          a client-key, or an auth-provider",
+                                            //         context
+                                            // ))),
+                                    };
+                                }
+                                let client_cert_key = client_cert_key_res.map_or(
+                                    Ok(None),
+                                    |r| r.map(Some))?;
                                 Kluster::new(
                                     context,
                                     cluster.cert.clone(),
                                     cluster.server.as_str(),
                                     auth,
+                                    client_cert_key,
                                     cluster.insecure_skip_tls_verify,
                                 )
                             })

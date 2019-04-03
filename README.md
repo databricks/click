@@ -24,7 +24,7 @@ You'll need rust and cargo. See
 [here](https://doc.rust-lang.org/cargo/getting-started/installation.html) for instructions on how to
 get them.
 
-Click is on crates.io, so you can just run `cargo install` to install it.
+Click is on crates.io, so you can just run `cargo install click` to install it.
 
 Alternatively, to build it yourself, clone the click repository and run `cargo build`.
 

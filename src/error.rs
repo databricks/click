@@ -17,6 +17,7 @@ use hyper;
 use serde_json;
 use serde_yaml;
 
+use std::error::Error;
 use std::{error, fmt, io, env};
 use std::convert::From;
 
@@ -87,7 +88,7 @@ impl fmt::Display for KubeError {
             KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
             KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
-            KubeError::HyperErr(ref err) => write!(f, "Hyper error: {}", err),
+            KubeError::HyperErr(ref err) => write!(f, "Hyper error: {} ({:?})", err, err.cause()),
             KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
             KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
             KubeError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),

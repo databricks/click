@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use subjaltnames::{get_subj_alt_names, SubjAltName};
+use kube::NoCertificateVerification;
+use subjaltnames::{get_subj_alt_names, DNSNameRef, SubjAltName};
 
 use der_parser;
 use regex::Regex;
@@ -185,10 +186,13 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
 }
 
 fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Error> {
-    let config = ClientConfig::new();
+    let mut config = ClientConfig::new();
+    config.dangerous()
+        .set_certificate_verifier(Arc::new(NoCertificateVerification {}));
     let ac = Arc::new(config);
     let dns_name_str = format!("{}:{}", ip, port);
-    let dns_name_ref = webpki::DNSNameRef::try_from_ascii_str(&dns_name_str).unwrap();
+    let dns_name_ref = DNSNameRef::get_webpki_ref(untrusted::Input::from(dns_name_str.as_bytes()));
+    //let dns_name_ref = webpki::DNSNameRef::try_from_ascii_str(&dns_name_str).unwrap();
     let mut session = ClientSession::new(&ac, dns_name_ref);
     let sock_addr = (*ip, port).into();
     let mut sock = TcpStream::connect_timeout(&sock_addr, Duration::new(2, 0))?;
@@ -216,6 +220,7 @@ pub fn try_ip_to_name(target_ip: &IpAddr, port: u16) -> Option<String> {
             for cert in certs.iter() {
                 let mut reader = Reader::new(Input::from(cert.0.as_slice()));
                 let names = get_subj_alt_names(&mut reader);
+                println!("got names: {:?}", names);
                 let mut dns_name: Option<String> = None;
                 let mut found = false;
                 for san in names.into_iter() {

@@ -18,9 +18,9 @@
 use values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
-use chrono::DateTime;
 use chrono::offset::Local;
 use chrono::offset::Utc;
+use chrono::DateTime;
 use serde_json::Value;
 
 use std::borrow::Cow;
@@ -129,7 +129,8 @@ where
                     "/creationTimestamp",
                     metadata,
                     "<No CreationTime>",
-                )).unwrap();
+                ))
+                .unwrap();
                 format!("{} ({})", created, created.with_timezone(&Local)).into()
             }
             DescItem::CustomFunc {
@@ -242,7 +243,8 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
                     format!(
                         "    SecretName:\t{}\n",
                         val_str("/secretName", secret, "<No SecretName>")
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
             }
             if let Some(aws) = vol.get("awsElasticBlockStore") {
@@ -253,7 +255,8 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
                     format!(
                         "    VolumeId:\t{}\n",
                         val_str("/volumeID", aws, "<No VolumeID>")
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
                 buf.push_str(
                     format!("    FSType:\t{}\n", val_str("/fsType", aws, "<No FsType>")).as_str(),
@@ -366,7 +369,8 @@ fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
                         format!(
                             "ec2-{}-{}-{}-{}.us-west-2.compute.amazonaws.com ({})",
                             octs[0], octs[1], octs[2], octs[3], ip
-                        ).into()
+                        )
+                        .into()
                     }
                 })
             } else {
@@ -498,9 +502,13 @@ fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'
                                                         epbuf.push_str(", ");
                                                     }
                                                     epbuf.push_str(
-                                                        format!("{}:{}",
-                                                                val_str("/ip", addr, "<No IP>"),
-                                                                port_num).as_str());
+                                                        format!(
+                                                            "{}:{}",
+                                                            val_str("/ip", addr, "<No IP>"),
+                                                            port_num
+                                                        )
+                                                        .as_str(),
+                                                    );
                                                 }
                                             })
                                         });
@@ -522,7 +530,8 @@ fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'
                         val_str("/name", port, "<No Name>"),
                         val_u64("/nodePort", port, 0),
                         proto
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
                 buf.push_str(endpoints.as_str());
                 buf.push('\n');

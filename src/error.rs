@@ -17,8 +17,8 @@ use hyper;
 use serde_json;
 use serde_yaml;
 
-use std::{error, fmt, io, env};
 use std::convert::From;
+use std::{env, error, fmt, io};
 
 #[derive(Debug)]
 pub enum KubeErrNo {

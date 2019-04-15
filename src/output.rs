@@ -14,15 +14,14 @@
 
 /// Module to handle writing data to stdout, and/or copying/writing it
 /// to files etc
-
 use ansi_term::Colour::{Blue, Green};
-use duct_sh::sh_dangerous;
 use duct::Handle;
+use duct_sh::sh_dangerous;
 use os_pipe::{pipe, PipeWriter};
 use serde::ser::Serialize;
 use serde_json;
-use serde_json::Error as JsonError;
 use serde_json::ser::{CharEscape, Formatter, PrettyFormatter, Serializer};
+use serde_json::Error as JsonError;
 use serde_yaml;
 
 use std::fs::File;

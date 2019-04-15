@@ -16,15 +16,15 @@ use subjaltnames::{get_subj_alt_names, SubjAltName};
 
 use der_parser;
 use regex::Regex;
-use rustls::{ClientConfig, ClientSession, Session};
-use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigningKey;
+use rustls::{Certificate, PrivateKey};
+use rustls::{ClientConfig, ClientSession, Session};
 use untrusted::{Input, Reader};
 
 use std::error::Error;
 use std::fs::File;
-use std::net::{IpAddr, TcpStream};
 use std::io::{self, BufReader, Read};
+use std::net::{IpAddr, TcpStream};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;

@@ -1,4 +1,4 @@
- // Copyright 2017 Databricks, Inc.
+// Copyright 2017 Databricks, Inc.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
+use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 use error::{KubeErrNo, KubeError};
 use kube::{ClientCertKey, Kluster, KlusterAuth};
-use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
 use super::kubefile::AuthProvider;
 
@@ -52,7 +52,6 @@ impl ClusterConf {
         }
     }
 }
-
 
 // These are the different kinds of authentication data  a user might have
 
@@ -82,9 +81,7 @@ impl From<super::kubefile::UserConf> for UserConf {
         if let (Some(username), Some(password)) = (conf.username, conf.password) {
             auth_vec.push(UserAuth::UserPass(username, password))
         }
-        if let (Some(client_cert_path), Some(key_path)) =
-            (conf.client_cert, conf.client_key)
-        {
+        if let (Some(client_cert_path), Some(key_path)) = (conf.client_cert, conf.client_key) {
             auth_vec.push(UserAuth::KeyCertPath(client_cert_path, key_path))
         }
         if let (Some(client_cert_data), Some(key_data)) =
@@ -95,12 +92,9 @@ impl From<super::kubefile::UserConf> for UserConf {
         if let Some(auth_provider) = conf.auth_provider {
             auth_vec.push(UserAuth::AuthProvider(auth_provider))
         }
-        UserConf {
-            auths: auth_vec,
-        }
+        UserConf { auths: auth_vec }
     }
 }
-
 
 /// A kubernetes config
 // This is actual config we expose
@@ -213,7 +207,7 @@ impl Config {
         let iconfs = paths
             .into_iter()
             .map(|config_path| super::kubefile::Config::from_file(config_path))
-            .collect::<Result<Vec<_>,_>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         // copy over clusters
         let mut cluster_map = HashMap::new();
@@ -229,7 +223,7 @@ impl Config {
                         if has_cd {
                             println!(
                                 "Cluster {} specifies a certificate path and certificate data, \
-                                ignoring data and using the path",
+                                 ignoring data and using the path",
                                 cluster.name
                             );
                         }
@@ -317,59 +311,55 @@ impl Config {
     }
 
     pub fn cluster_for_context(&self, context_name: &str) -> Result<Kluster, KubeError> {
-        let context = self.contexts.get(context_name).
-            ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
-        let cluster = self.clusters.get(&context.cluster).
-            ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))?;
-        let user = self.users.get(&context.user).
-            ok_or(KubeError::Kube(KubeErrNo::InvalidUser))?;
+        let context = self
+            .contexts
+            .get(context_name)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
+        let cluster = self
+            .clusters
+            .get(&context.cluster)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))?;
+        let user = self
+            .users
+            .get(&context.user)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))?;
 
         let mut client_cert_key = None;
         let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
-                &UserAuth::Token(ref token) => {
-                    auth = Some(KlusterAuth::with_token(token.as_str()))
-                }
+                &UserAuth::Token(ref token) => auth = Some(KlusterAuth::with_token(token.as_str())),
                 &UserAuth::UserPass(ref username, ref password) => {
-                    auth = Some(
-                        KlusterAuth::with_userpass(username, password)
-                    )
+                    auth = Some(KlusterAuth::with_userpass(username, password))
                 }
                 &UserAuth::AuthProvider(ref provider) => {
                     provider.copy_up();
-                    auth =
-                        Some(KlusterAuth::with_auth_provider
-                             (provider.clone())
-                        )
+                    auth = Some(KlusterAuth::with_auth_provider(provider.clone()))
                 }
                 &UserAuth::KeyCertData(ref cert_data, ref key_data) => {
-                    client_cert_key =
-                        Some(cert_key_from_data(
-                            cert_data, key_data, context_name))
+                    client_cert_key = Some(cert_key_from_data(cert_data, key_data, context_name))
                 }
                 &UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
-                    client_cert_key =
-                        Some(cert_key_from_paths(
-                            cert_path.clone(),
-                            key_path.clone(),
-                            context_name,
-                        ))
+                    client_cert_key = Some(cert_key_from_paths(
+                        cert_path.clone(),
+                        key_path.clone(),
+                        context_name,
+                    ))
                 }
             };
         }
 
         // Turns the Option<Result> into a Result<Option>, then extracts the Option
         // or early returns if error
-        let client_cert_key = client_cert_key.map_or(
-            Ok(None),
-            |r| r.map(Some))?;
+        let client_cert_key = client_cert_key.map_or(Ok(None), |r| r.map(Some))?;
 
         if auth.is_none() && client_cert_key.is_none() {
-            println!("[WARN]: Context {} has no client certificate and key, nor does it specify \
-                      any auth method (user/pass, token, auth-provider).  You will likely not be \
-                      able to authenticate to this cluster.  Please check your kube config.",
-                     context_name)
+            println!(
+                "[WARN]: Context {} has no client certificate and key, nor does it specify \
+                 any auth method (user/pass, token, auth-provider).  You will likely not be \
+                 able to authenticate to this cluster.  Please check your kube config.",
+                context_name
+            )
         }
 
         Kluster::new(
@@ -382,4 +372,3 @@ impl Config {
         )
     }
 }
-

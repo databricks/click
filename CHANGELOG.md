@@ -1,3 +1,13 @@
+0.4.1
+=====
+
+Cleanup:
+* Move config module into its own dir
+* Update duct so things compile properly
+
+Bug Fixes:
+* Handle minikube certs by working around webpki's lack of support for IpAddress SANS
+
 0.4.0
 =====
 This is a fairly substantial release, and includes a number of enhancements and bug fixes. Some of

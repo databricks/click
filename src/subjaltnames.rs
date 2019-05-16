@@ -14,8 +14,10 @@
 
 use ring::der;
 use untrusted::{Input, Reader};
+use webpki;
 
 use std::borrow::Cow;
+use std::mem;
 
 #[derive(Debug, PartialEq)]
 enum Object {
@@ -24,6 +26,21 @@ enum Object {
     BasicConstraints,
     SubjAltNames,
 }
+
+// This is gross, but we make our own DNSNameRef, to avoid webpki trying to validate it, and then
+// unsafe transmute it to the webpki one.
+#[derive(Clone, Copy)]
+pub struct DNSNameRef<'a>(Input<'a>);
+
+impl<'a> DNSNameRef<'a> {
+    pub fn get_webpki_ref(input: Input<'a>) -> webpki::DNSNameRef<'a> {
+        let internal = DNSNameRef(input);
+        unsafe {
+            mem::transmute(internal)
+        }
+    }
+}
+
 
 // This enum and the general_name function are taken and modified from the webpki crate:
 // https://github.com/briansmith/webpki (see names.rs)
@@ -38,9 +55,10 @@ fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
     const DNS_NAME_TAG: u8 = CONTEXT_SPECIFIC | 2;
     const IP_ADDRESS_TAG: u8 = CONTEXT_SPECIFIC | 7;
 
+
     let tv = der::read_tag_and_get_value(input);
     if tv.is_err() {
-        return Err(());
+         return Err(());
     }
     let (tag, value) = tv.unwrap();
     let name = match tag {
@@ -104,34 +122,40 @@ fn recurse_reader<'a>(reader: &mut Reader<'a>, vec: &mut Vec<SubjAltName<'a>>) {
                 }
                 der::Tag::OctetString => {
                     if is_subj_alt {
-                        let mut snr = Reader::new(rest);
-                        if snr.skip(2).is_err() {
-                            return;
-                        }
-                        while !snr.at_end() {
-                            let gn = general_name(&mut snr);
-                            match gn {
-                                Ok(n) => match n {
-                                    GeneralName::DNSName(input) => {
-                                        let name =
-                                            String::from_utf8_lossy(input.as_slice_less_safe());
-                                        vec.push(SubjAltName::DNSName(name));
-                                    }
-                                    GeneralName::IPAddress(input) => {
-                                        if input.len() >= 4 {
-                                            let mut a = [0; 4];
-                                            let mut i = input.iter();
-                                            a[0] = *i.next().unwrap();
-                                            a[1] = *i.next().unwrap();
-                                            a[2] = *i.next().unwrap();
-                                            a[3] = *i.next().unwrap();
-                                            vec.push(SubjAltName::IPAddress(a));
+                        let mut name_seq = Reader::new(rest);
+                        match der::read_tag_and_get_value(&mut name_seq) {
+                            Ok((_, rest)) => {
+                                let mut snr = Reader::new(rest);
+                                while !snr.at_end() {
+                                    let gn = general_name(&mut snr);
+                                    match gn {
+                                        Ok(n) => match n {
+                                            GeneralName::DNSName(input) => {
+                                                let name =
+                                                    String::from_utf8_lossy(
+                                                        input.as_slice_less_safe());
+                                                vec.push(SubjAltName::DNSName(name));
+                                            }
+                                            GeneralName::IPAddress(input) => {
+                                                if input.len() >= 4 {
+                                                    let mut a = [0; 4];
+                                                    let mut i = input.iter();
+                                                    a[0] = *i.next().unwrap();
+                                                    a[1] = *i.next().unwrap();
+                                                    a[2] = *i.next().unwrap();
+                                                    a[3] = *i.next().unwrap();
+                                                    vec.push(SubjAltName::IPAddress(a));
+                                                }
+                                            }
+                                        },
+                                        Err(_) => {
+                                            break;
                                         }
                                     }
-                                },
-                                Err(_) => {
-                                    break;
                                 }
+                            }
+                            Err(_) => {
+                                break;
                             }
                         }
                     }

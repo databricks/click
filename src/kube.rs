@@ -386,7 +386,7 @@ pub struct Kluster {
 }
 
 // NoCertificateVerification struct/impl taken from the rustls example code
-struct NoCertificateVerification {}
+pub struct NoCertificateVerification {}
 impl rustls::ServerCertVerifier for NoCertificateVerification {
     fn verify_server_cert(
         &self,

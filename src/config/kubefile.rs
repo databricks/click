@@ -14,18 +14,18 @@
 
 //! Code to handle reading and representing .kube/config files.
 
+use chrono::{DateTime, Local, TimeZone};
+use chrono::offset::Utc;
+use duct::cmd;
+use serde_json::{self, Value};
+use serde_yaml;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::process::Command;
-
-use chrono::{DateTime, Local, TimeZone};
-use chrono::offset::Utc;
-use duct::cmd;
-use serde_json::{self, Value};
-use serde_yaml;
 
 //use error::{KubeErrNo, KubeError};
 //use kube::{Kluster, KlusterAuth};
@@ -114,7 +114,6 @@ pub struct Exec {
     pub args: Option<Vec<String>>,
     pub command: Option<String>,
     pub env: Option<Vec<Env>>,
-    //TODO:marc other place ?
     pub token: RefCell<Option<String>>,
     pub expiry: RefCell<Option<DateTime<Utc>>>,
 }

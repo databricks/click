@@ -15,21 +15,21 @@
 //! Code to represent the data found in .kube/config files after it's deserialized, validated, and
 //! so on.  Data in here is what gets passed around to the rest of Click.
 
- use std::collections::HashMap;
- use std::convert::From;
- use std::env;
- use std::error::Error;
- use std::fs::File;
- use std::io::{BufReader, Read};
+use std::collections::HashMap;
+use std::convert::From;
+use std::env;
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufReader, Read};
 
- use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
- use error::{KubeErrNo, KubeError};
- use kube::{ClientCertKey, Kluster, KlusterAuth};
+use error::{KubeErrNo, KubeError};
+use kube::{ClientCertKey, Kluster, KlusterAuth};
+use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
- use super::kubefile::AuthProvider;
- use super::kubefile::Exec;
+use super::kubefile::AuthProvider;
+use super::kubefile::Exec;
 
- #[derive(Debug)]
+#[derive(Debug)]
 pub struct ClusterConf {
     pub cert: Option<String>,
     pub server: String,

@@ -14,13 +14,6 @@
 
 //! Dealing with various kubernetes api calls
 
-use std::fmt;
-use std::io::BufReader;
-use std::net::IpAddr;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-
 use ansi_term::Colour::{Green, Red, Yellow};
 use chrono::DateTime;
 use chrono::offset::Utc;
@@ -32,10 +25,17 @@ use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
 use hyper_sync_rustls::TlsClient;
-use rustls::{self, Certificate, PrivateKey};
 use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
+use rustls::{self, Certificate, PrivateKey};
+
+use std::fmt;
+use std::io::BufReader;
+use std::net::IpAddr;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use config::AuthProvider;
 use config::Exec;

@@ -15,20 +15,21 @@
 //! Code to represent the data found in .kube/config files after it's deserialized, validated, and
 //! so on.  Data in here is what gets passed around to the rest of Click.
 
-use std::collections::HashMap;
-use std::convert::From;
-use std::env;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufReader, Read};
+ use std::collections::HashMap;
+ use std::convert::From;
+ use std::env;
+ use std::error::Error;
+ use std::fs::File;
+ use std::io::{BufReader, Read};
 
-use error::{KubeErrNo, KubeError};
-use kube::{ClientCertKey, Kluster, KlusterAuth};
-use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+ use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+ use error::{KubeErrNo, KubeError};
+ use kube::{ClientCertKey, Kluster, KlusterAuth};
 
-use super::kubefile::AuthProvider;
+ use super::kubefile::AuthProvider;
+ use super::kubefile::Exec;
 
-#[derive(Debug)]
+ #[derive(Debug)]
 pub struct ClusterConf {
     pub cert: Option<String>,
     pub server: String,
@@ -64,6 +65,7 @@ pub enum UserAuth {
     KeyCertPath(String, String),
     KeyCertData(String, String),
     UserPass(String, String),
+    Exec(Exec),
     AuthProvider(AuthProvider),
 }
 
@@ -81,6 +83,9 @@ impl From<super::kubefile::UserConf> for UserConf {
         }
         if let (Some(username), Some(password)) = (conf.username, conf.password) {
             auth_vec.push(UserAuth::UserPass(username, password))
+        }
+        if let Some(exec) = conf.exec {
+            auth_vec.push(UserAuth::Exec(exec))
         }
         if let (Some(client_cert_path), Some(key_path)) =
             (conf.client_cert, conf.client_key)
@@ -335,6 +340,9 @@ impl Config {
                     auth = Some(
                         KlusterAuth::with_userpass(username, password)
                     )
+                }
+                &UserAuth::Exec(ref _exec) => {
+                    auth = Some(KlusterAuth::with_exec(_exec.clone()))
                 }
                 &UserAuth::AuthProvider(ref provider) => {
                     provider.copy_up();

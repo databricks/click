@@ -17,7 +17,7 @@ use Env;
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
-use rustyline::{Helper, Result};
+use rustyline::{Helper, Result, Context};
 
 use cmd::Cmd;
 
@@ -31,7 +31,7 @@ impl<'a> Helper for ClickHelper<'a> {}
 impl<'a> Highlighter for ClickHelper<'a> {}
 
 impl<'a> Hinter for ClickHelper<'a> {
-    fn hint(&self, _line: &str, _pos: usize) -> Option<String> {
+    fn hint(&self, _line: &str, _pos: usize, _ctx: &Context<'_>) -> Option<String> {
         None
     }
 }
@@ -74,7 +74,7 @@ pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
 
 impl<'a> Completer for ClickHelper<'a> {
     type Candidate = Pair;
-    fn complete(&self, line: &str, pos: usize) -> Result<(usize, Vec<Pair>)> {
+    fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Pair>)> {
         let mut v = Vec::new();
         if pos == 0 {
             for cmd in self.commands.iter() {

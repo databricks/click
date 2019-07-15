@@ -1,3 +1,11 @@
+0.4.2
+=====
+
+Bug Fixes:
+* Don't crash if `context` command is called with no arguments and there's a context with no cluster
+* Update rustyline version so it actually compiles
+
+
 0.4.1
 =====
 

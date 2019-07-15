@@ -1109,9 +1109,12 @@ command!(
                 .iter()
                 .map(|context| {
                     let mut row = Vec::new();
-                    let cluster = env.config.clusters.get(*context).unwrap();
+                    let cluster = match env.config.clusters.get(*context) {
+                        Some(c) => c.server.as_str(),
+                        None => "[no cluster for context]"
+                    };
                     row.push(CellSpec::with_style(context, "FR"));
-                    row.push(CellSpec::new(cluster.server.as_str()));
+                    row.push(CellSpec::new(cluster));
                     (context, row)
                 })
                 .collect();
@@ -1818,7 +1821,7 @@ command!(
     |matches, env, writer| {
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
-            if let Some(mut url) = match env.current_object {
+            if let Some(url) = match env.current_object {
                 ::KObj::Pod { ref name, .. } => {
                     clickwrite!(writer, "Delete pod {} [y/N]? ", name);
                     Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))

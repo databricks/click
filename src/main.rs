@@ -867,7 +867,7 @@ fn main() {
                             }
                         }
 
-                        let mut parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
+                        let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                         let mut parts = parts_vec.iter().map(|s| &**s);
                         if let Some(cmdstr) = parts.next() {
                             // There was something typed

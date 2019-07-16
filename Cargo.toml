@@ -1,6 +1,6 @@
 [package]
 name = "click"
-version = "0.4.1"
+version = "0.4.2"
 description = "A command-line REPL for Kubernetes that integrates into existing cli workflows"
 authors = ["Nick Lanham <nick@afternight.org>"]
 homepage = "https://github.com/databricks/click/wiki"
@@ -33,7 +33,7 @@ prettytable-rs = "^0.6"
 regex = "0.2"
 ring = "^0.13"
 rustls = { version = "0.14", features = ["dangerous_configuration"] }
-rustyline = "3.0"
+rustyline = "5.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"

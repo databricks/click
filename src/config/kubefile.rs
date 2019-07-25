@@ -108,9 +108,9 @@ pub struct ContextConf {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[allow(non_snake_case)]
 pub struct Exec {
-    apiVersion: String,
+    #[serde(rename = "apiVersion")]
+    api_version: String,
     pub args: Option<Vec<String>>,
     pub command: Option<String>,
     pub env: Option<Vec<Env>>,
@@ -133,10 +133,10 @@ struct Status {
 }
 
 #[derive(Serialize, Deserialize)]
-#[allow(non_snake_case)]
 struct AWSCredential {
     kind: String,
-    apiVersion: String,
+    #[serde(rename = "apiVersion")]
+    api_version: String,
     spec: Spec,
     status: Status,
 }

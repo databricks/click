@@ -341,8 +341,8 @@ impl Config {
                         KlusterAuth::with_userpass(username, password)
                     )
                 }
-                &UserAuth::Exec(ref _exec) => {
-                    auth = Some(KlusterAuth::with_exec(_exec.clone()))
+                &UserAuth::Exec(ref exec) => {
+                    auth = Some(KlusterAuth::with_exec(exec.clone()))
                 }
                 &UserAuth::AuthProvider(ref provider) => {
                     provider.copy_up();

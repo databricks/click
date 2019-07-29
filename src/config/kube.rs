@@ -316,6 +316,14 @@ impl Config {
         })
     }
 
+    pub fn namespace_for_context(&self, context_name: &str) -> Result<Option<String>, KubeError> {
+        let context = self
+            .contexts
+            .get(context_name)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
+        Ok(context.namespace.clone())
+    }
+
     pub fn cluster_for_context(&self, context_name: &str) -> Result<Kluster, KubeError> {
         let context = self.contexts.get(context_name).
             ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;

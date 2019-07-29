@@ -237,8 +237,18 @@ impl Env {
                         println!(
                             "[WARN] Couldn't find/load context {}, now no current context. \
                              Error: {}",
-                            cname,
-                            e
+                            cname, e
+                        );
+                        None
+                    }
+                };
+                self.namespace = match self.config.namespace_for_context(cname){
+                    Ok(ns) => ns,
+                    Err(e) => {
+                        println!(
+                            "[WARN] Couldn't find/load context {}, now no current context. \
+                             Error: {}",
+                            cname, e
                         );
                         None
                     }

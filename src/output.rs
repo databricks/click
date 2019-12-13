@@ -59,7 +59,7 @@ struct PipeProc {
 impl PipeProc {
     fn finish(self) -> io::Result<String> {
         drop(self.pipe);
-        let output = try!(self.expr.output());
+        let output = try!(self.expr.into_output());
         String::from_utf8(output.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
@@ -88,7 +88,7 @@ impl ClickWriter {
     pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), KubeError> {
         let expr = sh_dangerous(cmd);
         let (pipe_read, pipe_write) = pipe()?;
-        let handle = expr.stdin_handle(pipe_read).start()?;
+        let handle = expr.stdin_file(pipe_read).start()?;
         self.pipe_proc = Some(PipeProc {
             pipe: pipe_write,
             expr: handle,

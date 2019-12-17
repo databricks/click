@@ -21,9 +21,11 @@ use serde_json::{self, Value};
 use serde_yaml;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io;
+use std::process::Command;
 
 //use error::{KubeErrNo, KubeError};
 //use kube::{Kluster, KlusterAuth};
@@ -92,6 +94,7 @@ pub struct UserConf {
 
     pub username: Option<String>,
     pub password: Option<String>,
+    pub exec: Option<Exec>,
 
     #[serde(rename = "auth-provider")] pub auth_provider: Option<AuthProvider>,
 }
@@ -104,6 +107,91 @@ pub struct ContextConf {
     pub user: String,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct Exec {
+    #[serde(rename = "apiVersion")]
+    api_version: String,
+    pub args: Option<Vec<String>>,
+    pub command: Option<String>,
+    pub env: Option<Vec<Env>>,
+    pub token: RefCell<Option<String>>,
+    pub expiry: RefCell<Option<DateTime<Utc>>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Env {
+    name: String,
+    value: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Spec {}
+
+#[derive(Serialize, Deserialize)]
+struct Status {
+    token: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AWSCredential {
+    kind: String,
+    #[serde(rename = "apiVersion")]
+    api_version: String,
+    spec: Spec,
+    status: Status,
+}
+
+impl Exec {
+    // true if expiry is 10 minutes ago or more
+    fn check_dt<T: TimeZone>(&self, expiry: DateTime<T>) -> bool {
+        let etime = expiry.with_timezone(&Utc);
+        let now = Utc::now();
+        let diff = now.signed_duration_since(etime);
+        return diff.num_minutes() >= 10;
+    }
+
+    fn is_expired(&self) -> bool {
+        let expiry = self.expiry.borrow();
+        match *expiry {
+            Some(e) => {
+                self.check_dt(e)
+            }
+            None => {
+                true
+            }
+        }
+    }
+
+    fn generate_token(&self) -> String {
+        let mut filtered_env: HashMap<String, String> = HashMap::new();
+        for e in self.env.clone().unwrap() {
+            filtered_env.insert(e.name, e.value);
+        }
+
+        let output = Command::new(self.command.clone().unwrap())
+            .args(self.args.clone().unwrap())
+            .envs(filtered_env)
+            .output()
+            .expect("failed to execute process");
+
+        let out: String = String::from_utf8_lossy(&output.stdout).to_string();
+        let v: AWSCredential = serde_json::from_str(&out).unwrap();
+        let token = v.status.token;
+        return token;
+    }
+
+    /// Checks that we have a valid token, and if not, attempts to update it based on the config
+    pub fn ensure_token(&self) -> Option<String> {
+        let mut token = self.token.borrow_mut();
+        if self.is_expired() {
+            let mut expiry = self.expiry.borrow_mut();
+            *token = Some(self.generate_token());
+            let v = Utc::now();
+            *expiry = Some(v)
+        }
+        token.clone()
+    }
+}
 
 // Classes to hold deserialized data for auth
 #[derive(Debug, Deserialize, Clone)]

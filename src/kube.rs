@@ -38,6 +38,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use config::AuthProvider;
+use config::Exec;
 use connector::ClickSslConnector;
 use error::{KubeErrNo, KubeError};
 
@@ -345,6 +346,7 @@ pub struct JobList {
 pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
+    Exec(Exec),
     AuthProvider(AuthProvider),
 }
 
@@ -355,6 +357,10 @@ impl KlusterAuth {
 
     pub fn with_userpass(user: &str, pass: &str) -> KlusterAuth {
         KlusterAuth::UserPass(user.to_owned(), pass.to_owned())
+    }
+
+    pub fn with_exec(exec: Exec) -> KlusterAuth {
+        KlusterAuth::Exec(exec.to_owned())
     }
 
     pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
@@ -487,6 +493,15 @@ impl Kluster {
                     }
                 }
             }
+            Some(KlusterAuth::Exec(ref exec)) => {
+                match exec.ensure_token() {
+                    Some(token) => req.header(Authorization(Bearer { token: token })),
+                    None => {
+                        print_token_err();
+                        req
+                    }
+                }
+            }
             Some(KlusterAuth::UserPass(ref user, ref pass)) => req.header(Authorization(Basic {
                 username: user.clone(),
                 password: Some(pass.clone()),
@@ -573,6 +588,13 @@ impl Kluster {
                     }
                     Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
                         match auth_provider.ensure_token() {
+                            Some(token) => headers.set(
+                                Authorization(Bearer { token: token })),
+                            None => print_token_err(),
+                        }
+                    }
+                    Some(KlusterAuth::Exec(ref _exec)) => {
+                        match _exec.ensure_token() {
                             Some(token) => headers.set(
                                 Authorization(Bearer { token: token })),
                             None => print_token_err(),

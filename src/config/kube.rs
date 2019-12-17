@@ -27,6 +27,7 @@ use kube::{ClientCertKey, Kluster, KlusterAuth};
 use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
 use super::kubefile::AuthProvider;
+use super::kubefile::Exec;
 
 #[derive(Debug)]
 pub struct ClusterConf {
@@ -64,6 +65,7 @@ pub enum UserAuth {
     KeyCertPath(String, String),
     KeyCertData(String, String),
     UserPass(String, String),
+    Exec(Exec),
     AuthProvider(AuthProvider),
 }
 
@@ -81,6 +83,9 @@ impl From<super::kubefile::UserConf> for UserConf {
         }
         if let (Some(username), Some(password)) = (conf.username, conf.password) {
             auth_vec.push(UserAuth::UserPass(username, password))
+        }
+        if let Some(exec) = conf.exec {
+            auth_vec.push(UserAuth::Exec(exec))
         }
         if let (Some(client_cert_path), Some(key_path)) =
             (conf.client_cert, conf.client_key)
@@ -335,6 +340,9 @@ impl Config {
                     auth = Some(
                         KlusterAuth::with_userpass(username, password)
                     )
+                }
+                &UserAuth::Exec(ref exec) => {
+                    auth = Some(KlusterAuth::with_exec(exec.clone()))
                 }
                 &UserAuth::AuthProvider(ref provider) => {
                     provider.copy_up();

@@ -11,4 +11,5 @@ pub use self::click::EditMode;
 pub use self::kube::Config;
 
 pub use self::kubefile::AuthProvider;
+pub use self::kubefile::Exec;
 pub use self::kubefile::ContextConf;

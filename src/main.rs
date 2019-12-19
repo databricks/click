@@ -55,8 +55,8 @@ extern crate webpki;
 mod certs;
 mod cmd;
 mod completer;
-mod connector;
 mod config;
+mod connector;
 mod describe;
 mod error;
 mod kube;
@@ -77,9 +77,9 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::{File, OpenOptions};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::process::Child;
-use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -87,11 +87,13 @@ use cmd::Cmd;
 use completer::ClickHelper;
 use config::{Alias, ClickConfig, Config};
 use error::KubeError;
-use kube::{ConfigMapList, DeploymentList, Kluster, NodeList, PodList, ReplicaSetList, StatefulSetList,
-           SecretList, ServiceList, JobList};
+use kube::{
+    ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
+    ServiceList, StatefulSetList,
+};
 use output::ClickWriter;
-use values::val_str_opt;
 use std::env;
+use values::val_str_opt;
 
 /// An object we can have as a "current" thing
 enum KObj {
@@ -155,17 +157,18 @@ impl Env {
         let r = cbool.clone();
         ctrlc::set_handler(move || {
             r.store(true, Ordering::SeqCst);
-        }).expect("Error setting Ctrl-C handler");
+        })
+        .expect("Error setting Ctrl-C handler");
         let namespace = click_config.namespace.clone();
         let context = click_config.context.clone();
         let mut env = Env {
-            config: config,
-            click_config: click_config,
-            click_config_path: click_config_path,
+            config,
+            click_config,
+            click_config_path,
             quit: false,
             need_new_editor: false,
             kluster: None,
-            namespace: namespace,
+            namespace,
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
@@ -229,24 +232,20 @@ impl Env {
     }
 
     fn set_context(&mut self, ctx: Option<&str>) {
-        match ctx {
-            Some(cname) => {
-                self.kluster = match self.config.cluster_for_context(cname) {
-                    Ok(k) => Some(k),
-                    Err(e) => {
-                        println!(
-                            "[WARN] Couldn't find/load context {}, now no current context. \
-                             Error: {}",
-                            cname,
-                            e
-                        );
-                        None
-                    }
-                };
-                self.save_click_config();
-                self.set_prompt();
-            }
-            None => {} // no-op
+        if let Some(cname) = ctx {
+            self.kluster = match self.config.cluster_for_context(cname) {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    println!(
+                        "[WARN] Couldn't find/load context {}, now no current context. \
+                         Error: {}",
+                        cname, e
+                    );
+                    None
+                }
+            };
+            self.save_click_config();
+            self.set_prompt();
         }
     }
 
@@ -284,9 +283,10 @@ impl Env {
 
     // Return the current position of the specified alias in the Vec, or None if it's not there
     fn alias_position(&self, alias: &str) -> Option<usize> {
-        self.click_config.aliases.iter().position(|a| {
-            a.alias == *alias
-        })
+        self.click_config
+            .aliases
+            .iter()
+            .position(|a| a.alias == *alias)
     }
 
     fn add_alias(&mut self, alias: Alias) {
@@ -302,7 +302,7 @@ impl Env {
                 self.save_click_config();
                 true
             }
-            None => false
+            None => false,
         }
     }
 
@@ -322,14 +322,15 @@ impl Env {
             }
             LastList::PodList(ref pl) => {
                 if let Some(pod) = pl.items.get(num) {
-                    let containers = pod.spec
+                    let containers = pod
+                        .spec
                         .containers
                         .iter()
                         .map(|cspec| cspec.name.clone())
                         .collect();
                     self.current_object = KObj::Pod {
                         name: pod.metadata.name.clone(),
-                        containers: containers,
+                        containers,
                     };
                     self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
@@ -427,7 +428,7 @@ impl Env {
                 } else {
                     self.current_object = KObj::None;
                 }
-            },
+            }
             LastList::JobList(ref jl) => {
                 if let Some(ref job) = jl.items.get(num) {
                     match val_str_opt("/metadata/name", job) {
@@ -508,10 +509,12 @@ impl Env {
     /// Try and expand alias.
     /// FFIX Returns Some(expanded) if the alias expands, or None if no such alias
     /// is found
-    fn try_expand_alias<'a>(&'a self,
-                            line: &'a str,
-                            prev_word: Option<&'a str>) -> ExpandedAlias<'a> {
-        let pos = line.find(char::is_whitespace).unwrap_or(line.len());
+    fn try_expand_alias<'a>(
+        &'a self,
+        line: &'a str,
+        prev_word: Option<&'a str>,
+    ) -> ExpandedAlias<'a> {
+        let pos = line.find(char::is_whitespace).unwrap_or_else(|| line.len());
         let word = &line[0..pos];
         // don't expand if prev_word is Some, and is equal to my word
         // this means an alias maps to itself, and we want to stop expanding
@@ -561,14 +564,18 @@ impl fmt::Display for Env {
                 let emstr: String = (&self.click_config.editmode).into();
                 Green.paint(emstr)
             },
-            Green.paint(self.click_config
-                .editor
-                .as_ref()
-                .unwrap_or(&"<unset, will use $EDITOR>".to_owned())),
-            Green.paint(self.click_config
-                .terminal
-                .as_ref()
-                .unwrap_or(&"<unset, will use xterm>".to_owned())),
+            Green.paint(
+                self.click_config
+                    .editor
+                    .as_ref()
+                    .unwrap_or(&"<unset, will use $EDITOR>".to_owned())
+            ),
+            Green.paint(
+                self.click_config
+                    .terminal
+                    .as_ref()
+                    .unwrap_or(&"<unset, will use xterm>".to_owned())
+            ),
         )
     }
 }
@@ -629,7 +636,6 @@ fn build_parser_expr<'a>(
     }
 }
 
-
 #[derive(Debug)]
 struct ExpandedAlias<'a> {
     expansion: Option<&'a Alias>,
@@ -639,13 +645,14 @@ struct ExpandedAlias<'a> {
 fn alias_expand_line(env: &Env, line: &str) -> String {
     let expa = env.try_expand_alias(line, None);
     let mut alias_stack = vec![expa];
+    #[allow(clippy::while_let_loop)] // needed due to borrow restrictions
     loop {
         let expa = match alias_stack.last().unwrap().expansion {
             Some(ref prev) => {
                 // previous thing expanded an alias, so try and expand that too
                 env.try_expand_alias(prev.expanded.as_str(), Some(prev.alias.as_str()))
             }
-            None => break
+            None => break,
         };
         alias_stack.push(expa);
     }
@@ -655,7 +662,7 @@ fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
@@ -667,17 +674,19 @@ fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> 
 }
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
-fn get_editor<'a>(config: rustyconfig::Config,
-                  raw_env: *const Env,
-                  hist_path: &PathBuf,
-                  commands: &'a Vec<Box<Cmd>>) -> Editor<ClickHelper<'a>> {
+fn get_editor<'a>(
+    config: rustyconfig::Config,
+    raw_env: *const Env,
+    hist_path: &PathBuf,
+    commands: &'a [Box<dyn Cmd>],
+) -> Editor<ClickHelper<'a>> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl.set_helper(Some(ClickHelper::new(commands, raw_env)));
     rl
 }
 
-static SHELLP: &'static str = "Shell syntax can be used to redirect or pipe the output of click \
+static SHELLP: &str = "Shell syntax can be used to redirect or pipe the output of click \
 commands to files or other commands (like grep).\n
 Examples:\n\
  # grep logs for ERROR:\n\
@@ -689,12 +698,12 @@ Examples:\n\
  # Append log lines that contain \"foo bar\" to logs.txt\n\
  logs the-cont | grep \"foo bar\" >> /tmp/logs.txt";
 
-static COMPLETIONHELP: &'static str = "There are two completion types: list or circular.
+static COMPLETIONHELP: &str = "There are two completion types: list or circular.
 - 'list' will complete the next full match (like in Vim by default) (do: 'set completion list)
 - circular will complete until the longest match. If there is more than one match, \
 it will list all matches (like in Bash/Readline). (do: set completion circular)";
 
-static EDITMODEHELP: &'static str = "There are two edit modes: vi or emacs.
+static EDITMODEHELP: &str = "There are two edit modes: vi or emacs.
 This controls the style of editing and the standard keymaps to the mode used by the \
 associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
@@ -743,14 +752,16 @@ fn main() {
         .unwrap_or_else(|| {
             let mut config_path = conf_dir.clone();
             config_path.push("config");
-            vec!(config_path)
+            vec![config_path]
         })
         .into_iter()
-        .map(|config_file| config_file
-            .as_path()
-            .to_str()
-            .unwrap_or("[CONFIG_PATH_EMPTY]")
-            .to_owned())
+        .map(|config_file| {
+            config_file
+                .as_path()
+                .to_str()
+                .unwrap_or("[CONFIG_PATH_EMPTY]")
+                .to_owned()
+        })
         .collect::<Vec<_>>();
 
     let config = match Config::from_files(&config_paths) {
@@ -764,12 +775,12 @@ fn main() {
         }
     };
 
-    let mut hist_path = conf_dir.clone();
+    let mut hist_path = conf_dir;
     hist_path.push("click.history");
 
     let mut env = Env::new(config, click_conf, click_path);
 
-    let mut commands: Vec<Box<Cmd>> = Vec::new();
+    let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
     commands.push(Box::new(cmd::Context::new()));
     commands.push(Box::new(cmd::Contexts::new()));
@@ -800,16 +811,12 @@ fn main() {
     commands.push(Box::new(cmd::Unalias::new()));
 
     let raw_env: *const Env = &env;
-    let mut rl = get_editor(env.get_rustyline_conf(),
-                            raw_env,
-                            &hist_path,
-                            &commands);
+    let mut rl = get_editor(env.get_rustyline_conf(), raw_env, &hist_path, &commands);
 
     while !env.quit {
         let mut writer = ClickWriter::new();
         if env.need_new_editor {
-            rl = get_editor(env.get_rustyline_conf(),
-                            raw_env, &hist_path, &commands);
+            rl = get_editor(env.get_rustyline_conf(), raw_env, &hist_path, &commands);
             env.need_new_editor = false;
         }
         let readline = rl.readline(env.prompt.as_str());
@@ -823,16 +830,15 @@ fn main() {
                     if !c.is_whitespace() {
                         break;
                     }
-                    first_non_whitespace+=1;
+                    first_non_whitespace += 1;
                 }
-                let lstr =
-                    if first_non_whitespace == 0 {
-                        // bash semantics: don't add to history if start with space
-                        rl.add_history_entry(line.as_str());
-                        line.as_str()
-                    } else {
-                        &line[first_non_whitespace..]
-                    };
+                let lstr = if first_non_whitespace == 0 {
+                    // bash semantics: don't add to history if start with space
+                    rl.add_history_entry(line.as_str());
+                    line.as_str()
+                } else {
+                    &line[first_non_whitespace..]
+                };
                 let expanded_line = alias_expand_line(&env, lstr);
                 match parse_line(&expanded_line) {
                     Ok((left, right)) => {

@@ -18,9 +18,9 @@
 use values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
-use chrono::DateTime;
 use chrono::offset::Local;
 use chrono::offset::Utc;
+use chrono::DateTime;
 use serde_json::Value;
 
 use std::borrow::Cow;
@@ -43,7 +43,7 @@ pub enum DescItem<'a> {
     ObjectCreated,
     CustomFunc {
         path: Option<&'a str>,
-        func: &'a (Fn(&Value) -> Cow<str>),
+        func: &'a (dyn Fn(&Value) -> Cow<str>),
         default: &'a str,
     },
     StaticStr(Cow<'a, str>),
@@ -129,7 +129,8 @@ where
                     "/creationTimestamp",
                     metadata,
                     "<No CreationTime>",
-                )).unwrap();
+                ))
+                .unwrap();
                 format!("{} ({})", created, created.with_timezone(&Local)).into()
             }
             DescItem::CustomFunc {
@@ -138,8 +139,8 @@ where
                 default,
             } => {
                 let value = match path {
-                    &Some(p) => v.pointer(p),
-                    &None => Some(v),
+                    Some(p) => v.pointer(p),
+                    None => Some(v),
                 };
                 match value {
                     Some(v) => func(v),
@@ -148,7 +149,7 @@ where
             }
             DescItem::StaticStr(s) => s,
         };
-        write!(&mut res, "{}{}\n", title, val).unwrap();
+        writeln!(&mut res, "{}{}", title, val).unwrap();
     }
     res
 }
@@ -220,7 +221,7 @@ pub fn describe_format_pod(v: Value) -> String {
 }
 
 /// Get volume info out of volume array
-fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
+fn get_volume_str(v: &Value) -> Cow<str> {
     let mut buf = String::new();
     if let Some(vol_arry) = v.as_array() {
         for vol in vol_arry.iter() {
@@ -242,7 +243,8 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
                     format!(
                         "    SecretName:\t{}\n",
                         val_str("/secretName", secret, "<No SecretName>")
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
             }
             if let Some(aws) = vol.get("awsElasticBlockStore") {
@@ -253,7 +255,8 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
                     format!(
                         "    VolumeId:\t{}\n",
                         val_str("/volumeID", aws, "<No VolumeID>")
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
                 buf.push_str(
                     format!("    FSType:\t{}\n", val_str("/fsType", aws, "<No FsType>")).as_str(),
@@ -280,7 +283,7 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
     buf.into()
 }
 
-fn pod_phase<'a>(v: &Value) -> Cow<str> {
+fn pod_phase(v: &Value) -> Cow<str> {
     let phase_str = val_str("/status/phase", v, "<No Phase>");
     let colour = match &*phase_str {
         "Pending" | "Unknown" => Colour::Yellow,
@@ -342,14 +345,14 @@ pub fn describe_format_node(v: Value) -> String {
     describe_object(&v, fields.into_iter())
 }
 
-fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
+fn node_access_url(v: &Value) -> Cow<str> {
     match val_str_opt("/spec/providerID", v) {
         Some(provider) => {
             if provider.starts_with("aws://") {
                 let ip_opt = v.pointer("/status/addresses").and_then(|addr| {
                     addr.as_array().and_then(|addr_vec| {
                         addr_vec
-                            .into_iter()
+                            .iter()
                             .find(|&aval| {
                                 aval.as_object().map_or(false, |addr| {
                                     addr["type"].as_str().map_or(false, |t| t == "ExternalIP")
@@ -359,14 +362,15 @@ fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
                     })
                 });
                 ip_opt.map_or("Not Found".into(), |ip| {
-                    let octs: Vec<&str> = ip.split(".").collect();
+                    let octs: Vec<&str> = ip.split('.').collect();
                     if octs.len() < 4 {
                         format!("Unexpected ip format: {}", ip).into()
                     } else {
                         format!(
                             "ec2-{}-{}-{}-{}.us-west-2.compute.amazonaws.com ({})",
                             octs[0], octs[1], octs[2], octs[3], ip
-                        ).into()
+                        )
+                        .into()
                     }
                 })
             } else {
@@ -444,7 +448,7 @@ pub fn describe_format_service(v: Value, endpoint_val: Option<Value>) -> String 
 }
 
 /// Get ports info out of ports array
-fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'a, str> {
+fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
     if v.is_none() {
         return "<none>".into();
     }
@@ -498,9 +502,13 @@ fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'
                                                         epbuf.push_str(", ");
                                                     }
                                                     epbuf.push_str(
-                                                        format!("{}:{}",
-                                                                val_str("/ip", addr, "<No IP>"),
-                                                                port_num).as_str());
+                                                        format!(
+                                                            "{}:{}",
+                                                            val_str("/ip", addr, "<No IP>"),
+                                                            port_num
+                                                        )
+                                                        .as_str(),
+                                                    );
                                                 }
                                             })
                                         });
@@ -522,7 +530,8 @@ fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'
                         val_str("/name", port, "<No Name>"),
                         val_u64("/nodePort", port, 0),
                         proto
-                    ).as_str(),
+                    )
+                    .as_str(),
                 );
                 buf.push_str(endpoints.as_str());
                 buf.push('\n');

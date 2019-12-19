@@ -14,8 +14,8 @@
 
 //! Code to handle reading and representing .kube/config files.
 
-use chrono::{DateTime, Local, TimeZone};
 use chrono::offset::Utc;
+use chrono::{DateTime, Local, TimeZone};
 use duct::cmd;
 use serde_json::{self, Value};
 use serde_yaml;
@@ -28,7 +28,6 @@ use std::io;
 //use error::{KubeErrNo, KubeError};
 //use kube::{Kluster, KlusterAuth};
 //use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
-
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -50,33 +49,37 @@ impl Config {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct Cluster {
     pub name: String,
-    #[serde(rename = "cluster")] pub conf: ClusterConf,
+    #[serde(rename = "cluster")]
+    pub conf: ClusterConf,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ClusterConf {
-    #[serde(rename = "certificate-authority")] pub cert: Option<String>,
-    #[serde(rename = "certificate-authority-data")] pub cert_data: Option<String>,
-    #[serde(rename = "insecure-skip-tls-verify")] pub skip_tls: Option<bool>,
+    #[serde(rename = "certificate-authority")]
+    pub cert: Option<String>,
+    #[serde(rename = "certificate-authority-data")]
+    pub cert_data: Option<String>,
+    #[serde(rename = "insecure-skip-tls-verify")]
+    pub skip_tls: Option<bool>,
     pub server: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Context {
     pub name: String,
-    #[serde(rename = "context")] pub conf: ContextConf,
+    #[serde(rename = "context")]
+    pub conf: ContextConf,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct User {
     pub name: String,
-    #[serde(rename = "user")] pub conf: UserConf,
+    #[serde(rename = "user")]
+    pub conf: UserConf,
 }
-
 
 /// This represents what we can find in a user in the actual config file (note the Deserialize).
 /// Hence all the optional fields.  At some point we should write a custom deserializer for this to
@@ -85,15 +88,20 @@ pub struct User {
 pub struct UserConf {
     pub token: Option<String>,
 
-    #[serde(rename = "client-certificate")] pub client_cert: Option<String>,
-    #[serde(rename = "client-key")] pub client_key: Option<String>,
-    #[serde(rename = "client-certificate-data")] pub client_cert_data: Option<String>,
-    #[serde(rename = "client-key-data")] pub client_key_data: Option<String>,
+    #[serde(rename = "client-certificate")]
+    pub client_cert: Option<String>,
+    #[serde(rename = "client-key")]
+    pub client_key: Option<String>,
+    #[serde(rename = "client-certificate-data")]
+    pub client_cert_data: Option<String>,
+    #[serde(rename = "client-key-data")]
+    pub client_key_data: Option<String>,
 
     pub username: Option<String>,
     pub password: Option<String>,
 
-    #[serde(rename = "auth-provider")] pub auth_provider: Option<AuthProvider>,
+    #[serde(rename = "auth-provider")]
+    pub auth_provider: Option<AuthProvider>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -103,7 +111,6 @@ pub struct ContextConf {
     pub namespace: Option<String>,
     pub user: String,
 }
-
 
 // Classes to hold deserialized data for auth
 #[derive(Debug, Deserialize, Clone)]
@@ -162,11 +169,12 @@ impl AuthProvider {
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<String>) {
         match self.config.cmd_path {
             Some(ref conf_cmd) => {
-                let args = self.config
+                let args = self
+                    .config
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
-                    .unwrap_or(vec![]);
+                    .unwrap_or_else(|| vec![]);
                 match cmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         let v: Value = serde_json::from_str(output.as_str()).unwrap();
@@ -227,11 +235,16 @@ impl AuthProvider {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AuthProviderConfig {
-    #[serde(rename = "access-token")] pub access_token: Option<String>,
+    #[serde(rename = "access-token")]
+    pub access_token: Option<String>,
     expiry: Option<String>,
 
-    #[serde(rename = "cmd-args")] cmd_args: Option<String>,
-    #[serde(rename = "cmd-path")] cmd_path: Option<String>,
-    #[serde(rename = "expiry-key")] expiry_key: Option<String>,
-    #[serde(rename = "token-key")] token_key: Option<String>,
+    #[serde(rename = "cmd-args")]
+    cmd_args: Option<String>,
+    #[serde(rename = "cmd-path")]
+    cmd_path: Option<String>,
+    #[serde(rename = "expiry-key")]
+    expiry_key: Option<String>,
+    #[serde(rename = "token-key")]
+    token_key: Option<String>,
 }

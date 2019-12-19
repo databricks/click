@@ -17,9 +17,9 @@ use hyper;
 use serde_json;
 use serde_yaml;
 
-use std::error::Error;
-use std::{error, fmt, io, env};
 use std::convert::From;
+use std::error::Error;
+use std::{env, error, fmt, io};
 
 #[derive(Debug)]
 pub enum KubeErrNo {
@@ -33,14 +33,14 @@ pub enum KubeErrNo {
 impl fmt::Display for KubeErrNo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
-            &KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
-            &KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
-            &KubeErrNo::Unauthorized => write!(
+            KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
+            KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
+            KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
+            KubeErrNo::Unauthorized => write!(
                 f,
                 "Not authorized to talk to cluster, check credentials in config"
             ),
-            &KubeErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
+            KubeErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
         }
     }
 }
@@ -48,17 +48,17 @@ impl fmt::Display for KubeErrNo {
 impl error::Error for KubeErrNo {
     fn description(&self) -> &str {
         match self {
-            &KubeErrNo::InvalidContextName => "Invalid Context Name",
-            &KubeErrNo::InvalidCluster => "Invalid Cluster Name",
-            &KubeErrNo::InvalidUser => "Invalid User Name",
-            &KubeErrNo::Unauthorized => {
+            KubeErrNo::InvalidContextName => "Invalid Context Name",
+            KubeErrNo::InvalidCluster => "Invalid Cluster Name",
+            KubeErrNo::InvalidUser => "Invalid User Name",
+            KubeErrNo::Unauthorized => {
                 "Not authorized to talk to cluster, check credentials in config"
             }
-            &KubeErrNo::Unknown => "Unknown error talking to cluster",
+            KubeErrNo::Unknown => "Unknown error talking to cluster",
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }
@@ -113,7 +113,7 @@ impl error::Error for KubeError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             KubeError::ParseErr(_) => None,
             KubeError::Kube(ref err) => Some(err),

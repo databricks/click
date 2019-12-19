@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 /// Click config
-
-use atomicwrites::{AtomicFile, AllowOverwrite};
+use atomicwrites::{AllowOverwrite, AtomicFile};
 use rustyline::config as rustyconfig;
 
 use std::error::Error;
@@ -37,15 +35,21 @@ pub enum EditMode {
 }
 
 impl Default for EditMode {
-    fn default() -> Self { EditMode::Emacs }
+    fn default() -> Self {
+        EditMode::Emacs
+    }
 }
 
 impl fmt::Display for EditMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            EditMode::Emacs => "Emacs",
-            EditMode::Vi => "Vi",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                EditMode::Emacs => "Emacs",
+                EditMode::Vi => "Vi",
+            }
+        )
     }
 }
 
@@ -62,15 +66,21 @@ pub enum CompletionType {
 }
 
 impl Default for CompletionType {
-    fn default() -> Self { CompletionType::Circular }
+    fn default() -> Self {
+        CompletionType::Circular
+    }
 }
 
 impl fmt::Display for CompletionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            CompletionType::Circular => "Circular",
-            CompletionType::List => "List",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                CompletionType::Circular => "Circular",
+                CompletionType::List => "List",
+            }
+        )
     }
 }
 
@@ -121,10 +131,10 @@ impl ClickConfig {
             EditMode::Vi => config.edit_mode(rustyconfig::EditMode::Vi),
         };
         config = match self.completiontype {
-            CompletionType::Circular =>
-                config.completion_type(rustyconfig::CompletionType::Circular),
-            CompletionType::List =>
-                config.completion_type(rustyconfig::CompletionType::List),
+            CompletionType::Circular => {
+                config.completion_type(rustyconfig::CompletionType::Circular)
+            }
+            CompletionType::List => config.completion_type(rustyconfig::CompletionType::List),
         };
         config.build()
     }
@@ -133,11 +143,13 @@ impl ClickConfig {
     /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
         let af = AtomicFile::new(path, AllowOverwrite);
-        try!(af.write(|mut f| {
-            serde_yaml::to_writer(&mut f, &self)
-        }).map_err(|e| KubeError::ConfigFileError(
-            format!("Failed to write config file: {}", e.description())
-        )));
+        af.write(|mut f| serde_yaml::to_writer(&mut f, &self))
+            .map_err(|e| {
+                KubeError::ConfigFileError(format!(
+                    "Failed to write config file: {}",
+                    e.description()
+                ))
+            })?;
         Ok(())
     }
 }

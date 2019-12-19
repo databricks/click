@@ -17,15 +17,15 @@ use subjaltnames::{get_subj_alt_names, DNSNameRef, SubjAltName};
 
 use der_parser;
 use regex::Regex;
-use rustls::{ClientConfig, ClientSession, Session};
-use rustls::{Certificate, PrivateKey};
 use rustls::sign::RSASigningKey;
+use rustls::{Certificate, PrivateKey};
+use rustls::{ClientConfig, ClientSession, Session};
 use untrusted::{Input, Reader};
 
 use std::error::Error;
 use std::fs::File;
-use std::net::{IpAddr, TcpStream};
 use std::io::{self, BufReader, Read};
+use std::net::{IpAddr, TcpStream};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -91,10 +91,7 @@ fn get_body(s: &str) -> Option<String> {
 
 /// Check if string is a pkcs#8 private key.  These start with the RE defined below.
 fn is_pkcs8(s: &str) -> bool {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"-----BEGIN PRIVATE KEY-----").unwrap();
-    }
-    RE.is_match(s)
+    s.starts_with(r"-----BEGIN PRIVATE KEY-----")
 }
 
 /// Make sure the key is valid, to avoid panics when trying to use it
@@ -122,7 +119,7 @@ pub fn get_cert_from_pem(pem: &str) -> Option<Certificate> {
     }
 }
 
-static RSAOID: &'static [u64] = &[1, 2, 840, 113549, 1, 1, 1];
+static RSAOID: &[u64] = &[1, 2, 840, 113_549, 1, 1, 1];
 // Convert rsa/pkcs8 private string to der cert
 pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
     let pkcs8 = is_pkcs8(s);
@@ -187,7 +184,8 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
 
 fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Error> {
     let mut config = ClientConfig::new();
-    config.dangerous()
+    config
+        .dangerous()
         .set_certificate_verifier(Arc::new(NoCertificateVerification {}));
     let ac = Arc::new(config);
     let dns_name_str = format!("{}:{}", ip, port);
@@ -203,7 +201,7 @@ fn fetch_cert_for_ip(ip: &IpAddr, port: u16) -> Result<Vec<Certificate>, io::Err
         return Err(io::Error::new(io::ErrorKind::WriteZero, "No data to read"));
     }
     let _processed = session.process_new_packets();
-    Ok(session.get_peer_certificates().unwrap_or(Vec::new()))
+    Ok(session.get_peer_certificates().unwrap_or_default())
 }
 
 // Fetch the cert from the specified endpoint, then, if cert contains a SAN that matches target_ip,

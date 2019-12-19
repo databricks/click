@@ -14,7 +14,6 @@
 
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
-
 use output::ClickWriter;
 
 use clap::ArgMatches;
@@ -30,9 +29,9 @@ lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
-                        format::LineSeparator::new('-', '+', '+', '+')
-                )
-        .padding(1,1)
+            format::LineSeparator::new('-', '+', '+', '+')
+        )
+        .padding(1, 1)
         .build();
 }
 
@@ -147,24 +146,22 @@ where
     I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
 {
     things
-        .filter_map(|thing| {
+        .filter(|thing| {
             let mut has_match = false;
             for cell_spec in thing.1.iter() {
                 if !has_match {
                     has_match = cell_spec.matches(&regex);
                 }
             }
-            if has_match {
-                Some(thing)
-            } else {
-                None
-            }
+            has_match
         })
         .collect()
 }
 
 pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
-    where F: Fn(&T, &T) -> Ordering {
+where
+    F: Fn(&T, &T) -> Ordering,
+{
     match (o1, o2) {
         (Some(ref v1), Some(ref v2)) => f(v1, v2),
         (None, Some(_)) => Ordering::Less,
@@ -173,7 +170,7 @@ pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
     }
 }
 
-fn term_print_table<T: Write>(table: &Table, writer:&mut T) -> bool {
+fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
     match term::TerminfoTerminal::new(writer) {
         Some(ref mut term) => {
             table.print_term(term).unwrap_or(0);
@@ -183,6 +180,7 @@ fn term_print_table<T: Write>(table: &Table, writer:&mut T) -> bool {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 pub fn print_table<'a, T>(
     table: &mut Table,
     specs: &Vec<(T, Vec<CellSpec<'a>>)>,

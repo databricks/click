@@ -34,10 +34,7 @@ impl<S: SslClient> ClickSslConnector<S> {
     /// of (hostname,ip_address), and for that hostname we will short-circuit DNS and just map to
     /// the specified IP.
     pub fn new(s: S, host_addr: Option<(String, String)>) -> ClickSslConnector<S> {
-        ClickSslConnector {
-            ssl: s,
-            host_addr: host_addr,
-        }
+        ClickSslConnector { ssl: s, host_addr }
     }
 
     fn click_connect(&self, host: &str, port: u16, scheme: &str) -> Result<HttpStream> {
@@ -51,16 +48,13 @@ impl<S: SslClient> ClickSslConnector<S> {
             }
             None => (host, port),
         };
-        Ok(try!(match scheme {
-            "http" => {
-                let res = Ok(HttpStream(try!(TcpStream::connect(&addr))));
-                res
-            }
+        Ok(match scheme {
+            "http" => Ok(HttpStream(TcpStream::connect(&addr)?)),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Invalid scheme for Http"
+                "Invalid scheme for Http",
             )),
-        }))
+        }?)
     }
 }
 
@@ -68,7 +62,7 @@ impl<S: SslClient> NetworkConnector for ClickSslConnector<S> {
     type Stream = HttpsStream<S::Stream>;
 
     fn connect(&self, host: &str, port: u16, scheme: &str) -> Result<Self::Stream> {
-        let stream = try!(self.click_connect(host, port, "http"));
+        let stream = self.click_connect(host, port, "http")?;
         if scheme == "https" {
             self.ssl.wrap_client(stream, host).map(HttpsStream::Https)
         } else {

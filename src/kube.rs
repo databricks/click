@@ -505,7 +505,7 @@ impl Kluster {
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
         let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
-        let mut endpoint = try!(Url::parse(server));
+        let mut endpoint = Url::parse(server)?;
         let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
         let mut client = Client::with_connector(Kluster::make_connector(
             tlsclient,
@@ -524,7 +524,7 @@ impl Kluster {
     }
 
     fn send_req(&self, path: &str) -> Result<Response, KubeError> {
-        let url = try!(self.endpoint.join(path));
+        let url = self.endpoint.join(path)?;
         let req = self.client.get(url);
         let req = self.add_auth_header(req);
         req.send().map_err(|he| KubeError::from(he))
@@ -537,7 +537,7 @@ impl Kluster {
             Err(KubeError::Kube(KubeErrNo::Unauthorized))
         } else {
             // try and read an error message out
-            let val: Value = try!(serde_json::from_reader(resp));
+            let val: Value = serde_json::from_reader(resp)?;
             match ::values::val_str_opt("/message", &val) {
                 Some(msg) => Err(KubeError::KubeServerError(msg)),
                 None => Err(KubeError::Kube(KubeErrNo::Unknown)),
@@ -550,8 +550,8 @@ impl Kluster {
     where
         for<'de> T: Deserialize<'de>,
     {
-        let resp = try!(self.send_req(path));
-        let resp = try!(self.check_resp(resp));
+        let resp = self.send_req(path)?;
+        let resp = self.check_resp(resp)?;
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 
@@ -559,8 +559,8 @@ impl Kluster {
     /// like printing logs)
     pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
         if timeout.is_some() {
-            let url = try!(self.endpoint.join(path));
-            let mut req = try!(Request::with_connector(Method::Get, url, &self.connector,));
+            let url = self.endpoint.join(path)?;
+            let mut req = Request::with_connector(Method::Get, url, &self.connector,)?;
             {
                 // scope for mutable borrow of req
                 let headers = req.headers_mut();
@@ -587,26 +587,26 @@ impl Kluster {
                     None => {},
                 }
             }
-            try!(req.set_read_timeout(timeout));
-            let next = try!(req.start());
-            let resp = try!(next.send().map_err(|he| KubeError::from(he)));
+            req.set_read_timeout(timeout)?;
+            let next = req.start()?;
+            let resp = next.send().map_err(|he| KubeError::from(he))?;
             self.check_resp(resp)
         } else {
-            let resp = try!(self.send_req(path));
+            let resp = self.send_req(path)?;
             self.check_resp(resp)
         }
     }
 
     /// Get a serde_json::Value
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
-        let resp = try!(self.send_req(path));
-        let resp = try!(self.check_resp(resp));
+        let resp = self.send_req(path)?;
+        let resp = self.check_resp(resp)?;
         serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
     }
 
     /// Issue an HTTP DELETE request to the specified path
     pub fn delete(&self, path: &str, body: Option<String>) -> Result<Response, KubeError> {
-        let url = try!(self.endpoint.join(path));
+        let url = self.endpoint.join(path)?;
         let req = self.client.delete(url);
         let req = match body {
             Some(ref b) => {
@@ -622,7 +622,7 @@ impl Kluster {
     /// Get all namespaces in this cluster
     pub fn namespaces_for_context(&self) -> Result<Vec<String>, KubeError> {
         let mut vec = Vec::new();
-        let res = try!(self.get::<NamespaceList>("/api/v1/namespaces"));
+        let res = self.get::<NamespaceList>("/api/v1/namespaces")?;
         for ns in res.items.iter() {
             vec.push(ns.metadata.name.clone());
         }

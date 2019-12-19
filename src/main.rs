@@ -670,7 +670,7 @@ fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> 
 fn get_editor<'a>(config: rustyconfig::Config,
                   raw_env: *const Env,
                   hist_path: &PathBuf,
-                  commands: &'a Vec<Box<Cmd>>) -> Editor<ClickHelper<'a>> {
+                  commands: &'a Vec<Box<dyn Cmd>>) -> Editor<ClickHelper<'a>> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl.set_helper(Some(ClickHelper::new(commands, raw_env)));
@@ -769,7 +769,7 @@ fn main() {
 
     let mut env = Env::new(config, click_conf, click_path);
 
-    let mut commands: Vec<Box<Cmd>> = Vec::new();
+    let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
     commands.push(Box::new(cmd::Quit::new()));
     commands.push(Box::new(cmd::Context::new()));
     commands.push(Box::new(cmd::Contexts::new()));

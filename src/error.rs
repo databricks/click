@@ -58,7 +58,7 @@ impl error::Error for KubeErrNo {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }
@@ -113,7 +113,7 @@ impl error::Error for KubeError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             KubeError::ParseErr(_) => None,
             KubeError::Kube(ref err) => Some(err),

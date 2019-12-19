@@ -76,7 +76,7 @@ lazy_static! {
 
 pub trait Cmd {
     // break if returns true
-    fn exec(&self, &mut Env, &mut Iterator<Item = &str>, &mut ClickWriter) -> bool;
+    fn exec(&self, &mut Env, &mut dyn Iterator<Item = &str>, &mut ClickWriter) -> bool;
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix:&str, env: &Env) -> Vec<RustlinePair>;
@@ -104,7 +104,7 @@ fn start_clap(
 fn exec_match<F>(
     clap: &RefCell<App<'static, 'static>>,
     env: &mut Env,
-    args: &mut Iterator<Item = &str>,
+    args: &mut dyn Iterator<Item = &str>,
     writer: &mut ClickWriter,
     func: F,
 ) -> bool
@@ -163,7 +163,7 @@ macro_rules! command {
         pub struct $cmd_name {
             aliases: Vec<&'static str>,
             clap: RefCell<App<'static, 'static>>,
-            completers: Vec<&'static Fn(&str, &Env) -> Vec<RustlinePair>>,
+            completers: Vec<&'static dyn Fn(&str, &Env) -> Vec<RustlinePair>>,
         }
 
         impl $cmd_name {
@@ -183,7 +183,7 @@ macro_rules! command {
         }
 
         impl Cmd for $cmd_name {
-            fn exec(&self, env:&mut Env, args:&mut Iterator<Item=&str>,
+            fn exec(&self, env:&mut Env, args:&mut dyn Iterator<Item=&str>,
                     writer: &mut ClickWriter) -> bool {
                 exec_match(&self.clap, env, args, writer, $cmd_expr)
             }
@@ -549,7 +549,7 @@ fn print_podlist(
         None => {}
     }
 
-    let to_map: Box<Iterator<Item=Pod>> = if reverse {
+    let to_map: Box<dyn Iterator<Item=Pod>> = if reverse {
         Box::new(podlist.items.into_iter().rev())
     } else {
         Box::new(podlist.items.into_iter())
@@ -654,7 +654,7 @@ fn print_nodelist(
         }
         None => {}
     }
-    let to_map: Box<Iterator<Item=Node>> = if reverse {
+    let to_map: Box<dyn Iterator<Item=Node>> = if reverse {
         Box::new(nodelist.items.into_iter().rev())
     } else {
         Box::new(nodelist.items.into_iter())
@@ -789,7 +789,7 @@ fn print_deployments(
         None => {}
     }
 
-    let to_map: Box<Iterator<Item=Deployment>> = if reverse {
+    let to_map: Box<dyn Iterator<Item=Deployment>> = if reverse {
         Box::new(deplist.items.into_iter().rev())
     } else {
         Box::new(deplist.items.into_iter())
@@ -977,7 +977,7 @@ fn print_servicelist(
         None => {}
     }
 
-    let to_map: Box<Iterator<Item=(Service, (String, String))>> = if reverse {
+    let to_map: Box<dyn Iterator<Item=(Service, (String, String))>> = if reverse {
         Box::new(servswithipportss.into_iter().rev())
     } else {
         Box::new(servswithipportss.into_iter())

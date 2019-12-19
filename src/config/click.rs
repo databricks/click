@@ -133,11 +133,11 @@ impl ClickConfig {
     /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
         let af = AtomicFile::new(path, AllowOverwrite);
-        try!(af.write(|mut f| {
+        af.write(|mut f| {
             serde_yaml::to_writer(&mut f, &self)
         }).map_err(|e| KubeError::ConfigFileError(
             format!("Failed to write config file: {}", e.description())
-        )));
+        ))?;
         Ok(())
     }
 }

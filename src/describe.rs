@@ -43,7 +43,7 @@ pub enum DescItem<'a> {
     ObjectCreated,
     CustomFunc {
         path: Option<&'a str>,
-        func: &'a (Fn(&Value) -> Cow<str>),
+        func: &'a (dyn Fn(&Value) -> Cow<str>),
         default: &'a str,
     },
     StaticStr(Cow<'a, str>),

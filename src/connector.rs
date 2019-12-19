@@ -51,16 +51,16 @@ impl<S: SslClient> ClickSslConnector<S> {
             }
             None => (host, port),
         };
-        Ok(try!(match scheme {
+        Ok(match scheme {
             "http" => {
-                let res = Ok(HttpStream(try!(TcpStream::connect(&addr))));
+                let res = Ok(HttpStream(TcpStream::connect(&addr)?));
                 res
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "Invalid scheme for Http"
             )),
-        }))
+        }?)
     }
 }
 
@@ -68,7 +68,7 @@ impl<S: SslClient> NetworkConnector for ClickSslConnector<S> {
     type Stream = HttpsStream<S::Stream>;
 
     fn connect(&self, host: &str, port: u16, scheme: &str) -> Result<Self::Stream> {
-        let stream = try!(self.click_connect(host, port, "http"));
+        let stream = self.click_connect(host, port, "http")?;
         if scheme == "https" {
             self.ssl.wrap_client(stream, host).map(HttpsStream::Https)
         } else {

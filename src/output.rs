@@ -59,7 +59,7 @@ struct PipeProc {
 impl PipeProc {
     fn finish(self) -> io::Result<String> {
         drop(self.pipe);
-        let output = try!(self.expr.into_output());
+        let output = self.expr.into_output()?;
         String::from_utf8(output.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 

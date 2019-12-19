@@ -944,12 +944,16 @@ fn main() {
                 }
             }
             Err(ReadlineError::Interrupted) => {} // don't exit on Ctrl-C
-            Err(_) => {
+            Err(ReadlineError::Eof) => {
+                // Ctrl-D
+                break;
+            }
+            Err(e) => {
+                println!("Error reading input: {}", e);
                 break;
             }
         }
     }
-
     env.save_click_config();
     if let Err(e) = rl.save_history(hist_path.as_path()) {
         println!("Couldn't save command history: {}", e);

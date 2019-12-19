@@ -18,13 +18,13 @@
 use output::ClickWriter;
 
 use clap::ArgMatches;
-use prettytable::cell::Cell;
-use prettytable::row::Row;
+use prettytable::Cell;
+use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
-use term::terminfo::TerminfoTerminal;
 
 use std::cmp::Ordering;
+use std::io::Write;
 
 lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
@@ -173,10 +173,10 @@ pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
     }
 }
 
-fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
-    match TerminfoTerminal::new(writer) {
+fn term_print_table<T: Write>(table: &Table, writer:&mut T) -> bool {
+    match term::TerminfoTerminal::new(writer) {
         Some(ref mut term) => {
-            table.print_term(term).unwrap_or(());
+            table.print_term(term).unwrap_or(0);
             true
         }
         None => false,
@@ -194,6 +194,6 @@ pub fn print_table<'a, T>(
     }
     table.set_format(TBLFMT.clone());
     if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
+        table.print(writer).unwrap_or(0);
     }
 }

@@ -35,12 +35,9 @@ pub struct DNSNameRef<'a>(Input<'a>);
 impl<'a> DNSNameRef<'a> {
     pub fn get_webpki_ref(input: Input<'a>) -> webpki::DNSNameRef<'a> {
         let internal = DNSNameRef(input);
-        unsafe {
-            mem::transmute(internal)
-        }
+        unsafe { mem::transmute(internal) }
     }
 }
-
 
 // This enum and the general_name function are taken and modified from the webpki crate:
 // https://github.com/briansmith/webpki (see names.rs)
@@ -55,10 +52,9 @@ fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
     const DNS_NAME_TAG: u8 = CONTEXT_SPECIFIC | 2;
     const IP_ADDRESS_TAG: u8 = CONTEXT_SPECIFIC | 7;
 
-
     let tv = der::read_tag_and_get_value(input);
     if tv.is_err() {
-         return Err(());
+        return Err(());
     }
     let (tag, value) = tv.unwrap();
     let name = match tag {
@@ -131,9 +127,9 @@ fn recurse_reader<'a>(reader: &mut Reader<'a>, vec: &mut Vec<SubjAltName<'a>>) {
                                     match gn {
                                         Ok(n) => match n {
                                             GeneralName::DNSName(input) => {
-                                                let name =
-                                                    String::from_utf8_lossy(
-                                                        input.as_slice_less_safe());
+                                                let name = String::from_utf8_lossy(
+                                                    input.as_slice_less_safe(),
+                                                );
                                                 vec.push(SubjAltName::DNSName(name));
                                             }
                                             GeneralName::IPAddress(input) => {

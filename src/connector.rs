@@ -58,7 +58,7 @@ impl<S: SslClient> ClickSslConnector<S> {
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Invalid scheme for Http"
+                "Invalid scheme for Http",
             )),
         }?)
     }

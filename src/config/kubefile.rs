@@ -174,7 +174,7 @@ impl AuthProvider {
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
-                    .unwrap_or(vec![]);
+                    .unwrap_or_else(|| vec![]);
                 match cmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         let v: Value = serde_json::from_str(output.as_str()).unwrap();

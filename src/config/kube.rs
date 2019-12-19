@@ -38,16 +38,16 @@ pub struct ClusterConf {
 impl ClusterConf {
     fn new(cert: Option<String>, server: String) -> ClusterConf {
         ClusterConf {
-            cert: cert,
-            server: server,
+            cert,
+            server,
             insecure_skip_tls_verify: false,
         }
     }
 
     fn new_insecure(cert: Option<String>, server: String) -> ClusterConf {
         ClusterConf {
-            cert: cert,
-            server: server,
+            cert,
+            server,
             insecure_skip_tls_verify: true,
         }
     }
@@ -63,7 +63,7 @@ pub enum UserAuth {
     KeyCertPath(String, String),
     KeyCertData(String, String),
     UserPass(String, String),
-    AuthProvider(AuthProvider),
+    AuthProvider(Box<AuthProvider>),
 }
 
 #[derive(Debug)]
@@ -90,7 +90,7 @@ impl From<super::kubefile::UserConf> for UserConf {
             auth_vec.push(UserAuth::KeyCertData(client_cert_data, key_data))
         }
         if let Some(auth_provider) = conf.auth_provider {
-            auth_vec.push(UserAuth::AuthProvider(auth_provider))
+            auth_vec.push(UserAuth::AuthProvider(Box::new(auth_provider)))
         }
         UserConf { auths: auth_vec }
     }
@@ -114,17 +114,17 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
         ));
     }
     // unwrap okay, validated above
-    if path.chars().next().unwrap() == '/' {
+    if path.starts_with('/') {
         Ok(path)
     } else if let Some(home_dir) = dirs::home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
-        return Err(KubeError::ConfigFileError(
+        Err(KubeError::ConfigFileError(
             "Could not get path kubernetes \
              certificates/keys (not fully specified, and \
              your home directory is not known."
                 .to_owned(),
-        ));
+        ))
     }
 }
 
@@ -133,13 +133,13 @@ fn cert_key_from_paths(
     key_path: String,
     context: &str,
 ) -> Result<ClientCertKey, KubeError> {
-    if client_cert_path.len() == 0 {
+    if client_cert_path.is_empty() {
         return Err(KubeError::ConfigFileError(format!(
             "Empty client certificate path for {}, can't continue",
             context
         )));
     }
-    if key_path.len() == 0 {
+    if key_path.is_empty() {
         return Err(KubeError::ConfigFileError(format!(
             "Empty client key path for {}, can't continue",
             context
@@ -162,22 +162,22 @@ fn cert_key_from_paths(
 }
 
 fn cert_key_from_data(
-    client_cert_data: &String,
-    key_data: &String,
+    client_cert_data: &str,
+    key_data: &str,
     context: &str,
 ) -> Result<ClientCertKey, KubeError> {
-    if client_cert_data.len() == 0 {
+    if client_cert_data.is_empty() {
         Err(KubeError::ConfigFileError(format!(
             "Empty client certificate data for {}, can't continue",
             context
         )))
-    } else if key_data.len() == 0 {
+    } else if key_data.is_empty() {
         Err(KubeError::ConfigFileError(format!(
             "Empty client key data for {}, can't continue",
             context
         )))
     } else {
-        let mut cert_enc = ::base64::decode(client_cert_data.as_str())?;
+        let mut cert_enc = ::base64::decode(client_cert_data)?;
         cert_enc.retain(|&i| i != 0);
         let cert_pem = String::from_utf8(cert_enc).map_err(|e| {
             KubeError::ConfigFileError(format!(
@@ -186,7 +186,7 @@ fn cert_key_from_data(
             ))
         })?;
         let cert = get_cert_from_pem(cert_pem.as_str());
-        let mut key_enc = ::base64::decode(key_data.as_str())?;
+        let mut key_enc = ::base64::decode(key_data)?;
         key_enc.retain(|&i| i != 0);
         let key_str = String::from_utf8(key_enc).map_err(|e| {
             KubeError::ConfigFileError(format!("Invalid utf8 data in key: {}", e.description()))
@@ -205,7 +205,7 @@ fn cert_key_from_data(
 impl Config {
     pub fn from_files(paths: &[String]) -> Result<Config, KubeError> {
         let iconfs = paths
-            .into_iter()
+            .iter()
             .map(|config_path| super::kubefile::Config::from_file(config_path))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -297,7 +297,7 @@ impl Config {
             }
         }
 
-        let sources = match env::join_paths(paths.into_iter())?.into_string() {
+        let sources = match env::join_paths(paths.iter())?.into_string() {
             Ok(srcs) => srcs,
             Err(_) => "[config paths contain non-utf8 characters, cannot be displayed]".to_string(),
         };
@@ -328,18 +328,18 @@ impl Config {
         let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
-                &UserAuth::Token(ref token) => auth = Some(KlusterAuth::with_token(token.as_str())),
-                &UserAuth::UserPass(ref username, ref password) => {
+                UserAuth::Token(ref token) => auth = Some(KlusterAuth::with_token(token.as_str())),
+                UserAuth::UserPass(ref username, ref password) => {
                     auth = Some(KlusterAuth::with_userpass(username, password))
                 }
-                &UserAuth::AuthProvider(ref provider) => {
+                UserAuth::AuthProvider(ref provider) => {
                     provider.copy_up();
-                    auth = Some(KlusterAuth::with_auth_provider(provider.clone()))
+                    auth = Some(KlusterAuth::with_auth_provider(*provider.clone()))
                 }
-                &UserAuth::KeyCertData(ref cert_data, ref key_data) => {
+                UserAuth::KeyCertData(ref cert_data, ref key_data) => {
                     client_cert_key = Some(cert_key_from_data(cert_data, key_data, context_name))
                 }
-                &UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
+                UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
                     client_cert_key = Some(cert_key_from_paths(
                         cert_path.clone(),
                         key_path.clone(),

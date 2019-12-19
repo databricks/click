@@ -146,18 +146,14 @@ where
     I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
 {
     things
-        .filter_map(|thing| {
+        .filter(|thing| {
             let mut has_match = false;
             for cell_spec in thing.1.iter() {
                 if !has_match {
                     has_match = cell_spec.matches(&regex);
                 }
             }
-            if has_match {
-                Some(thing)
-            } else {
-                None
-            }
+            has_match
         })
         .collect()
 }
@@ -184,6 +180,7 @@ fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 pub fn print_table<'a, T>(
     table: &mut Table,
     specs: &Vec<(T, Vec<CellSpec<'a>>)>,

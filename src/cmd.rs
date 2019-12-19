@@ -296,7 +296,7 @@ fn has_waiting(pod: &Pod) -> bool {
 
 // Figure out the right thing to print for the phase of the given pod
 fn phase_str(pod: &Pod) -> String {
-    if let Some(_) = pod.metadata.deletion_timestamp {
+    if pod.metadata.deletion_timestamp.is_some() {
         // Was deleted
         "Terminating".to_owned()
     } else if has_waiting(pod) {
@@ -312,7 +312,7 @@ fn ready_counts(pod: &Pod) -> Option<(u32, u32)> {
     pod.status.container_statuses.as_ref().map(|statuses| {
         let mut count = 0;
         let mut ready = 0;
-        for ref stat in statuses.iter() {
+        for stat in statuses.iter() {
             count += 1;
             if stat.ready {
                 ready += 1;
@@ -322,8 +322,8 @@ fn ready_counts(pod: &Pod) -> Option<(u32, u32)> {
     })
 }
 
-fn phase_style(phase: &String) -> &'static str {
-    phase_style_str(phase.as_str())
+fn phase_style(phase: &str) -> &'static str {
+    phase_style_str(phase)
 }
 
 fn phase_style_str(phase: &str) -> &'static str {
@@ -437,6 +437,7 @@ fn create_podlist_specs<'a>(
 }
 
 /// Print out the specified list of pods in a pretty format
+#[allow(clippy::too_many_arguments)]
 fn print_podlist(
     mut podlist: PodList,
     show_labels: bool,
@@ -479,8 +480,8 @@ fn print_podlist(
     }
     table.set_titles(title_row);
 
-    match sort {
-        Some(sortcol) => match sortcol {
+    if let Some(sortcol) = sort {
+        match sortcol {
             "Name" | "name" => podlist
                 .items
                 .sort_by(|p1, p2| p1.metadata.name.partial_cmp(&p2.metadata.name).unwrap()),
@@ -552,8 +553,7 @@ fn print_podlist(
                     sortcol
                 );
             }
-        },
-        None => {}
+        }
     }
 
     let to_map: Box<dyn Iterator<Item = Pod>> = if reverse {
@@ -579,7 +579,7 @@ fn print_podlist(
 /// Build a multi-line string of the specified keyvals
 fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
     let mut buf = String::new();
-    if let &Some(ref lbs) = keyvals {
+    if let Some(ref lbs) = keyvals {
         for (key, val) in lbs.iter() {
             buf.push_str(key);
             buf.push('=');
@@ -614,24 +614,14 @@ fn print_nodelist(
     }
     table.set_titles(title_row);
 
-    match sort {
-        Some(sortcol) => match sortcol {
+    if let Some(sortcol) = sort {
+        match sortcol {
             "Name" | "name" => nodelist
                 .items
                 .sort_by(|n1, n2| n1.metadata.name.partial_cmp(&n2.metadata.name).unwrap()),
             "State" | "state" => nodelist.items.sort_by(|n1, n2| {
-                let orn1 = n1
-                    .status
-                    .conditions
-                    .iter()
-                    .filter(|c| c.typ == "Ready")
-                    .next();
-                let orn2 = n2
-                    .status
-                    .conditions
-                    .iter()
-                    .filter(|c| c.typ == "Ready")
-                    .next();
+                let orn1 = n1.status.conditions.iter().find(|c| c.typ == "Ready");
+                let orn2 = n2.status.conditions.iter().find(|c| c.typ == "Ready");
                 opt_sort(orn1, orn2, |rn1, rn2| {
                     let sort_key1 = if rn1.status == "True" {
                         "Ready"
@@ -665,8 +655,7 @@ fn print_nodelist(
                     sortcol
                 );
             }
-        },
-        None => {}
+        }
     }
     let to_map: Box<dyn Iterator<Item = Node>> = if reverse {
         Box::new(nodelist.items.into_iter().rev())
@@ -678,12 +667,8 @@ fn print_nodelist(
         let mut specs = Vec::new();
         {
             // scope borrows
-            let readycond: Option<&NodeCondition> = node
-                .status
-                .conditions
-                .iter()
-                .filter(|c| c.typ == "Ready")
-                .next();
+            let readycond: Option<&NodeCondition> =
+                node.status.conditions.iter().find(|c| c.typ == "Ready");
             let (state, state_style) = if let Some(cond) = readycond {
                 if cond.status == "True" {
                     ("Ready", "Fg")
@@ -707,9 +692,8 @@ fn print_nodelist(
             specs.push(CellSpec::new_index());
             specs.push(CellSpec::new_owned(node.metadata.name.clone()));
             specs.push(CellSpec::with_style_owned(state, state_style));
-            specs.push(CellSpec::new_owned(format!(
-                "{}",
-                time_since(node.metadata.creation_timestamp.unwrap())
+            specs.push(CellSpec::new_owned(time_since(
+                node.metadata.creation_timestamp.unwrap(),
             )));
             if show_labels {
                 specs.push(CellSpec::new_owned(keyval_string(&node.metadata.labels)));
@@ -757,8 +741,8 @@ fn print_deployments(
     }
     table.set_titles(title_row);
 
-    match sort {
-        Some(sortcol) => match sortcol {
+    if let Some(sortcol) = sort {
+        match sortcol {
             "Name" | "name" => deplist
                 .items
                 .sort_by(|d1, d2| d1.metadata.name.partial_cmp(&d2.metadata.name).unwrap()),
@@ -796,8 +780,7 @@ fn print_deployments(
                     sortcol
                 );
             }
-        },
-        None => {}
+        }
     }
 
     let to_map: Box<dyn Iterator<Item = Deployment>> = if reverse {
@@ -826,9 +809,8 @@ fn print_deployments(
             format!("{}", dep.status.available),
             format::Alignment::CENTER,
         ));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(dep.metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(time_since(
+            dep.metadata.creation_timestamp.unwrap(),
         )));
         if show_labels {
             specs.push(CellSpec::new_owned(keyval_string(&dep.metadata.labels)));
@@ -941,8 +923,8 @@ fn print_servicelist(
     let mut servswithipportss: Vec<(Service, (String, String))> =
         servlist.items.into_iter().zip(extipsandports).collect();
 
-    match sort {
-        Some(sortcol) => match sortcol {
+    if let Some(sortcol) = sort {
+        match sortcol {
             "Name" | "name" => servswithipportss
                 .sort_by(|s1, s2| s1.0.metadata.name.partial_cmp(&s2.0.metadata.name).unwrap()),
             "Age" | "age" => servswithipportss.sort_by(|s1, s2| {
@@ -984,8 +966,7 @@ fn print_servicelist(
                     sortcol
                 );
             }
-        },
-        None => {}
+        }
     }
 
     let to_map: Box<dyn Iterator<Item = (Service, (String, String))>> = if reverse {
@@ -1000,21 +981,20 @@ fn print_servicelist(
         specs.push(CellSpec::new_index());
 
         specs.push(CellSpec::new_owned(service.metadata.name.clone()));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
+        specs.push(CellSpec::new_owned(
             service
                 .spec
                 .cluster_ip
                 .as_ref()
                 .unwrap_or(&"<none>".to_owned())
-        )));
+                .to_string(),
+        ));
 
         specs.push(CellSpec::new_owned(eipp.0));
         specs.push(CellSpec::new_owned(eipp.1));
 
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(service.metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(time_since(
+            service.metadata.creation_timestamp.unwrap(),
         )));
 
         if show_labels {
@@ -1057,9 +1037,8 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
         specs.push(CellSpec::new(ns.metadata.name.as_str()));
         let ps = ns.status.phase.as_str();
         specs.push(CellSpec::with_style(ps, phase_style_str(ps)));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(ns.metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(time_since(
+            ns.metadata.creation_timestamp.unwrap(),
         )));
         (ns, specs)
     });
@@ -1385,14 +1364,12 @@ command!(
     },
     vec!["logs"],
     vec![&completer::container_completer],
+    #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
         let cont = match matches.value_of("container") {
             Some(c) => c,
             None => match env.current_object {
-                ::KObj::Pod {
-                    name: _,
-                    ref containers,
-                } => {
+                ::KObj::Pod { ref containers, .. } => {
                     if containers.len() == 1 {
                         containers[0].as_str()
                     } else {
@@ -1470,9 +1447,9 @@ command!(
                                 }
                             }
                         };
-                        let tmpdir = match &env.tempdir {
-                            &Ok(ref td) => td,
-                            &Err(ref e) => {
+                        let tmpdir = match env.tempdir {
+                            Ok(ref td) => td,
+                            Err(ref e) => {
                                 clickwrite!(
                                     writer,
                                     "Failed to create tempdir: {}\n",
@@ -1523,7 +1500,7 @@ command!(
                                     );
                                 }
                                 clickwrite!(writer, "Starting editor\n");
-                                let expr = if editor.contains(" ") {
+                                let expr = if editor.contains(' ') {
                                     // split the whitespace
                                     let mut eargs: Vec<&str> = editor.split_whitespace().collect();
                                     eargs.push(file_path.to_str().unwrap());
@@ -1585,7 +1562,7 @@ where
     }
 }
 
-static NOTSUPPORTED: &'static str = "not supported without -j or -y yet\n";
+static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 command!(
     Describe,
@@ -1608,6 +1585,7 @@ command!(
         ),
     vec!["describe"],
     noop_complete!(),
+    #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
         match env.current_object {
             ::KObj::None => {
@@ -1865,6 +1843,7 @@ command!(
     },
     vec!["delete"],
     noop_complete!(),
+    #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
@@ -1920,9 +1899,9 @@ command!(
                     None
                 }
             } {
-                io::stdout().flush().ok().expect("Could not flush stdout");
+                io::stdout().flush().expect("Could not flush stdout");
                 let mut conf = String::new();
-                if let Ok(_) = io::stdin().read_line(&mut conf) {
+                if io::stdin().read_line(&mut conf).is_ok() {
                     if conf.trim() == "y" || conf.trim() == "yes" {
                         let mut policy = "Foreground";
                         if let Some(cascade) = matches.value_of("cascade") {
@@ -2079,7 +2058,7 @@ command!(
                                    ns,pod,ns);
             let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
             if let Some(el) = oel {
-                if el.items.len() > 0 {
+                if !el.items.is_empty() {
                     for e in el.items.iter() {
                         clickwrite!(writer, "{}\n", format_event(e));
                     }
@@ -2630,9 +2609,8 @@ fn print_configmaps(
         specs.push(CellSpec::new_owned(metadata.name));
         let data_count = val_item_count("/data", &cm);
         specs.push(CellSpec::new_owned(format!("{}", data_count)));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(time_since(
+            metadata.creation_timestamp.unwrap(),
         )));
         (cm, specs)
     });
@@ -2711,13 +2689,11 @@ fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWrite
         specs.push(CellSpec::new_owned(
             val_str("/type", &rs, "<none>").into_owned(),
         ));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            val_item_count("/data", &rs)
-        )));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(
+            val_item_count("/data", &rs).to_string(),
+        ));
+        specs.push(CellSpec::new_owned(time_since(
+            metadata.creation_timestamp.unwrap(),
         )));
         (rs, specs)
     });
@@ -2843,7 +2819,7 @@ command!(
                         ))
                     } else {
                         for part in parts {
-                            if !(part == "") {
+                            if part != "" {
                                 if let Err(e) = part.parse::<u32>() {
                                     return Err(e.description().to_owned());
                                 }
@@ -3046,9 +3022,9 @@ command!(
 
             if stop {
                 clickwrite!(writer, "  [y/N]? ");
-                io::stdout().flush().ok().expect("Could not flush stdout");
+                io::stdout().flush().expect("Could not flush stdout");
                 let mut conf = String::new();
-                if let Ok(_) = io::stdin().read_line(&mut conf) {
+                if io::stdin().read_line(&mut conf).is_ok() {
                     if conf.trim() == "y" || conf.trim() == "yes" {
                         match env.stop_port_forward(i) {
                             Ok(()) => {
@@ -3140,17 +3116,18 @@ fn print_jobs(
 
         specs.push(CellSpec::new_index());
         specs.push(CellSpec::new_owned(metadata.name.clone()));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            get_val_as::<u32>("/spec/parallelism", &job).unwrap(),
-        )));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            get_val_as::<u32>("/spec/completions", &job).unwrap(),
-        )));
-        specs.push(CellSpec::new_owned(format!(
-            "{}",
-            time_since(metadata.creation_timestamp.unwrap())
+        specs.push(CellSpec::new_owned(
+            get_val_as::<u32>("/spec/parallelism", &job)
+                .unwrap()
+                .to_string(),
+        ));
+        specs.push(CellSpec::new_owned(
+            get_val_as::<u32>("/spec/completions", &job)
+                .unwrap()
+                .to_string(),
+        ));
+        specs.push(CellSpec::new_owned(time_since(
+            metadata.creation_timestamp.unwrap(),
         )));
 
         (job, specs)

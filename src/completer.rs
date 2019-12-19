@@ -22,7 +22,7 @@ use rustyline::{Context, Helper, Result};
 use cmd::Cmd;
 
 pub struct ClickHelper<'a> {
-    commands: &'a Vec<Box<dyn Cmd>>,
+    commands: &'a [Box<dyn Cmd>],
     env: &'a ::Env,
 }
 
@@ -43,15 +43,16 @@ impl<'a> ClickHelper<'a> {
     /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
     /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
     /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: &'a Vec<Box<dyn Cmd>>, env: *const ::Env) -> ClickHelper<'a> {
+    pub fn new(commands: &'a [Box<dyn Cmd>], env: *const ::Env) -> ClickHelper<'a> {
         ClickHelper {
-            commands: commands,
+            commands,
             env: unsafe { &*env },
         }
     }
 }
 
 impl<'a> ClickHelper<'a> {
+    #[allow(clippy::borrowed_box)]
     fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
         for cmd in self.commands.iter() {
             if cmd.is(line) {
@@ -94,10 +95,10 @@ impl<'a> Completer for ClickHelper<'a> {
                     let (pos, prefix) = match split.next_back() {
                         Some(back) => {
                             // there was a command typed and also something after it
-                            if line.ends_with(" ") {
+                            if line.ends_with(' ') {
                                 // ending with a space means complete a positional
-                                let mut count = split.filter(|s| !s.starts_with("-")).count();
-                                if !back.starts_with("-") {
+                                let mut count = split.filter(|s| !s.starts_with('-')).count();
+                                if !back.starts_with('-') {
                                     // if the last thing didn't have a -, it's a positional arg
                                     // that we need to count
                                     count += 1;
@@ -125,7 +126,7 @@ impl<'a> Completer for ClickHelper<'a> {
                                 return Ok((line.len(), opts));
                             } else {
                                 // last thing isn't an option, figure out which positional we're at
-                                (split.filter(|s| !s.starts_with("-")).count(), back)
+                                (split.filter(|s| !s.starts_with('-')).count(), back)
                             }
                         }
                         None => (0, ""),
@@ -180,21 +181,15 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    match env.current_object {
-        ::KObj::Pod {
-            name: _,
-            ref containers,
-        } => {
-            for cont in containers.iter() {
-                if cont.starts_with(prefix) {
-                    v.push(Pair {
-                        display: cont.clone(),
-                        replacement: cont[prefix.len()..].to_string(),
-                    });
-                }
+    if let ::KObj::Pod { ref containers, .. } = env.current_object {
+        for cont in containers.iter() {
+            if cont.starts_with(prefix) {
+                v.push(Pair {
+                    display: cont.clone(),
+                    replacement: cont[prefix.len()..].to_string(),
+                });
             }
         }
-        _ => {}
     }
     v
 }

@@ -36,17 +36,11 @@ macro_rules! clickwrite {
         write!($writer);
     };
     ($writer:expr, $fmt:expr) => {
-        match write!($writer, $fmt) {
-            Ok(_) => {},
-            Err(_) => {},
-        }
+        if write!($writer, $fmt).is_ok() {}
     };
 
     ($writer:expr, $fmt:expr, $($arg:tt)*) => {
-        match write!($writer, $fmt, $($arg)*) {
-            Ok(_) => {},
-            Err(_) => {},
-        }
+        if write!($writer, $fmt, $($arg)*).is_ok() {}
     };
 }
 

@@ -100,37 +100,30 @@ pub enum ContainerState {
 impl fmt::Display for ContainerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ContainerState::Running { started_at } => match started_at {
+            ContainerState::Running { started_at } => match started_at {
                 Some(sa) => write!(f, "{} (started: {})", Green.paint("running"), sa),
                 None => write!(f, "{} (unknown start time)", Green.paint("running")),
             },
-            &ContainerState::Terminated {
-                container_id: _,
+            ContainerState::Terminated {
                 ref exit_code,
                 ref finished_at,
-                message: _,
-                reason: _,
-                signal: _,
-                started_at: _,
+                ..
             } => match finished_at {
-                &Some(fa) => write!(
+                Some(fa) => write!(
                     f,
                     "{} at {} (exit code: {})",
                     Red.paint("terminated"),
                     fa,
                     exit_code
                 ),
-                &None => write!(
+                None => write!(
                     f,
                     "{} (time unknown) (exit code: {})",
                     Red.paint("terminated"),
                     exit_code
                 ),
             },
-            &ContainerState::Waiting {
-                message: _,
-                ref reason,
-            } => write!(
+            ContainerState::Waiting { ref reason, .. } => write!(
                 f,
                 "{} ({})",
                 Yellow.paint("waiting"),
@@ -372,7 +365,7 @@ pub struct JobList {
 pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
-    AuthProvider(AuthProvider),
+    AuthProvider(Box<AuthProvider>),
 }
 
 impl KlusterAuth {
@@ -385,7 +378,7 @@ impl KlusterAuth {
     }
 
     pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
-        KlusterAuth::AuthProvider(auth_provider)
+        KlusterAuth::AuthProvider(Box::new(auth_provider))
     }
 }
 
@@ -434,7 +427,7 @@ impl Kluster {
     ) -> TlsClient {
         let mut tlsclient = TlsClient::new();
         if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
-            if let &Some(ref cert_data) = cert_opt {
+            if let Some(ref cert_data) = *cert_opt {
                 // add the cert to the root store
                 let mut br = BufReader::new(cert_data.as_bytes());
                 match cfg.root_store.add_pem_file(&mut br) {
@@ -511,7 +504,7 @@ impl Kluster {
             })),
             Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
                 match auth_provider.ensure_token() {
-                    Some(token) => req.header(Authorization(Bearer { token: token })),
+                    Some(token) => req.header(Authorization(Bearer { token })),
                     None => {
                         print_token_err();
                         req
@@ -547,9 +540,9 @@ impl Kluster {
         client.set_write_timeout(Some(Duration::new(20, 0)));
         Ok(Kluster {
             name: name.to_owned(),
-            endpoint: endpoint,
-            auth: auth,
-            client: client,
+            endpoint,
+            auth,
+            client,
             connector: Kluster::make_connector(tlsclient2, dns_host, ip),
         })
     }
@@ -558,7 +551,7 @@ impl Kluster {
         let url = self.endpoint.join(path)?;
         let req = self.client.get(url);
         let req = self.add_auth_header(req);
-        req.send().map_err(|he| KubeError::from(he))
+        req.send().map_err(KubeError::from)
     }
 
     fn check_resp(&self, resp: Response) -> Result<Response, KubeError> {
@@ -583,7 +576,7 @@ impl Kluster {
     {
         let resp = self.send_req(path)?;
         let resp = self.check_resp(resp)?;
-        serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
+        serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
@@ -604,7 +597,7 @@ impl Kluster {
                     }
                     Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
                         match auth_provider.ensure_token() {
-                            Some(token) => headers.set(Authorization(Bearer { token: token })),
+                            Some(token) => headers.set(Authorization(Bearer { token })),
                             None => print_token_err(),
                         }
                     }
@@ -619,7 +612,7 @@ impl Kluster {
             }
             req.set_read_timeout(timeout)?;
             let next = req.start()?;
-            let resp = next.send().map_err(|he| KubeError::from(he))?;
+            let resp = next.send().map_err(KubeError::from)?;
             self.check_resp(resp)
         } else {
             let resp = self.send_req(path)?;
@@ -631,7 +624,7 @@ impl Kluster {
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
         let resp = self.send_req(path)?;
         let resp = self.check_resp(resp)?;
-        serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
+        serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Issue an HTTP DELETE request to the specified path
@@ -646,7 +639,7 @@ impl Kluster {
             None => req,
         };
         let req = self.add_auth_header(req);
-        req.send().map_err(|he| KubeError::from(he))
+        req.send().map_err(KubeError::from)
     }
 
     /// Get all namespaces in this cluster

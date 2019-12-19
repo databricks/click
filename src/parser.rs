@@ -57,7 +57,7 @@ impl<'a> Iterator for Parser<'a> {
                     (Normal, '\'') => SingleQuoted,
                     (Normal, '"') => DoubleQuoted,
                     (Normal, c) if c == ' ' || c == '|' || c == '>' => {
-                        if arg.len() > 0 || was_quoted || c != ' ' {
+                        if !arg.is_empty() || was_quoted || c != ' ' {
                             yield_value = true;
                         } else {
                             start = i + 1;
@@ -99,7 +99,7 @@ impl<'a> Iterator for Parser<'a> {
                 }
             }
 
-            if arg.len() > 0 || was_quoted {
+            if !arg.is_empty() || was_quoted {
                 return Some((start..self.cmdline_len, ' ', arg));
             }
         }

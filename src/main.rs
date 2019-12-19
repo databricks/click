@@ -162,13 +162,13 @@ impl Env {
         let namespace = click_config.namespace.clone();
         let context = click_config.context.clone();
         let mut env = Env {
-            config: config,
-            click_config: click_config,
-            click_config_path: click_config_path,
+            config,
+            click_config,
+            click_config_path,
             quit: false,
             need_new_editor: false,
             kluster: None,
-            namespace: namespace,
+            namespace,
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
@@ -232,23 +232,20 @@ impl Env {
     }
 
     fn set_context(&mut self, ctx: Option<&str>) {
-        match ctx {
-            Some(cname) => {
-                self.kluster = match self.config.cluster_for_context(cname) {
-                    Ok(k) => Some(k),
-                    Err(e) => {
-                        println!(
-                            "[WARN] Couldn't find/load context {}, now no current context. \
-                             Error: {}",
-                            cname, e
-                        );
-                        None
-                    }
-                };
-                self.save_click_config();
-                self.set_prompt();
-            }
-            None => {} // no-op
+        if let Some(cname) = ctx {
+            self.kluster = match self.config.cluster_for_context(cname) {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    println!(
+                        "[WARN] Couldn't find/load context {}, now no current context. \
+                         Error: {}",
+                        cname, e
+                    );
+                    None
+                }
+            };
+            self.save_click_config();
+            self.set_prompt();
         }
     }
 
@@ -333,7 +330,7 @@ impl Env {
                         .collect();
                     self.current_object = KObj::Pod {
                         name: pod.metadata.name.clone(),
-                        containers: containers,
+                        containers,
                     };
                     self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
@@ -517,7 +514,7 @@ impl Env {
         line: &'a str,
         prev_word: Option<&'a str>,
     ) -> ExpandedAlias<'a> {
-        let pos = line.find(char::is_whitespace).unwrap_or(line.len());
+        let pos = line.find(char::is_whitespace).unwrap_or_else(|| line.len());
         let word = &line[0..pos];
         // don't expand if prev_word is Some, and is equal to my word
         // this means an alias maps to itself, and we want to stop expanding
@@ -648,6 +645,7 @@ struct ExpandedAlias<'a> {
 fn alias_expand_line(env: &Env, line: &str) -> String {
     let expa = env.try_expand_alias(line, None);
     let mut alias_stack = vec![expa];
+    #[allow(clippy::while_let_loop)] // needed due to borrow restrictions
     loop {
         let expa = match alias_stack.last().unwrap().expansion {
             Some(ref prev) => {
@@ -664,7 +662,7 @@ fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line<'a>(line: &'a str) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
@@ -680,7 +678,7 @@ fn get_editor<'a>(
     config: rustyconfig::Config,
     raw_env: *const Env,
     hist_path: &PathBuf,
-    commands: &'a Vec<Box<dyn Cmd>>,
+    commands: &'a [Box<dyn Cmd>],
 ) -> Editor<ClickHelper<'a>> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.load_history(hist_path.as_path()).unwrap_or_default();
@@ -688,7 +686,7 @@ fn get_editor<'a>(
     rl
 }
 
-static SHELLP: &'static str = "Shell syntax can be used to redirect or pipe the output of click \
+static SHELLP: &str = "Shell syntax can be used to redirect or pipe the output of click \
 commands to files or other commands (like grep).\n
 Examples:\n\
  # grep logs for ERROR:\n\
@@ -700,12 +698,12 @@ Examples:\n\
  # Append log lines that contain \"foo bar\" to logs.txt\n\
  logs the-cont | grep \"foo bar\" >> /tmp/logs.txt";
 
-static COMPLETIONHELP: &'static str = "There are two completion types: list or circular.
+static COMPLETIONHELP: &str = "There are two completion types: list or circular.
 - 'list' will complete the next full match (like in Vim by default) (do: 'set completion list)
 - circular will complete until the longest match. If there is more than one match, \
 it will list all matches (like in Bash/Readline). (do: set completion circular)";
 
-static EDITMODEHELP: &'static str = "There are two edit modes: vi or emacs.
+static EDITMODEHELP: &str = "There are two edit modes: vi or emacs.
 This controls the style of editing and the standard keymaps to the mode used by the \
 associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
@@ -777,7 +775,7 @@ fn main() {
         }
     };
 
-    let mut hist_path = conf_dir.clone();
+    let mut hist_path = conf_dir;
     hist_path.push("click.history");
 
     let mut env = Env::new(config, click_conf, click_path);

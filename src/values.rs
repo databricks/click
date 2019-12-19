@@ -70,7 +70,7 @@ where
     for<'de> T: serde::Deserialize<'de>,
 {
     match value.pointer(pointer) {
-        Some(p) => serde::Deserialize::deserialize(p).map_err(|je| KubeError::from(je)),
+        Some(p) => serde::Deserialize::deserialize(p).map_err(KubeError::from),
         None => Err(KubeError::ParseErr("Can't deserialize".to_owned())),
     }
 }

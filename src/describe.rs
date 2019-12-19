@@ -139,8 +139,8 @@ where
                 default,
             } => {
                 let value = match path {
-                    &Some(p) => v.pointer(p),
-                    &None => Some(v),
+                    Some(p) => v.pointer(p),
+                    None => Some(v),
                 };
                 match value {
                     Some(v) => func(v),
@@ -149,7 +149,7 @@ where
             }
             DescItem::StaticStr(s) => s,
         };
-        write!(&mut res, "{}{}\n", title, val).unwrap();
+        writeln!(&mut res, "{}{}", title, val).unwrap();
     }
     res
 }
@@ -221,7 +221,7 @@ pub fn describe_format_pod(v: Value) -> String {
 }
 
 /// Get volume info out of volume array
-fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
+fn get_volume_str(v: &Value) -> Cow<str> {
     let mut buf = String::new();
     if let Some(vol_arry) = v.as_array() {
         for vol in vol_arry.iter() {
@@ -283,7 +283,7 @@ fn get_volume_str<'a>(v: &'a Value) -> Cow<'a, str> {
     buf.into()
 }
 
-fn pod_phase<'a>(v: &Value) -> Cow<str> {
+fn pod_phase(v: &Value) -> Cow<str> {
     let phase_str = val_str("/status/phase", v, "<No Phase>");
     let colour = match &*phase_str {
         "Pending" | "Unknown" => Colour::Yellow,
@@ -345,14 +345,14 @@ pub fn describe_format_node(v: Value) -> String {
     describe_object(&v, fields.into_iter())
 }
 
-fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
+fn node_access_url(v: &Value) -> Cow<str> {
     match val_str_opt("/spec/providerID", v) {
         Some(provider) => {
             if provider.starts_with("aws://") {
                 let ip_opt = v.pointer("/status/addresses").and_then(|addr| {
                     addr.as_array().and_then(|addr_vec| {
                         addr_vec
-                            .into_iter()
+                            .iter()
                             .find(|&aval| {
                                 aval.as_object().map_or(false, |addr| {
                                     addr["type"].as_str().map_or(false, |t| t == "ExternalIP")
@@ -362,7 +362,7 @@ fn node_access_url<'a>(v: &'a Value) -> Cow<'a, str> {
                     })
                 });
                 ip_opt.map_or("Not Found".into(), |ip| {
-                    let octs: Vec<&str> = ip.split(".").collect();
+                    let octs: Vec<&str> = ip.split('.').collect();
                     if octs.len() < 4 {
                         format!("Unexpected ip format: {}", ip).into()
                     } else {
@@ -448,7 +448,7 @@ pub fn describe_format_service(v: Value, endpoint_val: Option<Value>) -> String 
 }
 
 /// Get ports info out of ports array
-fn get_ports_str<'a>(v: Option<&'a Value>, endpoint_val: Option<Value>) -> Cow<'a, str> {
+fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
     if v.is_none() {
         return "<none>".into();
     }

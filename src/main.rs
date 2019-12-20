@@ -742,7 +742,13 @@ fn main() {
 
     let mut click_path = conf_dir.clone();
     click_path.push("click.config");
-    let click_conf = ClickConfig::from_file(click_path.as_path().to_str().unwrap());
+    let click_conf = match ClickConfig::from_file(click_path.as_path().to_str().unwrap()) {
+        Ok(conf) => conf,
+        Err(e) => {
+            println!("Could not load click config: {}\nUsing default values.", e);
+            ClickConfig::default()
+        }
+    };
 
     let config_paths = env::var_os("KUBECONFIG")
         .map(|paths| {

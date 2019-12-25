@@ -21,11 +21,10 @@ use serde_json::{self, Value};
 use serde_yaml;
 
 use std::cell::RefCell;
-use std::error::Error;
 use std::fs::File;
-use std::io;
+use std::io::Read;
 
-//use error::{KubeErrNo, KubeError};
+use error::KubeError;
 //use kube::{Kluster, KlusterAuth};
 //use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 
@@ -38,14 +37,14 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Result<Config, io::Error> {
+    pub fn from_reader<R>(r: R) -> Result<Config, KubeError>
+    where R: Read, {
+        serde_yaml::from_reader(r).map_err(KubeError::from)
+    }
+
+    pub fn from_file(path: &str) -> Result<Config, KubeError> {
         let f = File::open(path)?;
-        serde_yaml::from_reader(f).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Couldn't read yaml in '{}': {}", path, e.description()),
-            )
-        })
+        Config::from_reader(f)
     }
 }
 
@@ -56,14 +55,19 @@ pub struct Cluster {
     pub conf: ClusterConf,
 }
 
+// needed for serde default
+fn default_false() -> bool {
+    false
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ClusterConf {
     #[serde(rename = "certificate-authority")]
     pub cert: Option<String>,
     #[serde(rename = "certificate-authority-data")]
     pub cert_data: Option<String>,
-    #[serde(rename = "insecure-skip-tls-verify")]
-    pub skip_tls: Option<bool>,
+    #[serde(rename = "insecure-skip-tls-verify", default="default_false")]
+    pub skip_tls: bool,
     pub server: String,
 }
 
@@ -113,7 +117,7 @@ pub struct ContextConf {
 }
 
 // Classes to hold deserialized data for auth
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AuthProvider {
     name: String,
     pub token: RefCell<Option<String>>,
@@ -233,7 +237,7 @@ impl AuthProvider {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AuthProviderConfig {
     #[serde(rename = "access-token")]
     pub access_token: Option<String>,
@@ -247,4 +251,215 @@ pub struct AuthProviderConfig {
     expiry_key: Option<String>,
     #[serde(rename = "token-key")]
     token_key: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TEST_CONFIG: &str = r"apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: ../relative/ca.cert
+    server: https://cluster1.test:443
+  name: cluster1
+- cluster:
+    certificate-authority: /absolute-path/ca.pem
+    server: https://cluster2.foo:8443
+  name: cluster2
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://insecure.blah
+  name: insecure
+- cluster:
+    certificate-authority-data: aGVsbG8K
+    server: http://nos.foo:80
+  name: data
+contexts:
+- context:
+    cluster: cluster1
+    user: c1user
+    namespace: ns1
+  name: c1ctx
+- context:
+    cluster: cluster2
+    user: c2user
+  name: c2ctx
+current-context: c1ctx
+users:
+- name: c1user
+  user:
+    client-certificate: ../relative/c1.cert
+    client-key: ../relative/c1.key
+- name: token
+  user:
+    token: DEADBEEF
+- name: keydata
+  user:
+    client-certificate-data: CERTDATA
+    client-key-data: KEYDATA
+- name: userpass
+  user:
+    username: user
+    password: hunter2
+";
+
+    fn contains_cluster(config: &Config, cluster: Cluster) -> bool {
+        for c in config.clusters.iter() {
+            if c.name == cluster.name {
+                if  c.conf.cert == cluster.conf.cert &&
+                    c.conf.cert_data == cluster.conf.cert_data &&
+                    c.conf.skip_tls == cluster.conf.skip_tls &&
+                    c.conf.server == cluster.conf.server {
+                        return true;
+                    }
+            }
+        }
+        return false;
+    }
+
+    fn contains_context(config: &Config, context: Context) -> bool {
+        for c in config.contexts.iter() {
+            if c.name == context.name {
+                if  c.conf.cluster == context.conf.cluster &&
+                    c.conf.user == context.conf.user &&
+                    c.conf.namespace == context.conf.namespace {
+                        return true;
+                    }
+            }
+        }
+        return false;
+    }
+
+    fn contains_user(config: &Config, user: User) -> bool {
+        for u in config.users.iter() {
+            if u.name == user.name {
+                if  u.conf.token == user.conf.token &&
+                    u.conf.client_cert == user.conf.client_cert &&
+                    u.conf.client_key == user.conf.client_key &&
+                    u.conf.client_cert_data == user.conf.client_cert_data &&
+                    u.conf.client_key_data == user.conf.client_key_data &&
+                    u.conf.username == user.conf.username &&
+                    u.conf.password == user.conf.password &&
+                    u.conf.auth_provider == user.conf.auth_provider {
+                        return true;
+                    }
+            }
+        }
+        return false;
+    }
+
+    #[test]
+    fn test_parse_config() {
+        let config = Config::from_reader(TEST_CONFIG.as_bytes());
+        if config.is_err() {
+            println!("Failed to parse config: {:?}", config);
+            assert!(config.is_ok()); // will always fail
+        }
+        let config = config.unwrap();
+        assert!(contains_cluster(&config, Cluster {
+            name: "data".to_string(),
+            conf: ClusterConf {
+                cert: None,
+                cert_data: Some("aGVsbG8K".to_string()),
+                skip_tls: false,
+                server: "http://nos.foo:80".to_string(),
+            }
+        }));
+        assert!(contains_cluster(&config, Cluster {
+            name: "cluster1".to_string(),
+            conf: ClusterConf {
+                cert: Some("../relative/ca.cert".to_string()),
+                cert_data: None,
+                skip_tls: false,
+                server: "https://cluster1.test:443".to_string(),
+            }
+        }));
+        assert!(contains_cluster(&config, Cluster {
+            name: "cluster2".to_string(),
+            conf: ClusterConf {
+                cert: Some("/absolute-path/ca.pem".to_string()),
+                cert_data: None,
+                skip_tls: false,
+                server: "https://cluster2.foo:8443".to_string(),
+            }
+        }));
+        assert!(contains_cluster(&config, Cluster {
+            name: "insecure".to_string(),
+            conf: ClusterConf {
+                cert: None,
+                cert_data: None,
+                skip_tls: true,
+                server: "https://insecure.blah".to_string(),
+            }
+        }));
+        assert!(contains_context(&config, Context {
+            name: "c1ctx".to_string(),
+            conf: ContextConf {
+                cluster: "cluster1".to_string(),
+                user: "c1user".to_string(),
+                namespace: Some("ns1".to_string()),
+            }
+        }));
+        assert!(contains_context(&config, Context {
+            name: "c2ctx".to_string(),
+            conf: ContextConf {
+                cluster: "cluster2".to_string(),
+                user: "c2user".to_string(),
+                namespace: None,
+            }
+        }));
+        assert!(contains_user(&config, User {
+            name: "c1user".to_string(),
+            conf: UserConf {
+                token: None,
+                client_cert: Some("../relative/c1.cert".to_string()),
+                client_key: Some("../relative/c1.key".to_string()),
+                client_cert_data: None,
+                client_key_data: None,
+                username: None,
+                password: None,
+                auth_provider: None,
+            }
+        }));
+        assert!(contains_user(&config, User {
+            name: "token".to_string(),
+            conf: UserConf {
+                token: Some("DEADBEEF".to_string()),
+                client_cert: None,
+                client_key: None,
+                client_cert_data: None,
+                client_key_data: None,
+                username: None,
+                password: None,
+                auth_provider: None,
+            }
+        }));
+        assert!(contains_user(&config, User {
+            name: "keydata".to_string(),
+            conf: UserConf {
+                token: None,
+                client_cert: None,
+                client_key: None,
+                client_cert_data: Some("CERTDATA".to_string()),
+                client_key_data: Some("KEYDATA".to_string()),
+                username: None,
+                password: None,
+                auth_provider: None,
+            }
+        }));
+        assert!(contains_user(&config, User {
+            name: "userpass".to_string(),
+            conf: UserConf {
+                token: None,
+                client_cert: None,
+                client_key: None,
+                client_cert_data: None,
+                client_key_data: None,
+                username: Some("user".to_string()),
+                password: Some("hunter2".to_string()),
+                auth_provider: None,
+            }
+        }));
+    }
 }

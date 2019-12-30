@@ -6,6 +6,16 @@ rust:
 os:
   - linux
   - osx
+before_install:
+  - set -e
+  - rustup component add rustfmt
+  - rustup component add clippy
+  - cargo fmt -- --check
+  - rustup self update
+script:
+  - cargo fmt -- --check
+  - cargo clippy -- -D clippy:all
+  - cargo test --verbose
 matrix:
   allow_failures:
     - rust: nightly

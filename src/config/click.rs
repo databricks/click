@@ -107,7 +107,9 @@ pub struct ClickConfig {
 
 impl ClickConfig {
     pub fn from_reader<R>(r: R) -> Result<ClickConfig, KubeError>
-    where R: Read, {
+    where
+        R: Read,
+    {
         serde_yaml::from_reader(r).map_err(KubeError::from)
     }
 
@@ -197,10 +199,16 @@ aliases:
         let config = ClickConfig::from_reader(TEST_CONFIG.as_bytes());
         assert!(config.is_ok());
         let rlconf = config.unwrap().get_rustyline_conf();
-        assert_eq!(rlconf.completion_type(), rustyline::config::CompletionType::List);
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::List
+        );
         assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Vi);
         let rlconf = ClickConfig::default().get_rustyline_conf();
-        assert_eq!(rlconf.completion_type(), rustyline::config::CompletionType::Circular);
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::Circular
+        );
         assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Emacs);
     }
 }

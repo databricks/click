@@ -19,6 +19,7 @@ use rustyline::config as rustyconfig;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
+use std::io::Read;
 
 use error::KubeError;
 
@@ -28,7 +29,7 @@ pub struct Alias {
     pub expanded: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum EditMode {
     Emacs,
     Vi,
@@ -59,7 +60,7 @@ impl Into<String> for &EditMode {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum CompletionType {
     Circular,
     List,
@@ -105,23 +106,16 @@ pub struct ClickConfig {
 }
 
 impl ClickConfig {
-    pub fn from_file(path: &str) -> ClickConfig {
-        match File::open(path) {
-            Ok(f) => match serde_yaml::from_reader(f) {
-                Ok(c) => c,
-                Err(e) => {
-                    println!("Could not read config file {:?}, using default values", e);
-                    ClickConfig::default()
-                }
-            },
-            Err(e) => {
-                println!(
-                    "Could not open config file at '{}': {}. Using default values",
-                    path, e
-                );
-                ClickConfig::default()
-            }
-        }
+    pub fn from_reader<R>(r: R) -> Result<ClickConfig, KubeError>
+    where
+        R: Read,
+    {
+        serde_yaml::from_reader(r).map_err(KubeError::from)
+    }
+
+    pub fn from_file(path: &str) -> Result<ClickConfig, KubeError> {
+        let f = File::open(path)?;
+        ClickConfig::from_reader(f)
     }
 
     pub fn get_rustyline_conf(&self) -> rustyconfig::Config {
@@ -151,5 +145,70 @@ impl ClickConfig {
                 ))
             })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TEST_CONFIG: &str = r"---
+namespace: ns
+context: ctx
+editor: emacs
+terminal: alacritty -e
+editmode: Vi
+completiontype: List
+aliases:
+  - alias: pn
+    expanded: pods --sort node";
+
+    #[test]
+    fn test_parse_config() {
+        let config = ClickConfig::from_reader(TEST_CONFIG.as_bytes());
+        assert!(config.is_ok());
+        let config = config.unwrap();
+        assert_eq!(config.namespace, Some("ns".to_owned()));
+        assert_eq!(config.context, Some("ctx".to_owned()));
+        assert_eq!(config.editor, Some("emacs".to_owned()));
+        assert_eq!(config.terminal, Some("alacritty -e".to_owned()));
+        assert_eq!(config.editmode, EditMode::Vi);
+        assert_eq!(config.completiontype, CompletionType::List);
+        assert_eq!(config.aliases.len(), 1);
+        let a = config.aliases.get(0).unwrap();
+        assert_eq!(a.alias, "pn");
+        assert_eq!(a.expanded, "pods --sort node");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = ClickConfig::default();
+        assert_eq!(config.namespace, None);
+        assert_eq!(config.editmode, EditMode::Emacs);
+        assert_eq!(config.completiontype, CompletionType::Circular);
+    }
+
+    #[test]
+    fn test_invalid_conf() {
+        let config = ClickConfig::from_reader("not valid".as_bytes());
+        assert!(config.is_err());
+    }
+
+    #[test]
+    fn test_rustline_conf() {
+        let config = ClickConfig::from_reader(TEST_CONFIG.as_bytes());
+        assert!(config.is_ok());
+        let rlconf = config.unwrap().get_rustyline_conf();
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::List
+        );
+        assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Vi);
+        let rlconf = ClickConfig::default().get_rustyline_conf();
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::Circular
+        );
+        assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Emacs);
     }
 }

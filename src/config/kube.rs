@@ -270,7 +270,7 @@ impl Config {
                         }
                     },
                     (None, None) => {
-                        let conf = if cluster.conf.skip_tls.unwrap_or(false) {
+                        let conf = if cluster.conf.skip_tls {
                             ClusterConf::new_insecure(None, cluster.conf.server.clone())
                         } else {
                             ClusterConf::new(None, cluster.conf.server.clone())

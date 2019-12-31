@@ -1,4 +1,5 @@
 language: rust
+cache: cargo
 rust:
   - stable
   - beta
@@ -6,17 +7,29 @@ rust:
 os:
   - linux
   - osx
+env:
+  global:
+  - RUST_BACKTRACE=1
 before_install:
   - set -e
-  - rustup component add rustfmt
-  - rustup component add clippy
-  - cargo fmt -- --check
   - rustup self update
 script:
-  - cargo fmt -- --check
-  - cargo clippy -- -D warnings
+  - cargo build --verbose
   - cargo test --verbose
 matrix:
   allow_failures:
     - rust: nightly
   fast_finish: true
+  include:
+  - name: 'cargo fmt check'
+    rust: stable
+    install:
+    - rustup component add rustfmt
+    script:
+    - cargo fmt -- --check
+  - name: 'clippy check'
+    rust: stable
+    install:
+    - rustup component add clippy
+    script:
+    - cargo clippy -- -D warnings

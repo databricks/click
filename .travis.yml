@@ -14,7 +14,7 @@ before_install:
   - rustup self update
 script:
   - cargo fmt -- --check
-  - cargo clippy -- -D all
+  - cargo clippy -- -D warnings
   - cargo test --verbose
 matrix:
   allow_failures:

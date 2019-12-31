@@ -709,6 +709,7 @@ associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
 - 'emacs' Use standard readline/bash/emacs keybindings (do: 'set edit_mode emacs')";
 
+#[allow(clippy::cognitive_complexity)]
 fn main() {
     // Command line arg paring for click itself
     let matches = App::new("Click")

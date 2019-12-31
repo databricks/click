@@ -175,9 +175,9 @@ impl AuthProvider {
     fn is_expired(&self) -> bool {
         let expiry = self.expiry.borrow();
         match *expiry {
-            Some(ref e) => {
+            Some(e) => {
                 let now = Local::now();
-                e < &now
+                e < now
             }
             None => {
                 eprintln!("No expiry, cannot validate if token is still valid, assuming expired");

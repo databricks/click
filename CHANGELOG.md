@@ -1,3 +1,20 @@
+0.4.3
+=====
+
+Cleanup:
+* cargo fmt
+* lots of small changes for new compiler+clippy lints
+* Adding unit tests
+* Update lots of dependent crates
+
+Bug Fixes:
+* Update to compile with new duct
+* The update of rustyline fixes a problem where Click would exit if you typed anything while a
+  network request was processing
+
+Changes:
+* Exit when typing Ctrl-D
+
 0.4.2
 =====
 

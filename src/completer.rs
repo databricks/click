@@ -22,7 +22,7 @@ use rustyline::{Context, Helper, Result};
 use cmd::Cmd;
 
 pub struct ClickHelper<'a> {
-    commands: &'a [Box<dyn Cmd>],
+    commands: Vec<Box<dyn Cmd>>,
     env: &'a ::Env,
 }
 
@@ -43,7 +43,7 @@ impl<'a> ClickHelper<'a> {
     /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
     /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
     /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: &'a [Box<dyn Cmd>], env: *const ::Env) -> ClickHelper<'a> {
+    pub fn new(commands: Vec<Box<dyn Cmd>>, env: *const ::Env) -> ClickHelper<'a> {
         ClickHelper {
             commands,
             env: unsafe { &*env },

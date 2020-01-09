@@ -678,12 +678,227 @@ fn get_editor<'a>(
     config: rustyconfig::Config,
     raw_env: *const Env,
     hist_path: &PathBuf,
-    commands: &'a [Box<dyn Cmd>],
+    commands: Vec<Box<dyn Cmd>>,
 ) -> Editor<ClickHelper<'a>> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl.set_helper(Some(ClickHelper::new(commands, raw_env)));
     rl
+}
+
+struct CommandProcessor<'a> {
+    env: Env,
+    rl: Editor<ClickHelper<'a>>,
+    hist_path: PathBuf,
+    commands: Vec<Box<dyn Cmd>>,
+}
+
+impl<'a> CommandProcessor<'a> {
+    fn new(env: Env, hist_path: PathBuf) -> CommandProcessor<'a> {
+        let commands = CommandProcessor::get_command_vec();
+        let rl = get_editor(
+            env.get_rustyline_conf(),
+            &env,
+            &hist_path,
+            CommandProcessor::get_command_vec(),
+        );
+        CommandProcessor {
+            env,
+            rl,
+            hist_path,
+            commands,
+        }
+    }
+
+    fn get_command_vec() -> Vec<Box<dyn Cmd>> {
+        let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
+        commands.push(Box::new(cmd::Quit::new()));
+        commands.push(Box::new(cmd::Context::new()));
+        commands.push(Box::new(cmd::Contexts::new()));
+        commands.push(Box::new(cmd::Pods::new()));
+        commands.push(Box::new(cmd::Nodes::new()));
+        commands.push(Box::new(cmd::Deployments::new()));
+        commands.push(Box::new(cmd::Services::new()));
+        commands.push(Box::new(cmd::ReplicaSets::new()));
+        commands.push(Box::new(cmd::StatefulSets::new()));
+        commands.push(Box::new(cmd::ConfigMaps::new()));
+        commands.push(Box::new(cmd::Namespace::new()));
+        commands.push(Box::new(cmd::Logs::new()));
+        commands.push(Box::new(cmd::Describe::new()));
+        commands.push(Box::new(cmd::Exec::new()));
+        commands.push(Box::new(cmd::Containers::new()));
+        commands.push(Box::new(cmd::Events::new()));
+        commands.push(Box::new(cmd::Clear::new()));
+        commands.push(Box::new(cmd::EnvCmd::new()));
+        commands.push(Box::new(cmd::SetCmd::new()));
+        commands.push(Box::new(cmd::Delete::new()));
+        commands.push(Box::new(cmd::UtcCmd::new()));
+        commands.push(Box::new(cmd::Namespaces::new()));
+        commands.push(Box::new(cmd::Secrets::new()));
+        commands.push(Box::new(cmd::PortForward::new()));
+        commands.push(Box::new(cmd::PortForwards::new()));
+        commands.push(Box::new(cmd::Jobs::new()));
+        commands.push(Box::new(cmd::Alias::new()));
+        commands.push(Box::new(cmd::Unalias::new()));
+        commands
+    }
+
+    fn run_repl(&'a mut self) {
+        while !self.env.quit {
+            let writer = ClickWriter::new();
+            if self.env.need_new_editor {
+                self.rl = get_editor(
+                    self.env.get_rustyline_conf(),
+                    &self.env,
+                    &self.hist_path,
+                    CommandProcessor::get_command_vec(),
+                );
+                self.env.need_new_editor = false;
+            }
+            let readline = self.rl.readline(self.env.prompt.as_str());
+            match readline {
+                Ok(line) => {
+                    self.process_line(line.as_str(), writer);
+                }
+                Err(ReadlineError::Interrupted) => {} // don't exit on Ctrl-C
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D
+                    break;
+                }
+                Err(e) => {
+                    println!("Error reading input: {}", e);
+                    break;
+                }
+            }
+        }
+        self.env.save_click_config();
+        if let Err(e) = self.rl.save_history(self.hist_path.as_path()) {
+            println!("Couldn't save command history: {}", e);
+        }
+        self.env.stop_all_forwards();
+    }
+
+    fn process_line(&mut self, line: &str, mut writer: ClickWriter) {
+        if line.is_empty() {
+            return;
+        }
+        let mut first_non_whitespace = 0;
+        for c in line.chars() {
+            if !c.is_whitespace() {
+                break;
+            }
+            first_non_whitespace += 1;
+        }
+        let lstr = if first_non_whitespace == 0 {
+            // bash semantics: don't add to history if start with space
+            self.rl.add_history_entry(line);
+            line
+        } else {
+            &line[first_non_whitespace..]
+        };
+        let expanded_line = alias_expand_line(&self.env, lstr);
+        match parse_line(&expanded_line) {
+            Ok((left, right)) => {
+                // set up output
+                match right {
+                    RightExpr::None => {} // do nothing
+                    RightExpr::Pipe(cmd) => {
+                        if let Err(e) = writer.setup_pipe(cmd) {
+                            println!("{}", e.description());
+                            return;
+                        }
+                    }
+                    RightExpr::Redir(filename) => match File::create(filename) {
+                        Ok(out_file) => {
+                            writer.out_file = Some(out_file);
+                        }
+                        Err(ref e) => {
+                            println!("Can't open output file: {}", e);
+                            return;
+                        }
+                    },
+                    RightExpr::Append(filename) => {
+                        match OpenOptions::new().append(true).create(true).open(filename) {
+                            Ok(out_file) => {
+                                writer.out_file = Some(out_file);
+                            }
+                            Err(ref e) => {
+                                println!("Can't open output file: {}", e);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
+                let mut parts = parts_vec.iter().map(|s| &**s);
+                if let Some(cmdstr) = parts.next() {
+                    // There was something typed
+                    if let Ok(num) = (cmdstr as &str).parse::<usize>() {
+                        self.env.set_current(num);
+                    } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
+                        // found a matching command
+                        cmd.exec(&mut self.env, &mut parts, &mut writer);
+                    } else if cmdstr == "help" {
+                        // help isn't a command as it needs access to the commands vec
+                        if let Some(hcmd) = parts.next() {
+                            if let Some(cmd) = self.commands.iter().find(|&c| c.is(hcmd)) {
+                                cmd.print_help();
+                            } else {
+                                match hcmd {
+                                    // match for meta topics
+                                    "pipes" | "redirection" | "shell" => {
+                                        println!("{}", SHELLP);
+                                    }
+                                    "completion" => {
+                                        println!("{}", COMPLETIONHELP);
+                                    }
+                                    "edit_mode" => {
+                                        println!("{}", EDITMODEHELP);
+                                    }
+                                    _ => {
+                                        println!("I don't know anything about {}, sorry", hcmd);
+                                    }
+                                }
+                            }
+                        } else {
+                            println!("Available commands (type 'help [COMMAND]' for details):");
+                            let spacer = "                  ";
+                            for c in self.commands.iter() {
+                                println!(
+                                    "  {}{}{}",
+                                    c.get_name(),
+                                    &spacer[0..(20 - c.get_name().len())],
+                                    c.about()
+                                );
+                            }
+                            println!("\nOther help topics (type 'help [TOPIC]' for details)");
+                            println!(
+                                "  completion          Available completion_type values \
+                                 for the 'set' command, and what they mean"
+                            );
+                            println!(
+                                "  edit_mode           Available edit_mode values for \
+                                 the 'set' command, and what they mean"
+                            );
+                            println!(
+                                "  shell               Redirecting and piping click \
+                                 output to shell commands"
+                            );
+                        }
+                    } else {
+                        println!("Unknown command");
+                    }
+                }
+
+                // reset output
+                writer.finish_output();
+            }
+            Err(err) => {
+                println!("{}", err);
+            }
+        }
+    }
 }
 
 static SHELLP: &str = "Shell syntax can be used to redirect or pipe the output of click \
@@ -709,9 +924,8 @@ associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
 - 'emacs' Use standard readline/bash/emacs keybindings (do: 'set edit_mode emacs')";
 
-#[allow(clippy::cognitive_complexity)]
 fn main() {
-    // Command line arg paring for click itself
+    // Command line arg parsing for click itself
     let matches = App::new("Click")
         .version(crate_version!())
         .author("Nick Lanham <nick@databricks.com>")
@@ -722,6 +936,27 @@ fn main() {
                 .long("config_dir")
                 .value_name("DIR")
                 .help("Specify the directory to find kubernetes and click configs")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("exec")
+                .long("exec")
+                .value_name("COMMAND")
+                .help("Execute the specified command then exit")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("context")
+                .short("C")
+                .long("context")
+                .help("Start in the specified context")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("namespace")
+                .short("n")
+                .long("namespace")
+                .help("Start in the specified namespace")
                 .takes_value(true),
         )
         .get_matches();
@@ -786,190 +1021,18 @@ fn main() {
     hist_path.push("click.history");
 
     let mut env = Env::new(config, click_conf, click_path);
-
-    let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
-    commands.push(Box::new(cmd::Quit::new()));
-    commands.push(Box::new(cmd::Context::new()));
-    commands.push(Box::new(cmd::Contexts::new()));
-    commands.push(Box::new(cmd::Pods::new()));
-    commands.push(Box::new(cmd::Nodes::new()));
-    commands.push(Box::new(cmd::Deployments::new()));
-    commands.push(Box::new(cmd::Services::new()));
-    commands.push(Box::new(cmd::ReplicaSets::new()));
-    commands.push(Box::new(cmd::StatefulSets::new()));
-    commands.push(Box::new(cmd::ConfigMaps::new()));
-    commands.push(Box::new(cmd::Namespace::new()));
-    commands.push(Box::new(cmd::Logs::new()));
-    commands.push(Box::new(cmd::Describe::new()));
-    commands.push(Box::new(cmd::Exec::new()));
-    commands.push(Box::new(cmd::Containers::new()));
-    commands.push(Box::new(cmd::Events::new()));
-    commands.push(Box::new(cmd::Clear::new()));
-    commands.push(Box::new(cmd::EnvCmd::new()));
-    commands.push(Box::new(cmd::SetCmd::new()));
-    commands.push(Box::new(cmd::Delete::new()));
-    commands.push(Box::new(cmd::UtcCmd::new()));
-    commands.push(Box::new(cmd::Namespaces::new()));
-    commands.push(Box::new(cmd::Secrets::new()));
-    commands.push(Box::new(cmd::PortForward::new()));
-    commands.push(Box::new(cmd::PortForwards::new()));
-    commands.push(Box::new(cmd::Jobs::new()));
-    commands.push(Box::new(cmd::Alias::new()));
-    commands.push(Box::new(cmd::Unalias::new()));
-
-    let raw_env: *const Env = &env;
-    let mut rl = get_editor(env.get_rustyline_conf(), raw_env, &hist_path, &commands);
-
-    while !env.quit {
-        let mut writer = ClickWriter::new();
-        if env.need_new_editor {
-            rl = get_editor(env.get_rustyline_conf(), raw_env, &hist_path, &commands);
-            env.need_new_editor = false;
-        }
-        let readline = rl.readline(env.prompt.as_str());
-        match readline {
-            Ok(line) => {
-                if line.is_empty() {
-                    continue;
-                }
-                let mut first_non_whitespace = 0;
-                for c in line.chars() {
-                    if !c.is_whitespace() {
-                        break;
-                    }
-                    first_non_whitespace += 1;
-                }
-                let lstr = if first_non_whitespace == 0 {
-                    // bash semantics: don't add to history if start with space
-                    rl.add_history_entry(line.as_str());
-                    line.as_str()
-                } else {
-                    &line[first_non_whitespace..]
-                };
-                let expanded_line = alias_expand_line(&env, lstr);
-                match parse_line(&expanded_line) {
-                    Ok((left, right)) => {
-                        // set up output
-                        match right {
-                            RightExpr::None => {} // do nothing
-                            RightExpr::Pipe(cmd) => {
-                                if let Err(e) = writer.setup_pipe(cmd) {
-                                    println!("{}", e.description());
-                                    continue;
-                                }
-                            }
-                            RightExpr::Redir(filename) => match File::create(filename) {
-                                Ok(out_file) => {
-                                    writer.out_file = Some(out_file);
-                                }
-                                Err(ref e) => {
-                                    println!("Can't open output file: {}", e);
-                                    continue;
-                                }
-                            },
-                            RightExpr::Append(filename) => {
-                                match OpenOptions::new().append(true).create(true).open(filename) {
-                                    Ok(out_file) => {
-                                        writer.out_file = Some(out_file);
-                                    }
-                                    Err(ref e) => {
-                                        println!("Can't open output file: {}", e);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
-                        let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
-                        let mut parts = parts_vec.iter().map(|s| &**s);
-                        if let Some(cmdstr) = parts.next() {
-                            // There was something typed
-                            if let Ok(num) = (cmdstr as &str).parse::<usize>() {
-                                env.set_current(num);
-                            } else if let Some(cmd) = commands.iter().find(|&c| c.is(cmdstr)) {
-                                // found a matching command
-                                cmd.exec(&mut env, &mut parts, &mut writer);
-                            } else if cmdstr == "help" {
-                                // help isn't a command as it needs access to the commands vec
-                                if let Some(hcmd) = parts.next() {
-                                    if let Some(cmd) = commands.iter().find(|&c| c.is(hcmd)) {
-                                        cmd.print_help();
-                                    } else {
-                                        match hcmd {
-                                            // match for meta topics
-                                            "pipes" | "redirection" | "shell" => {
-                                                println!("{}", SHELLP);
-                                            }
-                                            "completion" => {
-                                                println!("{}", COMPLETIONHELP);
-                                            }
-                                            "edit_mode" => {
-                                                println!("{}", EDITMODEHELP);
-                                            }
-                                            _ => {
-                                                println!(
-                                                    "I don't know anything about {}, sorry",
-                                                    hcmd
-                                                );
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    println!(
-                                        "Available commands (type 'help [COMMAND]' for details):"
-                                    );
-                                    let spacer = "                  ";
-                                    for c in commands.iter() {
-                                        println!(
-                                            "  {}{}{}",
-                                            c.get_name(),
-                                            &spacer[0..(20 - c.get_name().len())],
-                                            c.about()
-                                        );
-                                    }
-                                    println!(
-                                        "\nOther help topics (type 'help [TOPIC]' for details)"
-                                    );
-                                    println!(
-                                        "  completion          Available completion_type values \
-                                         for the 'set' command, and what they mean"
-                                    );
-                                    println!(
-                                        "  edit_mode           Available edit_mode values for \
-                                         the 'set' command, and what they mean"
-                                    );
-                                    println!(
-                                        "  shell               Redirecting and piping click \
-                                         output to shell commands"
-                                    );
-                                }
-                            } else {
-                                println!("Unknown command");
-                            }
-                        }
-
-                        // reset output
-                        writer.finish_output();
-                    }
-                    Err(err) => {
-                        println!("{}", err);
-                    }
-                }
-            }
-            Err(ReadlineError::Interrupted) => {} // don't exit on Ctrl-C
-            Err(ReadlineError::Eof) => {
-                // Ctrl-D
-                break;
-            }
-            Err(e) => {
-                println!("Error reading input: {}", e);
-                break;
-            }
-        }
+    if let Some(context) = matches.value_of("context") {
+        env.set_context(Some(context));
     }
-    env.save_click_config();
-    if let Err(e) = rl.save_history(hist_path.as_path()) {
-        println!("Couldn't save command history: {}", e);
+    if let Some(namespace) = matches.value_of("namespace") {
+        env.set_namespace(Some(namespace));
     }
-    env.stop_all_forwards();
+
+    let mut processor = CommandProcessor::new(env, hist_path);
+    if let Some(command) = matches.value_of("exec") {
+        let writer = ClickWriter::new();
+        processor.process_line(command, writer);
+    } else {
+        processor.run_repl();
+    }
 }

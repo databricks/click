@@ -17,6 +17,7 @@
 use completer;
 use config;
 use describe;
+use kobj::KObj;
 use env::{self, Env, KObj, LastList};
 use kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
@@ -1261,7 +1262,7 @@ command!(
             pushed_label = true;
         }
 
-        if let KObj::Node(ref node) = env.current_object {
+        if let Some(KObj::Node(ref node)) = env.current_object {
             if pushed_label {
                 urlstr.push('&');
             } else {
@@ -1369,7 +1370,7 @@ command!(
         let cont = match matches.value_of("container") {
             Some(c) => c,
             None => match env.current_object {
-                KObj::Pod { ref containers, .. } => {
+                Some(KObj::Pod { ref containers, .. }) => {
                     if containers.len() == 1 {
                         containers[0].as_str()
                     } else {
@@ -1547,23 +1548,6 @@ command!(
     }
 );
 
-fn maybe_full_output<T: ?Sized>(matches: ArgMatches, value: &T, writer: &mut ClickWriter) -> bool
-where
-    T: Serialize,
-{
-    if matches.is_present("json") {
-        writer.pretty_color_json(value).unwrap_or(());
-        true
-    } else if matches.is_present("yaml") {
-        writer.print_yaml(value).unwrap_or(());
-        true
-    } else {
-        false
-    }
-}
-
-static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
-
 command!(
     Describe,
     "describe",
@@ -1587,126 +1571,9 @@ command!(
     noop_complete!(),
     #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
-        match env.current_object {
-            KObj::None => {
-                clickwrite!(writer, "No active object to describe\n");
-            }
-            KObj::Pod { ref name, .. } => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    // describe the active pod
-                    let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
-                    let pod_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(pval) = pod_value {
-                        if !maybe_full_output(matches, &pval, writer) {
-                            clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
-                        }
-                    }
-                } else {
-                    write!(stderr(), "Don't know namespace for {}", name).unwrap_or(());
-                }
-            }
-            KObj::Node(ref node) => {
-                // describe the active node
-                let url = format!("/api/v1/nodes/{}", node);
-                let node_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                if let Some(nval) = node_value {
-                    if !maybe_full_output(matches, &nval, writer) {
-                        clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
-                    }
-                }
-            }
-            KObj::Deployment(ref deployment) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
-                        ns, deployment
-                    );
-                    let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(dval) = dep_value {
-                        if !maybe_full_output(matches, &dval, writer) {
-                            clickwrite!(writer, "{} {}", "Deployment", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::ReplicaSet(ref replicaset) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
-                        ns, replicaset
-                    );
-                    let rs_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(rsval) = rs_value {
-                        if !maybe_full_output(matches, &rsval, writer) {
-                            clickwrite!(writer, "{} {}", "ReplicaSet", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::StatefulSet(ref statefulset) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
-                        ns, statefulset
-                    );
-                    let statefulset_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(statefulset_val) = statefulset_value {
-                        if !maybe_full_output(matches, &statefulset_val, writer) {
-                            clickwrite!(writer, "{} {}", "StatefulSet", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::ConfigMap(ref config_map) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
-                    let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(cval) = cm_value {
-                        if !maybe_full_output(matches, &cval, writer) {
-                            clickwrite!(writer, "{} {}", "ConfigMap", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::Secret(ref secret) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
-                    let s_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(sval) = s_value {
-                        if !maybe_full_output(matches, &sval, writer) {
-                            clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
-                        }
-                    }
-                }
-            }
-            KObj::Service(ref service) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
-                    let service_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(sval) = service_value {
-                        if !maybe_full_output(matches, &sval, writer) {
-                            let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
-                            let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                            clickwrite!(
-                                writer,
-                                "{}\n",
-                                describe::describe_format_service(sval, endpoint_val)
-                            );
-                        }
-                    }
-                }
-            }
-            KObj::Job(ref job) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job);
-                    let job_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(jobval) = job_value {
-                        if !maybe_full_output(matches, &jobval, writer) {
-                            clickwrite!(writer, "{} {}", "Job", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
+        match &env.current_object {
+            Some(obj) => obj.describe(matches, env, writer),
+            None => clickwrite!(writer, "No active object to describe\n"),
         }
     }
 );
@@ -1848,53 +1715,53 @@ command!(
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
             if let Some(url) = match env.current_object {
-                KObj::Pod { ref name, .. } => {
+                Some(KObj::Pod) { ref name, .. } => {
                     clickwrite!(writer, "Delete pod {} [y/N]? ", name);
                     Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
                 }
-                KObj::Deployment(ref dep) => {
+                Some(KObj::Deployment(ref dep)) => {
                     clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
                     Some(format!(
                         "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
                         ns, dep
                     ))
                 }
-                KObj::ReplicaSet(ref repset) => {
+                Some(KObj::ReplicaSet(ref repset)) => {
                     clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
                     Some(format!(
                         "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
                         ns, repset
                     ))
                 }
-                KObj::StatefulSet(ref statefulset) => {
+                Some(KObj::StatefulSet(ref statefulset)) => {
                     clickwrite!(writer, "Delete stateful set {} [y/N]? ", statefulset);
                     Some(format!(
                         "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
                         ns, statefulset
                     ))
                 }
-                KObj::Service(ref service) => {
+                Some(KObj::Service(ref service)) => {
                     clickwrite!(writer, "Delete service {} [y/N]? ", service);
                     no_delete_opts = true;
                     Some(format!("/api/v1/namespaces/{}/services/{}", ns, service))
                 }
-                KObj::ConfigMap(ref cm) => {
+                Some(KObj::ConfigMap(ref cm)) => {
                     clickwrite!(writer, "Delete configmap {} [y/N]? ", cm);
                     Some(format!("/api/v1/namespaces/{}/configmaps/{}", ns, cm))
                 }
-                KObj::Secret(ref secret) => {
+                Some(KObj::Secret(ref secret)) => {
                     clickwrite!(writer, "Delete secret {} [y/N]? ", secret);
                     Some(format!("/api/v1/namespaces/{}/secrets/{}", ns, secret))
                 }
-                KObj::Node(ref node) => {
+                Some(KObj::Node(ref node)) => {
                     clickwrite!(writer, "Delete node {} [y/N]? ", node);
                     Some(format!("/api/v1/nodes/{}", node))
                 }
-                KObj::Job(ref job) => {
+                Some(KObj::Job(ref job)) => {
                     clickwrite!(writer, "Delete job {} [y/N]? ", job);
                     Some(format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job))
                 }
-                KObj::None => {
+                None => {
                     write!(stderr(), "No active object\n").unwrap_or(());
                     None
                 }
@@ -2854,7 +2721,7 @@ Examples:
         let pod = {
             let epod = env.current_pod();
             match epod {
-                Some(p) => p.clone(),
+                Some(p) => p.to_string(),
                 None => {
                     write!(stderr(), "No active pod").unwrap_or(());
                     return;

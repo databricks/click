@@ -217,7 +217,7 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    if let KObj::Pod { ref containers, .. } = env.current_object {
+    if let Some(KObj::Pod { ref containers, .. }) = env.current_object {
         for cont in containers.iter() {
             if cont.starts_with(prefix) {
                 v.push(Pair {

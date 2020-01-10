@@ -2,6 +2,8 @@ use describe;
 use output::ClickWriter;
 use Env;
 
+use ansi_term::ANSIString;
+use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
 use serde::ser::Serialize;
 
@@ -71,6 +73,20 @@ impl KObj {
             KObj::ConfigMap(_) => "ConfigMap",
             KObj::Secret(_) => "Secret",
             KObj::Job(_) => "Job",
+        }
+    }
+
+    pub fn prompt_str(&self) -> ANSIString {
+        match self {
+            KObj::Pod { name, .. } => Yellow.bold().paint(name.as_str()),
+            KObj::Node(name) => Blue.bold().paint(name.as_str()),
+            KObj::Deployment(name) => Purple.bold().paint(name.as_str()),
+            KObj::Service(name) => Cyan.bold().paint(name.as_str()),
+            KObj::ReplicaSet(name) => Green.bold().paint(name.as_str()),
+            KObj::StatefulSet(name) => Green.bold().paint(name.as_str()),
+            KObj::ConfigMap(name) => Black.bold().paint(name.as_str()),
+            KObj::Secret(name) => Red.bold().paint(name.as_str()),
+            KObj::Job(name) => Purple.bold().paint(name.as_str()),
         }
     }
 

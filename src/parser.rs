@@ -1,4 +1,4 @@
-//! bash-like cmdline parser
+//! file to hold parsers for the various things we need to parse ourselves
 
 // This is take and modified from:
 // https://github.com/klemens/cmdline-parser/blob/master/src/unix.rs
@@ -23,6 +23,7 @@ enum ParsingState {
 ///
 /// Unfinished quotings at the end of a command line are parsed successfully
 /// to support building of e.g. path completers.
+// TODO: Rename to BashParser
 pub struct Parser<'a> {
     state: ParsingState,
     cmdline: Peekable<CharIndices<'a>>,
@@ -107,3 +108,10 @@ impl<'a> Iterator for Parser<'a> {
         None
     }
 }
+
+// something that can specify objects to operate on
+// enum ObjectSpecifier {
+//     Single(usize),
+//     Range(dyn Iterator<Item=usize>),
+// }
+    

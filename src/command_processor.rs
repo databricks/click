@@ -228,7 +228,7 @@ impl<'a> CommandProcessor<'a> {
         self.env.stop_all_forwards();
     }
 
-    pub fn process_line<W: Write>(&mut self, line: &str, mut writer: ClickWriter<W>) {
+    pub fn process_line(&mut self, line: &str, mut writer: ClickWriter) {
         if line.is_empty() {
             return;
         }
@@ -249,40 +249,37 @@ impl<'a> CommandProcessor<'a> {
         let expanded_line = alias_expand_line(&self.env, lstr);
         match parse_line(&expanded_line) {
             Ok((left, right)) => {
-                // set up output
-                let writer =
-                    match right {
-                        RightExpr::None => writer, // do nothing
-                        RightExpr::Pipe(cmd) => {
-                            match ClickWriter::with_pipe(writer.writer, cmd) {
-                                Ok(w) => w,
-                                Err(e) => {
-                                    clickwrite!(writer, "{}", e.description());
-                                    return;
-                                }
-                            }
-                        }
-                        RightExpr::Redir(filename) => match File::create(filename) {
-                            Ok(out_file) => {
-                                ClickWriter::with_writer(out_file, false)
-                            }
-                            Err(ref e) => {
-                                clickwrite!(writer, "Can't open output file: {}", e);
-                                return;
-                            }
-                        },
-                        RightExpr::Append(filename) => {
-                            match OpenOptions::new().append(true).create(true).open(filename) {
-                                Ok(out_file) => {
-                                    ClickWriter::with_writer(out_file, false)
-                                }
-                                Err(ref e) => {
-                                    clickwrite!(writer, "Can't open output file: {}", e);
-                                    return;
-                                }
-                            }
-                        }
-                    };
+                 // set up output
+                 match right {
+                     RightExpr::None => {} // do nothing
+                     RightExpr::Pipe(cmd) => {
+                         if let Err(e) = writer.setup_pipe(cmd) {
+                             println!("{}", e.description());
+                             return;
+                         }
+                     }
+                     RightExpr::Redir(filename) => match File::create(filename) {
+                         Ok(out_file) => {
+                             writer.out_file = Some(out_file);
+                         }
+                         Err(ref e) => {
+                             println!("Can't open output file: {}", e);
+                             return;
+                         }
+                     },
+                     RightExpr::Append(filename) => {
+                         match OpenOptions::new().append(true).create(true).open(filename) {
+                             Ok(out_file) => {
+                                 writer.out_file = Some(out_file);
+                             }
+                             Err(ref e) => {
+                                 println!("Can't open output file: {}", e);
+                                 return;
+                             }
+                         }
+                     }
+                 }
+
 
                 let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                 let mut parts = parts_vec.iter().map(|s| &**s);
@@ -402,11 +399,11 @@ mod tests {
 
     struct TestCmd;
     impl Cmd for TestCmd {
-        fn exec<W: Write>(
+        fn exec(
             &self,
             _env: &mut Env,
             _args: &mut dyn Iterator<Item = &str>,
-            _writer: &mut ClickWriter<W>,
+            _writer: &mut ClickWriter,
         ) -> bool {
             println!("Called");
             true
@@ -420,7 +417,7 @@ mod tests {
             "testcmd"
         }
 
-        fn write_help<W: Write>(&self, writer: &mut ClickWriter<W>) {
+        fn write_help<W: Write>(&self, writer: &mut ClickWriter) {
             clickwrite!(writer, "HELP\n");
         }
 

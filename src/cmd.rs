@@ -73,7 +73,7 @@ pub trait Cmd {
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
     fn complete_option(&self, prefix: &str) -> Vec<RustlinePair>;
-    fn print_help(&self);
+    fn write_help(&self, writer: &mut ClickWriter);
     fn about(&self) -> &'static str;
 }
 
@@ -192,12 +192,13 @@ macro_rules! command {
                 $name
             }
 
-            fn print_help(&self) {
-                // TODO: put though the ClickWriter?
-                if let Err(res) = self.clap.borrow_mut().print_help() {
-                    print!("Couldn't print help: {}", res);
+            fn write_help(&self, writer: &mut ClickWriter) {
+                if let Err(res) = self.clap.borrow_mut().write_help(writer) {
+                    clickwrite!(writer, "Couldn't print help: {}", res);
                 }
                 println!(); // clap print_help doesn't add final newline
+                // clap write_help doesn't add final newline
+                clickwrite!(writer, "\n");
             }
 
             fn about(&self) -> &'static str {

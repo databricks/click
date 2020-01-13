@@ -372,3 +372,18 @@ impl Config {
         )
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    pub fn get_test_config() -> Config {
+        Config {
+            source_file: "/tmp/test.conf".to_string(),
+            clusters: HashMap::new(),
+            contexts: HashMap::new(),
+            users: HashMap::new(),
+        }
+    }
+}

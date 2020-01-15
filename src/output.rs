@@ -26,7 +26,7 @@ use serde_yaml;
 
 use std::fs::File;
 use std::io;
-use std::io::Write;
+use std::io::{Stdout, Write};
 
 use error::KubeError;
 
@@ -65,50 +65,70 @@ impl PipeProc {
     }
 }
 
+enum WriterOutput {
+    Stdout(Stdout),
+    #[allow(dead_code)] // used in test
+    Buffer(Vec<u8>),
+    File(File),
+    Pipe(Box<PipeProc>),
+}
+
 pub struct ClickWriter {
-    pub out_file: Option<File>,
-    pipe_proc: Option<PipeProc>,
+    output: WriterOutput,
 }
 
 impl ClickWriter {
     pub fn new() -> ClickWriter {
         ClickWriter {
-            out_file: None,
-            pipe_proc: None,
+            output: WriterOutput::Stdout(std::io::stdout()),
         }
+    }
+
+    #[allow(dead_code)] // used in test
+    pub fn with_buffer(buffer: Vec<u8>, _do_color: bool) -> ClickWriter {
+        ClickWriter {
+            output: WriterOutput::Buffer(buffer),
+        }
+    }
+
+    pub fn set_output_file(&mut self, file: File) {
+        self.output = WriterOutput::File(file);
     }
 
     pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), KubeError> {
         let expr = sh_dangerous(cmd);
         let (pipe_read, pipe_write) = pipe()?;
         let handle = expr.stdin_file(pipe_read).start()?;
-        self.pipe_proc = Some(PipeProc {
+        self.output = WriterOutput::Pipe(Box::new(PipeProc {
             pipe: pipe_write,
             expr: handle,
-        });
+        }));
         Ok(())
     }
 
-    pub fn finish_output(mut self) {
-        if let Some(pipe_proc) = self.pipe_proc {
-            match pipe_proc.finish() {
-                Ok(out) => {
-                    print!("{}", out);
+    pub fn finish_output(self) -> Option<Vec<u8>> {
+        match self.output {
+            WriterOutput::Pipe(pipe_proc) => {
+                match pipe_proc.finish() {
+                    Ok(out) => {
+                        print!("{}", out);
+                    }
+                    Err(e) => {
+                        eprint!("Failed to execute command: {}", e);
+                    }
                 }
-                Err(e) => {
-                    eprint!("Failed to execute command: {}", e);
-                }
+                None
             }
+            WriterOutput::Buffer(buffer) => Some(buffer),
+            _ => None,
         }
-        self.out_file = None;
-        self.pipe_proc = None;
     }
 
     pub fn pretty_color_json<T: ?Sized>(&mut self, value: &T) -> Result<(), JsonError>
     where
         T: Serialize,
     {
-        if self.out_file.is_none() && self.pipe_proc.is_none() {
+        if let WriterOutput::Stdout(_) = self.output {
             let mut ser = Serializer::with_formatter(self, PrettyColorFormatter::new());
             value.serialize(&mut ser)
         } else {
@@ -127,22 +147,20 @@ impl ClickWriter {
 
 impl Write for ClickWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
-        if let Some(ref mut file) = self.out_file {
-            file.write(buf)
-        } else if let Some(ref mut pipe_proc) = self.pipe_proc {
-            pipe_proc.write(buf)
-        } else {
-            io::stdout().write(buf)
+        match self.output {
+            WriterOutput::Stdout(ref mut stdout) => stdout.write(buf),
+            WriterOutput::Buffer(ref mut buffer) => buffer.write(buf),
+            WriterOutput::File(ref mut file) => file.write(buf),
+            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.write(buf),
         }
     }
 
     fn flush(&mut self) -> Result<(), io::Error> {
-        if let Some(ref mut file) = self.out_file {
-            file.flush()
-        } else if let Some(ref mut pipe_proc) = self.pipe_proc {
-            pipe_proc.flush()
-        } else {
-            io::stdout().flush()
+        match self.output {
+            WriterOutput::Stdout(ref mut stdout) => stdout.flush(),
+            WriterOutput::Buffer(ref mut buffer) => buffer.flush(),
+            WriterOutput::File(ref mut file) => file.flush(),
+            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.flush(),
         }
     }
 }

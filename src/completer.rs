@@ -12,46 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use Env;
+use cmd::Cmd;
+use env::{Env, KObj};
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Context, Helper, Result};
 
-use cmd::Cmd;
+use std::rc::Rc;
 
-pub struct ClickHelper<'a> {
-    commands: &'a [Box<dyn Cmd>],
-    env: &'a ::Env,
+pub struct ClickHelper {
+    commands: Vec<Box<dyn Cmd>>,
+    help_topics: Vec<&'static str>,
+    env: Option<Rc<Env>>,
 }
 
-impl<'a> Helper for ClickHelper<'a> {}
+impl Helper for ClickHelper {}
 
-impl<'a> Highlighter for ClickHelper<'a> {}
+impl Highlighter for ClickHelper {}
 
-impl<'a> Hinter for ClickHelper<'a> {
+impl Hinter for ClickHelper {
     fn hint(&self, _line: &str, _pos: usize, _context: &Context) -> Option<String> {
         None
     }
 }
 
-impl<'a> ClickHelper<'a> {
-    /// Create a new ClickHelper.  We use a raw pointer here because this needs to hold onto a
-    /// reference to the env while the main loop is executing, but the main loop also needs to
-    /// mutate the env, so the borrow checker complains with safe code.  However, the main loop is
-    /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
-    /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
-    /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: &'a [Box<dyn Cmd>], env: *const ::Env) -> ClickHelper<'a> {
+impl ClickHelper {
+    /// Create a new completer. help_topics are any extra things you can type after 'help' that
+    /// aren't commands
+    pub fn new(commands: Vec<Box<dyn Cmd>>, help_topics: Vec<&'static str>) -> ClickHelper {
         ClickHelper {
             commands,
-            env: unsafe { &*env },
+            help_topics,
+            env: None,
         }
+    }
+
+    pub fn set_env(&mut self, env: Option<Rc<Env>>) {
+        self.env = env;
     }
 }
 
-impl<'a> ClickHelper<'a> {
+impl ClickHelper {
     #[allow(clippy::borrowed_box)]
     fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
         for cmd in self.commands.iter() {
@@ -60,6 +63,28 @@ impl<'a> ClickHelper<'a> {
             }
         }
         None
+    }
+
+    fn get_command_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for cmd in self.commands.iter() {
+            if cmd.get_name().starts_with(line) {
+                candidates.push(Pair {
+                    display: cmd.get_name().to_owned(),
+                    replacement: cmd.get_name().to_owned(),
+                });
+            }
+        }
+    }
+
+    fn get_help_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for topic in self.help_topics.iter() {
+            if topic.starts_with(line) {
+                candidates.push(Pair {
+                    display: (*topic).to_string(),
+                    replacement: (*topic).to_string(),
+                });
+            }
+        }
     }
 }
 
@@ -71,7 +96,7 @@ pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
     }
 }
 
-impl<'a> Completer for ClickHelper<'a> {
+impl Completer for ClickHelper {
     type Candidate = Pair;
     fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
         let mut v = Vec::new();
@@ -133,16 +158,27 @@ impl<'a> Completer for ClickHelper<'a> {
                     };
                     // here the last thing typed wasn't a '-' option, so we ask the command to
                     // do completion
-                    let opts = cmd.try_complete(pos, prefix, self.env);
-                    return Ok((line.len(), opts));
+                    if let Some(ref env) = self.env {
+                        let opts = cmd.try_complete(pos, prefix, &*env);
+                        return Ok((line.len(), opts));
+                    } else {
+                        return Ok((0, v));
+                    }
+                } else if linecmd == "help" {
+                    let cmd_part = split.next().unwrap_or("");
+                    if split.next().is_none() {
+                        // only complete on the first arg to help
+                        self.get_command_completions(cmd_part, &mut v);
+                        self.get_help_completions(cmd_part, &mut v);
+                        return Ok((5, v)); // help plus space is 5 chars
+                    }
                 } else {
-                    for cmd in self.commands.iter() {
-                        if cmd.get_name().starts_with(linecmd) {
-                            v.push(Pair {
-                                display: cmd.get_name().to_owned(),
-                                replacement: cmd.get_name().to_owned(),
-                            });
-                        }
+                    self.get_command_completions(linecmd, &mut v);
+                    if "help".starts_with(linecmd) {
+                        v.push(Pair {
+                            display: "help".to_string(),
+                            replacement: "help".to_string(),
+                        });
                     }
                 }
             }
@@ -181,7 +217,7 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    if let ::KObj::Pod { ref containers, .. } = env.current_object {
+    if let KObj::Pod { ref containers, .. } = env.current_object {
         for cont in containers.iter() {
             if cont.starts_with(prefix) {
                 v.push(Pair {

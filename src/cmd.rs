@@ -17,6 +17,7 @@
 use completer;
 use config;
 use describe;
+use env::{self, Env, KObj, LastList};
 use kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
@@ -25,8 +26,6 @@ use kube::{
 use output::ClickWriter;
 use table::{opt_sort, CellSpec};
 use values::{get_val_as, val_item_count, val_str, val_u64};
-use Env;
-use LastList;
 
 use ansi_term::Colour::Yellow;
 use chrono::offset::Local;
@@ -73,7 +72,7 @@ pub trait Cmd {
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
     fn complete_option(&self, prefix: &str) -> Vec<RustlinePair>;
-    fn print_help(&self);
+    fn write_help(&self, writer: &mut ClickWriter);
     fn about(&self) -> &'static str;
 }
 
@@ -112,7 +111,7 @@ where
             true
         }
         Err(err) => {
-            println!("{}", err.message);
+            clickwrite!(writer, "{}\n", err.message);
             false
         }
     }
@@ -192,12 +191,13 @@ macro_rules! command {
                 $name
             }
 
-            fn print_help(&self) {
-                // TODO: put though the ClickWriter?
-                if let Err(res) = self.clap.borrow_mut().print_help() {
-                    print!("Couldn't print help: {}", res);
+            fn write_help(&self, writer: &mut ClickWriter) {
+                if let Err(res) = self.clap.borrow_mut().write_help(writer) {
+                    clickwrite!(writer, "Couldn't print help: {}", res);
                 }
                 println!(); // clap print_help doesn't add final newline
+                            // clap write_help doesn't add final newline
+                clickwrite!(writer, "\n");
             }
 
             fn about(&self) -> &'static str {
@@ -1261,7 +1261,7 @@ command!(
             pushed_label = true;
         }
 
-        if let ::KObj::Node(ref node) = env.current_object {
+        if let KObj::Node(ref node) = env.current_object {
             if pushed_label {
                 urlstr.push('&');
             } else {
@@ -1369,7 +1369,7 @@ command!(
         let cont = match matches.value_of("container") {
             Some(c) => c,
             None => match env.current_object {
-                ::KObj::Pod { ref containers, .. } => {
+                KObj::Pod { ref containers, .. } => {
                     if containers.len() == 1 {
                         containers[0].as_str()
                     } else {
@@ -1588,10 +1588,10 @@ command!(
     #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
         match env.current_object {
-            ::KObj::None => {
+            KObj::None => {
                 clickwrite!(writer, "No active object to describe\n");
             }
-            ::KObj::Pod { ref name, .. } => {
+            KObj::Pod { ref name, .. } => {
                 if let Some(ref ns) = env.current_object_namespace {
                     // describe the active pod
                     let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
@@ -1605,7 +1605,7 @@ command!(
                     write!(stderr(), "Don't know namespace for {}", name).unwrap_or(());
                 }
             }
-            ::KObj::Node(ref node) => {
+            KObj::Node(ref node) => {
                 // describe the active node
                 let url = format!("/api/v1/nodes/{}", node);
                 let node_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1615,7 +1615,7 @@ command!(
                     }
                 }
             }
-            ::KObj::Deployment(ref deployment) => {
+            KObj::Deployment(ref deployment) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!(
                         "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
@@ -1629,7 +1629,7 @@ command!(
                     }
                 }
             }
-            ::KObj::ReplicaSet(ref replicaset) => {
+            KObj::ReplicaSet(ref replicaset) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!(
                         "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
@@ -1643,7 +1643,7 @@ command!(
                     }
                 }
             }
-            ::KObj::StatefulSet(ref statefulset) => {
+            KObj::StatefulSet(ref statefulset) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!(
                         "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
@@ -1657,7 +1657,7 @@ command!(
                     }
                 }
             }
-            ::KObj::ConfigMap(ref config_map) => {
+            KObj::ConfigMap(ref config_map) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
                     let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1668,7 +1668,7 @@ command!(
                     }
                 }
             }
-            ::KObj::Secret(ref secret) => {
+            KObj::Secret(ref secret) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
                     let s_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1679,7 +1679,7 @@ command!(
                     }
                 }
             }
-            ::KObj::Service(ref service) => {
+            KObj::Service(ref service) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
                     let service_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1696,7 +1696,7 @@ command!(
                     }
                 }
             }
-            ::KObj::Job(ref job) => {
+            KObj::Job(ref job) => {
                 if let Some(ref ns) = env.current_object_namespace {
                     let url = format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job);
                     let job_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
@@ -1848,53 +1848,53 @@ command!(
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
             if let Some(url) = match env.current_object {
-                ::KObj::Pod { ref name, .. } => {
+                KObj::Pod { ref name, .. } => {
                     clickwrite!(writer, "Delete pod {} [y/N]? ", name);
                     Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
                 }
-                ::KObj::Deployment(ref dep) => {
+                KObj::Deployment(ref dep) => {
                     clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
                     Some(format!(
                         "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
                         ns, dep
                     ))
                 }
-                ::KObj::ReplicaSet(ref repset) => {
+                KObj::ReplicaSet(ref repset) => {
                     clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
                     Some(format!(
                         "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
                         ns, repset
                     ))
                 }
-                ::KObj::StatefulSet(ref statefulset) => {
+                KObj::StatefulSet(ref statefulset) => {
                     clickwrite!(writer, "Delete stateful set {} [y/N]? ", statefulset);
                     Some(format!(
                         "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
                         ns, statefulset
                     ))
                 }
-                ::KObj::Service(ref service) => {
+                KObj::Service(ref service) => {
                     clickwrite!(writer, "Delete service {} [y/N]? ", service);
                     no_delete_opts = true;
                     Some(format!("/api/v1/namespaces/{}/services/{}", ns, service))
                 }
-                ::KObj::ConfigMap(ref cm) => {
+                KObj::ConfigMap(ref cm) => {
                     clickwrite!(writer, "Delete configmap {} [y/N]? ", cm);
                     Some(format!("/api/v1/namespaces/{}/configmaps/{}", ns, cm))
                 }
-                ::KObj::Secret(ref secret) => {
+                KObj::Secret(ref secret) => {
                     clickwrite!(writer, "Delete secret {} [y/N]? ", secret);
                     Some(format!("/api/v1/namespaces/{}/secrets/{}", ns, secret))
                 }
-                ::KObj::Node(ref node) => {
+                KObj::Node(ref node) => {
                     clickwrite!(writer, "Delete node {} [y/N]? ", node);
                     Some(format!("/api/v1/nodes/{}", node))
                 }
-                ::KObj::Job(ref job) => {
+                KObj::Job(ref job) => {
                     clickwrite!(writer, "Delete job {} [y/N]? ", job);
                     Some(format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job))
                 }
-                ::KObj::None => {
+                KObj::None => {
                     write!(stderr(), "No active object\n").unwrap_or(());
                     None
                 }
@@ -2917,7 +2917,7 @@ Examples:
                 let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
                 clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
 
-                env.add_port_forward(::PortForward {
+                env.add_port_forward(env::PortForward {
                     child: child,
                     pod: pod,
                     ports: pvec,
@@ -2937,7 +2937,7 @@ Examples:
 );
 
 /// Print out port forwards found in iterator
-fn print_pfs(pfs: std::slice::Iter<::PortForward>) {
+fn print_pfs(pfs: std::slice::Iter<env::PortForward>) {
     let mut table = Table::new();
     table.set_titles(row!["####", "Pod", "Ports"]);
     for (i, pf) in pfs.enumerate() {

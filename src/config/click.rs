@@ -23,7 +23,7 @@ use std::io::Read;
 
 use error::KubeError;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Alias {
     pub alias: String,
     pub expanded: String,

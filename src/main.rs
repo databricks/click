@@ -91,6 +91,7 @@ use std::env;
 use values::val_str_opt;
 
 /// An object we can have as a "current" thing
+#[derive(Debug, PartialEq)]
 enum KObj {
     None,
     Pod {
@@ -152,14 +153,19 @@ pub struct Env {
     tempdir: std::io::Result<TempDir>,
 }
 
-impl Env {
-    fn new(config: Config, click_config: ClickConfig, click_config_path: PathBuf) -> Env {
-        let cbool = Arc::new(AtomicBool::new(false));
-        let r = cbool.clone();
+lazy_static! {
+    static ref CTC_BOOL: Arc<AtomicBool> = {
+        let b = Arc::new(AtomicBool::new(false));
+        let r = b.clone();
         ctrlc::set_handler(move || {
             r.store(true, Ordering::SeqCst);
-        })
-        .expect("Error setting Ctrl-C handler");
+        }).expect("Error setting Ctrl-C handler");
+        b
+    };
+}
+
+impl Env {
+    fn new(config: Config, click_config: ClickConfig, click_config_path: PathBuf) -> Env {
         let namespace = click_config.namespace.clone();
         let context = click_config.context.clone();
         let mut env = Env {
@@ -173,7 +179,7 @@ impl Env {
             current_object: KObj::None,
             current_object_namespace: None,
             last_objs: LastList::None,
-            ctrlcbool: cbool,
+            ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
             prompt: format!(
                 "[{}] [{}] [{}] > ",

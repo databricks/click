@@ -67,6 +67,22 @@ pub struct Metadata {
     pub owner_refs: Option<Vec<OwnerReference>>,
 }
 
+// Code to easily create a namespace in a test
+impl Metadata {
+    #[cfg(test)]
+    pub fn with_name(name: &str) -> Metadata {
+        Metadata {
+            name: name.to_string(),
+            namespace: None,
+            creation_timestamp: None,
+            deletion_timestamp: None,
+            labels: None,
+            annotations: None,
+            owner_refs: None,
+        }
+    }
+}
+
 // pods
 
 #[derive(Debug, Deserialize)]

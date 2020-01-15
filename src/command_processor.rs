@@ -228,9 +228,10 @@ impl<'a> CommandProcessor<'a> {
         self.env.stop_all_forwards();
     }
 
-    pub fn process_line(&mut self, line: &str, mut writer: ClickWriter) {
+    /// Process the line.  Returns the result of finish_output on the writer
+    pub fn process_line(&mut self, line: &str, mut writer: ClickWriter) ->  Option<Vec<u8>> {
         if line.is_empty() {
-            return;
+            return writer.finish_output();
         }
         let mut first_non_whitespace = 0;
         for c in line.chars() {
@@ -255,26 +256,26 @@ impl<'a> CommandProcessor<'a> {
                      RightExpr::Pipe(cmd) => {
                          if let Err(e) = writer.setup_pipe(cmd) {
                              println!("{}", e.description());
-                             return;
+                             return writer.finish_output();
                          }
                      }
                      RightExpr::Redir(filename) => match File::create(filename) {
                          Ok(out_file) => {
-                             writer.out_file = Some(out_file);
+                             writer.set_output_file(out_file);
                          }
                          Err(ref e) => {
                              println!("Can't open output file: {}", e);
-                             return;
+                             return writer.finish_output();
                          }
                      },
                      RightExpr::Append(filename) => {
                          match OpenOptions::new().append(true).create(true).open(filename) {
                              Ok(out_file) => {
-                                 writer.out_file = Some(out_file);
+                                 writer.set_output_file(out_file);
                              }
                              Err(ref e) => {
                                  println!("Can't open output file: {}", e);
-                                 return;
+                                 return writer.finish_output();
                              }
                          }
                      }
@@ -357,10 +358,11 @@ impl<'a> CommandProcessor<'a> {
                 }
 
                 // reset output
-                writer.finish_output();
+                writer.finish_output()
             }
             Err(err) => {
                 println!("{}", err);
+                None
             }
         }
     }
@@ -396,28 +398,32 @@ mod tests {
     use rustyline::completion::Pair as RustlinePair;
 
     use std::path::PathBuf;
+    use std::io::Read;
 
     struct TestCmd;
     impl Cmd for TestCmd {
         fn exec(
             &self,
             _env: &mut Env,
-            _args: &mut dyn Iterator<Item = &str>,
-            _writer: &mut ClickWriter,
+            args: &mut dyn Iterator<Item = &str>,
+            writer: &mut ClickWriter,
         ) -> bool {
-            println!("Called");
+            match args.next() {
+                Some(arg) =>  clickwrite!(writer, "Called with {}", arg),
+                None => clickwrite!(writer, "Called with no args"),
+            }
             true
         }
 
-        fn is(&self, _l: &str) -> bool {
-            false
+        fn is(&self, l: &str) -> bool {
+            l == "testcmd"
         }
 
         fn get_name(&self) -> &'static str {
             "testcmd"
         }
 
-        fn write_help<W: Write>(&self, writer: &mut ClickWriter) {
+        fn write_help(&self, writer: &mut ClickWriter) {
             clickwrite!(writer, "HELP\n");
         }
 
@@ -434,11 +440,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_help() {
+    fn get_processor<'a>() -> CommandProcessor<'a> {
         let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
         commands.push(Box::new(TestCmd));
-        let mut p = CommandProcessor::new_with_commands(
+        CommandProcessor::new_with_commands(
             Env::new(
                 get_test_config(),
                 ClickConfig::default(),
@@ -446,8 +451,146 @@ mod tests {
             ),
             PathBuf::from("/tmp/click.test.hist"),
             commands,
+        )
+    }
+
+    #[test]
+    fn test_help() {
+        let mut p = get_processor();
+
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("help testcmd", writer).unwrap();
+        assert_eq!(res, "HELP\n".as_bytes());
+
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("help unknown", writer).unwrap();
+        assert_eq!(res, "I don't know anything about unknown, sorry\n".as_bytes());
+
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("help", writer).unwrap();
+        assert_eq!(res, "Available commands (type 'help [COMMAND]' for details):
+  testcmd             This is the about
+
+Other help topics (type 'help [TOPIC]' for details)
+  completion          Available completion_type values for the 'set' command, and what they mean
+  edit_mode           Available edit_mode values for the 'set' command, and what they mean
+  shell               Redirecting and piping click output to shell commands\n".as_bytes());
+    }
+
+    #[test]
+    fn unknown_command() {
+        let mut p = get_processor();
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("blah", writer).unwrap();
+        assert_eq!(res, "Unknown command\n".as_bytes());
+    }
+
+    #[test]
+    fn exec() {
+        let mut p = get_processor();
+
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("testcmd", writer).unwrap();
+        assert_eq!(res, "Called with no args".as_bytes());
+
+        let buf = Vec::new();
+        let writer = ClickWriter::with_buffer(buf, false);
+        let res = p.process_line("testcmd arg1", writer).unwrap();
+        assert_eq!(res, "Called with arg1".as_bytes());
+    }
+
+    #[test]
+    fn number_selection() {
+        let commands: Vec<Box<dyn Cmd>> = Vec::new();
+        let mut env = Env::new(
+            get_test_config(),
+            ClickConfig::default(),
+            PathBuf::from("/tmp/click.conf"),
         );
-        let writer = ClickWriter::new();
-        p.process_line("help testcmd", writer);
+        let node = ::kube::Node {
+            metadata: ::kube::Metadata::with_name("ns1"),
+            spec: ::kube::NodeSpec { unschedulable: Some(false) },
+            status: ::kube::NodeStatus { conditions: Vec::new() },
+        };
+        let nodelist = ::kube::NodeList {
+            items: vec![node],
+        };
+        let ll = ::LastList::NodeList(nodelist);
+        env.set_lastlist(ll);
+        let mut p = CommandProcessor::new_with_commands(
+            env,
+            PathBuf::from("/tmp/click.test.hist"),
+            commands,
+        );
+        p.process_line("0", ClickWriter::new());
+        assert_eq!(p.env.current_object, ::KObj::Node("ns1".to_string()));
+
+        p.process_line("1", ClickWriter::new());
+        assert_eq!(p.env.current_object, ::KObj::None);
+    }
+
+    #[test]
+    fn redir_to_file() {
+        let dir = tempdir::TempDir::new("click_test_dir").unwrap();
+        let file_path_buf = dir.path().join("foo.txt");
+        let ffos = file_path_buf.clone().into_os_string();
+
+        let mut p = get_processor();
+        let cmd = format!("testcmd > {}", ffos.to_str().unwrap());
+        p.process_line(&cmd, ClickWriter::new());
+
+        let mut file = File::open(file_path_buf).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "Called with no args");
+
+        dir.close().unwrap();
+    }
+
+    #[test]
+    fn append_to_file() {
+        let dir = tempdir::TempDir::new("click_test_dir").unwrap();
+        let file_path_buf = dir.path().join("foo_append.txt");
+        let ffos = file_path_buf.clone().into_os_string();
+
+        let mut p = get_processor();
+
+        let cmd = format!("testcmd >> {}", ffos.to_str().unwrap());
+        p.process_line(&cmd, ClickWriter::new());
+        p.process_line(&cmd, ClickWriter::new());
+
+        let mut file = File::open(file_path_buf).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "Called with no argsCalled with no args");
+
+        dir.close().unwrap();
+    }
+
+    #[test]
+    #[ignore] // we ignore this since we can't guarantee a system has grep
+    fn pipeline() {
+        let dir = tempdir::TempDir::new("click_test_dir").unwrap();
+        let file_path_buf = dir.path().join("foo_pipeline.txt");
+        let ffos = file_path_buf.clone().into_os_string();
+
+        let mut p = get_processor();
+
+        let cmd1 = format!("testcmd foo | grep foo >> {}", ffos.to_str().unwrap());
+        let cmd2 = format!("testcmd foo | grep bar >> {}", ffos.to_str().unwrap());
+        p.process_line(&cmd1, ClickWriter::new());
+        p.process_line(&cmd2, ClickWriter::new());
+
+        let mut file = File::open(file_path_buf).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "Called with foo\n");
+
+        dir.close().unwrap();
     }
 }

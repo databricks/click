@@ -24,6 +24,7 @@ use std::rc::Rc;
 
 pub struct ClickHelper {
     commands: Vec<Box<dyn Cmd>>,
+    help_topics: Vec<&'static str>,
     env: Option<Rc<Env>>,
 }
 
@@ -38,9 +39,12 @@ impl Hinter for ClickHelper {
 }
 
 impl ClickHelper {
-    pub fn new(commands: Vec<Box<dyn Cmd>>) -> ClickHelper {
+    /// Create a new completer. help_topics are any extra things you can type after 'help' that
+    /// aren't commands
+    pub fn new(commands: Vec<Box<dyn Cmd>>, help_topics: Vec<&'static str>) -> ClickHelper {
         ClickHelper {
             commands,
+            help_topics,
             env: None,
         }
     }
@@ -59,6 +63,28 @@ impl ClickHelper {
             }
         }
         None
+    }
+
+    fn get_command_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for cmd in self.commands.iter() {
+            if cmd.get_name().starts_with(line) {
+                candidates.push(Pair {
+                    display: cmd.get_name().to_owned(),
+                    replacement: cmd.get_name().to_owned(),
+                });
+            }
+        }
+    }
+
+    fn get_help_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for topic in self.help_topics.iter() {
+            if topic.starts_with(line) {
+                candidates.push(Pair {
+                    display: (*topic).to_string(),
+                    replacement: (*topic).to_string(),
+                });
+            }
+        }
     }
 }
 
@@ -138,14 +164,21 @@ impl Completer for ClickHelper {
                     } else {
                         return Ok((0, v));
                     }
+                } else if linecmd == "help" {
+                    let cmd_part = split.next().unwrap_or("");
+                    if split.next().is_none() {
+                        // only complete on the first arg to help
+                        self.get_command_completions(cmd_part, &mut v);
+                        self.get_help_completions(cmd_part, &mut v);
+                        return Ok((5, v)); // help plus space is 5 chars
+                    }
                 } else {
-                    for cmd in self.commands.iter() {
-                        if cmd.get_name().starts_with(linecmd) {
-                            v.push(Pair {
-                                display: cmd.get_name().to_owned(),
-                                replacement: cmd.get_name().to_owned(),
-                            });
-                        }
+                    self.get_command_completions(linecmd, &mut v);
+                    if "help".starts_with(linecmd) {
+                        v.push(Pair {
+                            display: "help".to_string(),
+                            replacement: "help".to_string(),
+                        });
                     }
                 }
             }

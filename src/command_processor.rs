@@ -107,7 +107,10 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
 // see comment on ClickCompleter::new for why a raw pointer is needed
 fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickHelper> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
-    rl.set_helper(Some(ClickHelper::new(CommandProcessor::get_command_vec())));
+    rl.set_helper(Some(ClickHelper::new(
+        CommandProcessor::get_command_vec(),
+        vec!["completion", "edit_mode", "shell", "pipes", "redirection"],
+    )));
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl
 }
@@ -308,7 +311,7 @@ impl CommandProcessor {
                 cmd.write_help(writer);
             } else {
                 match hcmd {
-                    // match for meta topics
+                    // match for meta topics (add new topics to the ClickHelper above!)
                     "pipes" | "redirection" | "shell" => {
                         clickwrite!(writer, "{}\n", SHELLP);
                     }
@@ -374,8 +377,8 @@ Examples:\n\
  logs the-cont | grep \"foo bar\" >> /tmp/logs.txt";
 
 static COMPLETIONHELP: &str = "There are two completion types: list or circular.
-- 'list' will complete the next full match (like in Vim by default) (do: 'set completion list)
-- circular will complete until the longest match. If there is more than one match, \
+- list: complete the next full match (like in Vim by default) (do: set completion list)
+- circular: complete until the longest match. If there is more than one match, \
 it will list all matches (like in Bash/Readline). (do: set completion circular)";
 
 static EDITMODEHELP: &str = "There are two edit modes: vi or emacs.

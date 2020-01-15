@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use Env;
+use env::{Env, KObj};
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
@@ -23,7 +23,7 @@ use cmd::Cmd;
 
 pub struct ClickHelper<'a> {
     commands: Vec<Box<dyn Cmd>>,
-    env: &'a ::Env,
+    env: &'a Env,
 }
 
 impl<'a> Helper for ClickHelper<'a> {}
@@ -43,7 +43,7 @@ impl<'a> ClickHelper<'a> {
     /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
     /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
     /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: Vec<Box<dyn Cmd>>, env: *const ::Env) -> ClickHelper<'a> {
+    pub fn new(commands: Vec<Box<dyn Cmd>>, env: *const Env) -> ClickHelper<'a> {
         ClickHelper {
             commands,
             env: unsafe { &*env },
@@ -181,7 +181,7 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    if let ::KObj::Pod { ref containers, .. } = env.current_object {
+    if let KObj::Pod { ref containers, .. } = env.current_object {
         for cont in containers.iter() {
             if cont.starts_with(prefix) {
                 v.push(Pair {

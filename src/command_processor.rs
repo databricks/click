@@ -8,7 +8,7 @@ use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use Env;
+use env::Env;
 
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -395,6 +395,7 @@ associated editor.
 mod tests {
     use super::*;
     use config::{get_test_config, ClickConfig};
+    use env::{KObj, LastList};
     use rustyline::completion::Pair as RustlinePair;
 
     use std::path::PathBuf;
@@ -520,7 +521,7 @@ Other help topics (type 'help [TOPIC]' for details)
         let nodelist = ::kube::NodeList {
             items: vec![node],
         };
-        let ll = ::LastList::NodeList(nodelist);
+        let ll = LastList::NodeList(nodelist);
         env.set_lastlist(ll);
         let mut p = CommandProcessor::new_with_commands(
             env,
@@ -528,10 +529,10 @@ Other help topics (type 'help [TOPIC]' for details)
             commands,
         );
         p.process_line("0", ClickWriter::new());
-        assert_eq!(p.env.current_object, ::KObj::Node("ns1".to_string()));
+        assert_eq!(p.env.current_object, KObj::Node("ns1".to_string()));
 
         p.process_line("1", ClickWriter::new());
-        assert_eq!(p.env.current_object, ::KObj::None);
+        assert_eq!(p.env.current_object, KObj::None);
     }
 
     #[test]

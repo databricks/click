@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
+use cmd::Cmd;
 use env::{Env, KObj};
 
 use rustyline::completion::{Completer, Pair};
@@ -19,39 +21,37 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Context, Helper, Result};
 
-use cmd::Cmd;
+use std::rc::Rc;
 
-pub struct ClickHelper<'a> {
+pub struct ClickHelper {
     commands: Vec<Box<dyn Cmd>>,
-    env: &'a Env,
+    env: Option<Rc<Env>>,
 }
 
-impl<'a> Helper for ClickHelper<'a> {}
+impl Helper for ClickHelper {}
 
-impl<'a> Highlighter for ClickHelper<'a> {}
+impl Highlighter for ClickHelper {}
 
-impl<'a> Hinter for ClickHelper<'a> {
+impl Hinter for ClickHelper {
     fn hint(&self, _line: &str, _pos: usize, _context: &Context) -> Option<String> {
         None
     }
 }
 
-impl<'a> ClickHelper<'a> {
-    /// Create a new ClickHelper.  We use a raw pointer here because this needs to hold onto a
-    /// reference to the env while the main loop is executing, but the main loop also needs to
-    /// mutate the env, so the borrow checker complains with safe code.  However, the main loop is
-    /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
-    /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
-    /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: Vec<Box<dyn Cmd>>, env: *const Env) -> ClickHelper<'a> {
+impl ClickHelper {
+    pub fn new(commands: Vec<Box<dyn Cmd>>) -> ClickHelper {
         ClickHelper {
             commands,
-            env: unsafe { &*env },
+            env: None,
         }
+    }
+
+    pub fn set_env(&mut self, env: Option<Rc<Env>>) {
+        self.env = env;
     }
 }
 
-impl<'a> ClickHelper<'a> {
+impl ClickHelper {
     #[allow(clippy::borrowed_box)]
     fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
         for cmd in self.commands.iter() {
@@ -71,7 +71,7 @@ pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
     }
 }
 
-impl<'a> Completer for ClickHelper<'a> {
+impl Completer for ClickHelper {
     type Candidate = Pair;
     fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
         let mut v = Vec::new();
@@ -133,8 +133,12 @@ impl<'a> Completer for ClickHelper<'a> {
                     };
                     // here the last thing typed wasn't a '-' option, so we ask the command to
                     // do completion
-                    let opts = cmd.try_complete(pos, prefix, self.env);
-                    return Ok((line.len(), opts));
+                    if let Some(ref env) = self.env {
+                        let opts = cmd.try_complete(pos, prefix, &*env);
+                        return Ok((line.len(), opts));
+                    } else {
+                        return Ok((0, v));
+                    }
                 } else {
                     for cmd in self.commands.iter() {
                         if cmd.get_name().starts_with(linecmd) {

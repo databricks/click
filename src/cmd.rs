@@ -111,7 +111,7 @@ where
             true
         }
         Err(err) => {
-            println!("{}", err.message);
+            clickwrite!(writer, "{}\n", err.message);
             false
         }
     }

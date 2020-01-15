@@ -15,6 +15,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 /// Things the can come after a | or > char in input
 enum RightExpr<'a> {
@@ -106,32 +107,26 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
 // see comment on ClickCompleter::new for why a raw pointer is needed
 fn get_editor<'a>(
     config: rustyconfig::Config,
-    raw_env: *const Env,
     hist_path: &PathBuf,
-    commands: Vec<Box<dyn Cmd>>,
-) -> Editor<ClickHelper<'a>> {
+) -> Editor<ClickHelper> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
+    rl.set_helper(Some(ClickHelper::new(CommandProcessor::get_command_vec())));
     rl.load_history(hist_path.as_path()).unwrap_or_default();
-    rl.set_helper(Some(ClickHelper::new(commands, raw_env)));
     rl
 }
 
-pub struct CommandProcessor<'a> {
-    env: Env,
-    rl: Editor<ClickHelper<'a>>,
+pub struct CommandProcessor {
+    env: Rc<Env>,
+    rl: Editor<ClickHelper>,
     hist_path: PathBuf,
     commands: Vec<Box<dyn Cmd>>,
 }
 
-impl<'a> CommandProcessor<'a> {
-    pub fn new(env: Env, hist_path: PathBuf) -> CommandProcessor<'a> {
+impl CommandProcessor {
+    pub fn new(env: Env, hist_path: PathBuf) -> CommandProcessor {
         let commands = CommandProcessor::get_command_vec();
-        let rl = get_editor(
-            env.get_rustyline_conf(),
-            &env,
-            &hist_path,
-            CommandProcessor::get_command_vec(),
-        );
+        let env = Rc::new(env);
+        let rl = get_editor(env.get_rustyline_conf(), &hist_path);
         CommandProcessor {
             env,
             rl,
@@ -145,13 +140,9 @@ impl<'a> CommandProcessor<'a> {
         env: Env,
         hist_path: PathBuf,
         commands: Vec<Box<dyn Cmd>>,
-    ) -> CommandProcessor<'a> {
-        let rl = get_editor(
-            env.get_rustyline_conf(),
-            &env,
-            &hist_path,
-            Vec::new(),
-        );
+    ) -> CommandProcessor {
+        let env = Rc::new(env);
+        let rl = get_editor(env.get_rustyline_conf(), &hist_path);
         CommandProcessor {
             env,
             rl,
@@ -193,19 +184,22 @@ impl<'a> CommandProcessor<'a> {
         commands
     }
 
-    pub fn run_repl(&'a mut self) {
+    pub fn run_repl(&mut self) {
         while !self.env.quit {
             let writer = ClickWriter::new();
             if self.env.need_new_editor {
                 self.rl = get_editor(
                     self.env.get_rustyline_conf(),
-                    &self.env,
                     &self.hist_path,
-                    CommandProcessor::get_command_vec(),
                 );
-                self.env.need_new_editor = false;
+                Rc::get_mut(&mut self.env).unwrap().need_new_editor = false;
             }
+
+            // we set and unset the pointer to the env in the helper here so the get_mut below works
+            let helper_env = Some(self.env.clone());
+            self.rl.helper_mut().map(|h| h.set_env(helper_env));
             let readline = self.rl.readline(self.env.prompt.as_str());
+            self.rl.helper_mut().map(|h| h.set_env(None));
             match readline {
                 Ok(line) => {
                     self.process_line(line.as_str(), writer);
@@ -221,11 +215,12 @@ impl<'a> CommandProcessor<'a> {
                 }
             }
         }
-        self.env.save_click_config();
+        let env = Rc::get_mut(&mut self.env).unwrap();
+        env.save_click_config();
         if let Err(e) = self.rl.save_history(self.hist_path.as_path()) {
             println!("Couldn't save command history: {}", e);
         }
-        self.env.stop_all_forwards();
+        env.stop_all_forwards();
     }
 
     /// Process the line.  Returns the result of finish_output on the writer
@@ -284,13 +279,14 @@ impl<'a> CommandProcessor<'a> {
 
                 let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                 let mut parts = parts_vec.iter().map(|s| &**s);
+                let env = Rc::get_mut(&mut self.env).unwrap();
                 if let Some(cmdstr) = parts.next() {
                     // There was something typed
                     if let Ok(num) = (cmdstr as &str).parse::<usize>() {
-                        self.env.set_current(num);
+                        env.set_current(num);
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
-                        cmd.exec(&mut self.env, &mut parts, &mut writer);
+                        cmd.exec(env, &mut parts, &mut writer);
                     } else if cmdstr == "help" {
                         // help isn't a command as it needs access to the commands vec
                         if let Some(hcmd) = parts.next() {
@@ -441,7 +437,7 @@ mod tests {
         }
     }
 
-    fn get_processor<'a>() -> CommandProcessor<'a> {
+    fn get_processor() -> CommandProcessor {
         let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
         commands.push(Box::new(TestCmd));
         CommandProcessor::new_with_commands(

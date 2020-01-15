@@ -17,7 +17,6 @@ use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-
 /// An object we can have as a "current" thing
 #[derive(Debug, PartialEq)]
 pub enum KObj {
@@ -89,7 +88,8 @@ lazy_static! {
         let r = b.clone();
         ctrlc::set_handler(move || {
             r.store(true, Ordering::SeqCst);
-        }).expect("Error setting Ctrl-C handler");
+        })
+        .expect("Error setting Ctrl-C handler");
         b
     };
 }
@@ -444,8 +444,10 @@ impl Env {
     }
 
     /// Try and expand alias.
-    /// FFIX Returns Some(expanded) if the alias expands, or None if no such alias
-    /// is found
+    /// This function looks at the first word (whitespace delimited) of the
+    /// line, checks if it matches an alias, if it does it returns and ExpandedAlias with the
+    /// expansion and the rest of the line, otherwise the expansion field will be None and rest will
+    /// contain the whole line
     pub fn try_expand_alias<'a>(
         &'a self,
         line: &'a str,
@@ -514,5 +516,47 @@ impl fmt::Display for Env {
                     .unwrap_or(&"<unset, will use xterm>".to_owned())
             ),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::get_test_config;
+
+    #[test]
+    fn try_expand_alias() {
+        let mut cc = ClickConfig::default();
+        let pn_alias = Alias {
+            alias: "pn".to_string(),
+            expanded: "pods --sort node".to_string(),
+        };
+        let x_alias = Alias {
+            alias: "x".to_string(),
+            expanded: "xpand".to_string(),
+        };
+        cc.aliases.push(pn_alias.clone());
+        cc.aliases.push(x_alias.clone());
+        let env = Env::new(get_test_config(), cc, PathBuf::from("/tmp/click.config"));
+
+        let exp1 = env.try_expand_alias("pn", None);
+        assert_eq!(exp1.expansion, Some(&pn_alias));
+        assert_eq!(exp1.rest, "");
+
+        let exp2 = env.try_expand_alias("x", None);
+        assert_eq!(exp2.expansion, Some(&x_alias));
+        assert_eq!(exp2.rest, "");
+
+        let exp2 = env.try_expand_alias("x rest is this", None);
+        assert_eq!(exp2.expansion, Some(&x_alias));
+        assert_eq!(exp2.rest, " rest is this");
+
+        let exp3 = env.try_expand_alias("no alias", None);
+        assert_eq!(exp3.expansion, None);
+        assert_eq!(exp3.rest, "no alias");
+
+        let exp4 = env.try_expand_alias("x", Some("x"));
+        assert_eq!(exp4.expansion, None);
+        assert_eq!(exp4.rest, "x");
     }
 }

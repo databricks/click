@@ -105,10 +105,7 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
 }
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
-fn get_editor<'a>(
-    config: rustyconfig::Config,
-    hist_path: &PathBuf,
-) -> Editor<ClickHelper> {
+fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickHelper> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.set_helper(Some(ClickHelper::new(CommandProcessor::get_command_vec())));
     rl.load_history(hist_path.as_path()).unwrap_or_default();
@@ -186,20 +183,21 @@ impl CommandProcessor {
 
     pub fn run_repl(&mut self) {
         while !self.env.quit {
-            let writer = ClickWriter::new();
+            let mut writer = ClickWriter::new();
             if self.env.need_new_editor {
-                self.rl = get_editor(
-                    self.env.get_rustyline_conf(),
-                    &self.hist_path,
-                );
+                self.rl = get_editor(self.env.get_rustyline_conf(), &self.hist_path);
                 Rc::get_mut(&mut self.env).unwrap().need_new_editor = false;
             }
 
             // we set and unset the pointer to the env in the helper here so the get_mut below works
             let helper_env = Some(self.env.clone());
-            self.rl.helper_mut().map(|h| h.set_env(helper_env));
+            if let Some(h) = self.rl.helper_mut() {
+                h.set_env(helper_env)
+            }
             let readline = self.rl.readline(self.env.prompt.as_str());
-            self.rl.helper_mut().map(|h| h.set_env(None));
+            if let Some(h) = self.rl.helper_mut() {
+                h.set_env(None)
+            }
             match readline {
                 Ok(line) => {
                     self.process_line(line.as_str(), writer);
@@ -210,7 +208,7 @@ impl CommandProcessor {
                     break;
                 }
                 Err(e) => {
-                    println!("Error reading input: {}", e);
+                    clickwrite!(writer, "Error reading input: {}\n", e);
                     break;
                 }
             }
@@ -224,7 +222,7 @@ impl CommandProcessor {
     }
 
     /// Process the line.  Returns the result of finish_output on the writer
-    pub fn process_line(&mut self, line: &str, mut writer: ClickWriter) ->  Option<Vec<u8>> {
+    pub fn process_line(&mut self, line: &str, mut writer: ClickWriter) -> Option<Vec<u8>> {
         if line.is_empty() {
             return writer.finish_output();
         }
@@ -245,37 +243,36 @@ impl CommandProcessor {
         let expanded_line = alias_expand_line(&self.env, lstr);
         match parse_line(&expanded_line) {
             Ok((left, right)) => {
-                 // set up output
-                 match right {
-                     RightExpr::None => {} // do nothing
-                     RightExpr::Pipe(cmd) => {
-                         if let Err(e) = writer.setup_pipe(cmd) {
-                             println!("{}", e.description());
-                             return writer.finish_output();
-                         }
-                     }
-                     RightExpr::Redir(filename) => match File::create(filename) {
-                         Ok(out_file) => {
-                             writer.set_output_file(out_file);
-                         }
-                         Err(ref e) => {
-                             println!("Can't open output file: {}", e);
-                             return writer.finish_output();
-                         }
-                     },
-                     RightExpr::Append(filename) => {
-                         match OpenOptions::new().append(true).create(true).open(filename) {
-                             Ok(out_file) => {
-                                 writer.set_output_file(out_file);
-                             }
-                             Err(ref e) => {
-                                 println!("Can't open output file: {}", e);
-                                 return writer.finish_output();
-                             }
-                         }
-                     }
-                 }
-
+                // set up output
+                match right {
+                    RightExpr::None => {} // do nothing
+                    RightExpr::Pipe(cmd) => {
+                        if let Err(e) = writer.setup_pipe(cmd) {
+                            println!("{}", e.description());
+                            return writer.finish_output();
+                        }
+                    }
+                    RightExpr::Redir(filename) => match File::create(filename) {
+                        Ok(out_file) => {
+                            writer.set_output_file(out_file);
+                        }
+                        Err(ref e) => {
+                            println!("Can't open output file: {}", e);
+                            return writer.finish_output();
+                        }
+                    },
+                    RightExpr::Append(filename) => {
+                        match OpenOptions::new().append(true).create(true).open(filename) {
+                            Ok(out_file) => {
+                                writer.set_output_file(out_file);
+                            }
+                            Err(ref e) => {
+                                println!("Can't open output file: {}", e);
+                                return writer.finish_output();
+                            }
+                        }
+                    }
+                }
 
                 let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                 let mut parts = parts_vec.iter().map(|s| &**s);
@@ -288,66 +285,7 @@ impl CommandProcessor {
                         // found a matching command
                         cmd.exec(env, &mut parts, &mut writer);
                     } else if cmdstr == "help" {
-                        // help isn't a command as it needs access to the commands vec
-                        if let Some(hcmd) = parts.next() {
-                            if let Some(cmd) = self.commands.iter().find(|&c| c.is(hcmd)) {
-                                cmd.write_help(&mut writer);
-                            } else {
-                                match hcmd {
-                                    // match for meta topics
-                                    "pipes" | "redirection" | "shell" => {
-                                        clickwrite!(writer, "{}\n", SHELLP);
-                                    }
-                                    "completion" => {
-                                        clickwrite!(writer, "{}\n", COMPLETIONHELP);
-                                    }
-                                    "edit_mode" => {
-                                        clickwrite!(writer, "{}\n", EDITMODEHELP);
-                                    }
-                                    _ => {
-                                        clickwrite!(
-                                            writer,
-                                            "I don't know anything about {}, sorry\n",
-                                            hcmd
-                                        );
-                                    }
-                                }
-                            }
-                        } else {
-                            clickwrite!(
-                                writer,
-                                "Available commands (type 'help [COMMAND]' for details):\n"
-                            );
-                            let spacer = "                  ";
-                            for c in self.commands.iter() {
-                                clickwrite!(
-                                    writer,
-                                    "  {}{}{}\n",
-                                    c.get_name(),
-                                    &spacer[0..(20 - c.get_name().len())],
-                                    c.about()
-                                );
-                            }
-                            clickwrite!(
-                                writer,
-                                "\nOther help topics (type 'help [TOPIC]' for details)\n"
-                            );
-                            clickwrite!(
-                                writer,
-                                "  completion          Available completion_type values \
-                                 for the 'set' command, and what they mean\n"
-                            );
-                            clickwrite!(
-                                writer,
-                                "  edit_mode           Available edit_mode values for \
-                                 the 'set' command, and what they mean\n"
-                            );
-                            clickwrite!(
-                                writer,
-                                "  shell               Redirecting and piping click \
-                                 output to shell commands\n"
-                            );
-                        }
+                        self.show_help(&mut parts, &mut writer);
                     } else {
                         clickwrite!(writer, "Unknown command\n");
                     }
@@ -360,6 +298,65 @@ impl CommandProcessor {
                 println!("{}", err);
                 None
             }
+        }
+    }
+
+    fn show_help(&mut self, parts: &mut dyn Iterator<Item = &str>, writer: &mut ClickWriter) {
+        // help isn't a command as it needs access to the commands vec
+        if let Some(hcmd) = parts.next() {
+            if let Some(cmd) = self.commands.iter().find(|&c| c.is(hcmd)) {
+                cmd.write_help(writer);
+            } else {
+                match hcmd {
+                    // match for meta topics
+                    "pipes" | "redirection" | "shell" => {
+                        clickwrite!(writer, "{}\n", SHELLP);
+                    }
+                    "completion" => {
+                        clickwrite!(writer, "{}\n", COMPLETIONHELP);
+                    }
+                    "edit_mode" => {
+                        clickwrite!(writer, "{}\n", EDITMODEHELP);
+                    }
+                    _ => {
+                        clickwrite!(writer, "I don't know anything about {}, sorry\n", hcmd);
+                    }
+                }
+            }
+        } else {
+            clickwrite!(
+                writer,
+                "Available commands (type 'help [COMMAND]' for details):\n"
+            );
+            let spacer = "                  ";
+            for c in self.commands.iter() {
+                clickwrite!(
+                    writer,
+                    "  {}{}{}\n",
+                    c.get_name(),
+                    &spacer[0..(20 - c.get_name().len())],
+                    c.about()
+                );
+            }
+            clickwrite!(
+                writer,
+                "\nOther help topics (type 'help [TOPIC]' for details)\n"
+            );
+            clickwrite!(
+                writer,
+                "  completion          Available completion_type values \
+                 for the 'set' command, and what they mean\n"
+            );
+            clickwrite!(
+                writer,
+                "  edit_mode           Available edit_mode values for \
+                 the 'set' command, and what they mean\n"
+            );
+            clickwrite!(
+                writer,
+                "  shell               Redirecting and piping click \
+                 output to shell commands\n"
+            );
         }
     }
 }
@@ -390,12 +387,12 @@ associated editor.
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::{get_test_config, ClickConfig};
+    use config::{get_test_config, Alias, ClickConfig};
     use env::{KObj, LastList};
     use rustyline::completion::Pair as RustlinePair;
 
-    use std::path::PathBuf;
     use std::io::Read;
+    use std::path::PathBuf;
 
     struct TestCmd;
     impl Cmd for TestCmd {
@@ -406,7 +403,7 @@ mod tests {
             writer: &mut ClickWriter,
         ) -> bool {
             match args.next() {
-                Some(arg) =>  clickwrite!(writer, "Called with {}", arg),
+                Some(arg) => clickwrite!(writer, "Called with {}", arg),
                 None => clickwrite!(writer, "Called with no args"),
             }
             true
@@ -463,18 +460,25 @@ mod tests {
         let buf = Vec::new();
         let writer = ClickWriter::with_buffer(buf, false);
         let res = p.process_line("help unknown", writer).unwrap();
-        assert_eq!(res, "I don't know anything about unknown, sorry\n".as_bytes());
+        assert_eq!(
+            res,
+            "I don't know anything about unknown, sorry\n".as_bytes()
+        );
 
         let buf = Vec::new();
         let writer = ClickWriter::with_buffer(buf, false);
         let res = p.process_line("help", writer).unwrap();
-        assert_eq!(res, "Available commands (type 'help [COMMAND]' for details):
+        assert_eq!(
+            res,
+            "Available commands (type 'help [COMMAND]' for details):
   testcmd             This is the about
 
 Other help topics (type 'help [TOPIC]' for details)
   completion          Available completion_type values for the 'set' command, and what they mean
   edit_mode           Available edit_mode values for the 'set' command, and what they mean
-  shell               Redirecting and piping click output to shell commands\n".as_bytes());
+  shell               Redirecting and piping click output to shell commands\n"
+                .as_bytes()
+        );
     }
 
     #[test]
@@ -511,12 +515,14 @@ Other help topics (type 'help [TOPIC]' for details)
         );
         let node = ::kube::Node {
             metadata: ::kube::Metadata::with_name("ns1"),
-            spec: ::kube::NodeSpec { unschedulable: Some(false) },
-            status: ::kube::NodeStatus { conditions: Vec::new() },
+            spec: ::kube::NodeSpec {
+                unschedulable: Some(false),
+            },
+            status: ::kube::NodeStatus {
+                conditions: Vec::new(),
+            },
         };
-        let nodelist = ::kube::NodeList {
-            items: vec![node],
-        };
+        let nodelist = ::kube::NodeList { items: vec![node] };
         let ll = LastList::NodeList(nodelist);
         env.set_lastlist(ll);
         let mut p = CommandProcessor::new_with_commands(
@@ -589,5 +595,61 @@ Other help topics (type 'help [TOPIC]' for details)
         assert_eq!(contents, "Called with foo\n");
 
         dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_alias_expand_line() {
+        let mut cc = ClickConfig::default();
+        let pn_alias = Alias {
+            alias: "pn".to_string(),
+            expanded: "pods --sort node".to_string(),
+        };
+        let x_alias = Alias {
+            alias: "x".to_string(),
+            expanded: "xpand".to_string(),
+        };
+        let x_chain = Alias {
+            alias: "y".to_string(),
+            expanded: "x".to_string(),
+        };
+
+        let x_chain_arg = Alias {
+            alias: "z".to_string(),
+            expanded: "x arg".to_string(),
+        };
+        cc.aliases.push(pn_alias);
+        cc.aliases.push(x_alias);
+        cc.aliases.push(x_chain);
+        cc.aliases.push(x_chain_arg);
+        let env = Env::new(get_test_config(), cc, PathBuf::from("/tmp/click.config"));
+
+        assert_eq!(alias_expand_line(&env, "pn"), "pods --sort node");
+
+        assert_eq!(alias_expand_line(&env, "x"), "xpand");
+
+        assert_eq!(alias_expand_line(&env, "x args"), "xpand args");
+
+        assert_eq!(alias_expand_line(&env, "not an alias"), "not an alias");
+
+        assert_eq!(alias_expand_line(&env, "x x"), "xpand x");
+
+        assert_eq!(
+            alias_expand_line(&env, "pn pn foo"),
+            "pods --sort node pn foo"
+        );
+
+        assert_eq!(alias_expand_line(&env, "xx x"), "xx x");
+
+        assert_eq!(alias_expand_line(&env, "y"), "xpand");
+
+        assert_eq!(alias_expand_line(&env, "z"), "xpand arg");
+
+        assert_eq!(alias_expand_line(&env, "y arg"), "xpand arg");
+
+        assert_eq!(alias_expand_line(&env, "z outer"), "xpand arg outer");
+
+        assert_eq!(alias_expand_line(&env, "y x"), "xpand x");
+
+        assert_eq!(alias_expand_line(&env, "z x"), "xpand arg x");
     }
 }

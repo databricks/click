@@ -17,6 +17,7 @@
 use completer;
 use config;
 use describe;
+use env::{self, Env, KObj, LastList};
 use kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
@@ -25,7 +26,6 @@ use kube::{
 use output::ClickWriter;
 use table::{opt_sort, CellSpec};
 use values::{get_val_as, val_item_count, val_str, val_u64};
-use env::{self, Env, KObj, LastList};
 
 use ansi_term::Colour::Yellow;
 use chrono::offset::Local;
@@ -196,7 +196,7 @@ macro_rules! command {
                     clickwrite!(writer, "Couldn't print help: {}", res);
                 }
                 println!(); // clap print_help doesn't add final newline
-                // clap write_help doesn't add final newline
+                            // clap write_help doesn't add final newline
                 clickwrite!(writer, "\n");
             }
 

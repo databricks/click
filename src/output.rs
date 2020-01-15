@@ -70,7 +70,7 @@ enum WriterOutput {
     #[allow(dead_code)] // used in test
     Buffer(Vec<u8>),
     File(File),
-    Pipe(PipeProc),
+    Pipe(Box<PipeProc>),
 }
 
 pub struct ClickWriter {
@@ -86,10 +86,10 @@ impl ClickWriter {
 
     #[allow(dead_code)] // used in test
     pub fn with_buffer(buffer: Vec<u8>, _do_color: bool) -> ClickWriter {
-         ClickWriter {
-             output: WriterOutput::Buffer(buffer),
-         }
-     }
+        ClickWriter {
+            output: WriterOutput::Buffer(buffer),
+        }
+    }
 
     pub fn set_output_file(&mut self, file: File) {
         self.output = WriterOutput::File(file);
@@ -99,10 +99,10 @@ impl ClickWriter {
         let expr = sh_dangerous(cmd);
         let (pipe_read, pipe_write) = pipe()?;
         let handle = expr.stdin_file(pipe_read).start()?;
-        self.output = WriterOutput::Pipe(PipeProc {
+        self.output = WriterOutput::Pipe(Box::new(PipeProc {
             pipe: pipe_write,
             expr: handle,
-        });
+        }));
         Ok(())
     }
 
@@ -119,10 +119,8 @@ impl ClickWriter {
                 }
                 None
             }
-            WriterOutput::Buffer(buffer) => {
-                Some(buffer)
-            }
-            _ => None
+            WriterOutput::Buffer(buffer) => Some(buffer),
+            _ => None,
         }
     }
 
@@ -153,7 +151,7 @@ impl Write for ClickWriter {
             WriterOutput::Stdout(ref mut stdout) => stdout.write(buf),
             WriterOutput::Buffer(ref mut buffer) => buffer.write(buf),
             WriterOutput::File(ref mut file) => file.write(buf),
-            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.write(buf)
+            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.write(buf),
         }
     }
 
@@ -162,7 +160,7 @@ impl Write for ClickWriter {
             WriterOutput::Stdout(ref mut stdout) => stdout.flush(),
             WriterOutput::Buffer(ref mut buffer) => buffer.flush(),
             WriterOutput::File(ref mut file) => file.flush(),
-            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.flush()
+            WriterOutput::Pipe(ref mut pipe_proc) => pipe_proc.flush(),
         }
     }
 }

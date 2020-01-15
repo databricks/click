@@ -67,7 +67,6 @@ mod subjaltnames;
 mod table;
 mod values;
 
-
 use clap::{App, Arg};
 
 use std::error::Error;

@@ -1,12 +1,13 @@
 use config::{self, Alias, ClickConfig, Config};
 use error::KubeError;
+use kobj::KObj;
 use kube::{
     ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
     ServiceList, StatefulSetList,
 };
 use values::val_str_opt;
 
-use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
+use ansi_term::Colour::{Green, Red, Yellow};
 use rustyline::config as rustyconfig;
 use tempdir::TempDir;
 
@@ -16,24 +17,6 @@ use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-
-/// An object we can have as a "current" thing
-#[derive(Debug, PartialEq)]
-pub enum KObj {
-    None,
-    Pod {
-        name: String,
-        containers: Vec<String>,
-    },
-    Node(String),
-    Deployment(String),
-    Service(String),
-    ReplicaSet(String),
-    StatefulSet(String),
-    ConfigMap(String),
-    Secret(String),
-    Job(String),
-}
 
 pub enum LastList {
     None,
@@ -73,7 +56,7 @@ pub struct Env {
     pub need_new_editor: bool,
     pub kluster: Option<Kluster>,
     pub namespace: Option<String>,
-    pub current_object: KObj,
+    pub current_object: Option<KObj>,
     pub current_object_namespace: Option<String>,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
@@ -106,7 +89,7 @@ impl Env {
             need_new_editor: false,
             kluster: None,
             namespace,
-            current_object: KObj::None,
+            current_object: None,
             current_object_namespace: None,
             last_objs: LastList::None,
             ctrlcbool: CTC_BOOL.clone(),
@@ -146,16 +129,8 @@ impl Env {
                 Green.paint("none")
             },
             match self.current_object {
-                KObj::None => Yellow.paint("none"),
-                KObj::Pod { ref name, .. } => Yellow.bold().paint(name.as_str()),
-                KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
-                KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
-                KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
-                KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
-                KObj::StatefulSet(ref name) => Green.bold().paint(name.as_str()),
-                KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
-                KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
-                KObj::Job(ref name) => Purple.bold().paint(name.as_str()),
+                Some(ref obj) => obj.prompt_str(),
+                None => Yellow.paint("none"),
             }
         );
     }
@@ -248,7 +223,7 @@ impl Env {
     }
 
     pub fn clear_current(&mut self) {
-        self.current_object = KObj::None;
+        self.current_object = None;
         self.set_prompt();
     }
 
@@ -265,37 +240,37 @@ impl Env {
                         .iter()
                         .map(|cspec| cspec.name.clone())
                         .collect();
-                    self.current_object = KObj::Pod {
+                    self.current_object = Some(KObj::Pod {
                         name: pod.metadata.name.clone(),
                         containers,
-                    };
+                    });
                     self.current_object_namespace = pod.metadata.namespace.clone();
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::NodeList(ref nl) => {
                 if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
-                    self.current_object = KObj::Node(name);
+                    self.current_object = Some(KObj::Node(name));
                     self.current_object_namespace = None;
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::DeploymentList(ref dl) => {
                 if let Some(dep) = dl.items.get(num) {
-                    self.current_object = KObj::Deployment(dep.metadata.name.clone());
+                    self.current_object = Some(KObj::Deployment(dep.metadata.name.clone()));
                     self.current_object_namespace = dep.metadata.namespace.clone();
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::ServiceList(ref sl) => {
                 if let Some(service) = sl.items.get(num) {
-                    self.current_object = KObj::Service(service.metadata.name.clone());
+                    self.current_object = Some(KObj::Service(service.metadata.name.clone()));
                     self.current_object_namespace = service.metadata.namespace.clone();
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::ReplicaSetList(ref rsl) => {
@@ -303,16 +278,16 @@ impl Env {
                     match val_str_opt("/metadata/name", replicaset) {
                         Some(name) => {
                             let namespace = val_str_opt("/metadata/namespace", replicaset);
-                            self.current_object = KObj::ReplicaSet(name);
+                            self.current_object = Some(KObj::ReplicaSet(name));
                             self.current_object_namespace = namespace;
                         }
                         None => {
                             println!("ReplicaSet has no name in metadata");
-                            self.current_object = KObj::None;
+                            self.current_object = None;
                         }
                     }
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::StatefulSetList(ref stfs) => {
@@ -320,16 +295,16 @@ impl Env {
                     match val_str_opt("/metadata/name", statefulset) {
                         Some(name) => {
                             let namespace = val_str_opt("/metadata/namespace", statefulset);
-                            self.current_object = KObj::StatefulSet(name);
+                            self.current_object = Some(KObj::StatefulSet(name));
                             self.current_object_namespace = namespace;
                         }
                         None => {
                             println!("StatefulSet has no name in metadata");
-                            self.current_object = KObj::None;
+                            self.current_object = None;
                         }
                     }
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::ConfigMapList(ref cml) => {
@@ -337,16 +312,16 @@ impl Env {
                     match val_str_opt("/metadata/name", cm) {
                         Some(name) => {
                             let namespace = val_str_opt("/metadata/namespace", cm);
-                            self.current_object = KObj::ConfigMap(name);
+                            self.current_object = Some(KObj::ConfigMap(name));
                             self.current_object_namespace = namespace;
                         }
                         None => {
                             println!("ConfigMap has no name in metadata");
-                            self.current_object = KObj::None;
+                            self.current_object = None;
                         }
                     }
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::SecretList(ref sl) => {
@@ -354,16 +329,16 @@ impl Env {
                     match val_str_opt("/metadata/name", secret) {
                         Some(name) => {
                             let namespace = val_str_opt("/metadata/namespace", secret);
-                            self.current_object = KObj::Secret(name);
+                            self.current_object = Some(KObj::Secret(name));
                             self.current_object_namespace = namespace;
                         }
                         None => {
                             println!("Secret has no name in metadata");
-                            self.current_object = KObj::None;
+                            self.current_object = None;
                         }
                     }
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
             LastList::JobList(ref jl) => {
@@ -371,28 +346,30 @@ impl Env {
                     match val_str_opt("/metadata/name", job) {
                         Some(name) => {
                             let namespace = val_str_opt("/metadata/namespace", job);
-                            self.current_object = KObj::Job(name);
+                            self.current_object = Some(KObj::Job(name));
                             self.current_object_namespace = namespace;
                         }
                         None => {
                             println!("Job has no name in metadata");
-                            self.current_object = KObj::None;
+                            self.current_object = None;
                         }
                     }
                 } else {
-                    self.current_object = KObj::None;
+                    self.current_object = None;
                 }
             }
         }
         self.set_prompt();
     }
 
-    pub fn current_pod(&self) -> Option<&String> {
-        if let KObj::Pod { ref name, .. } = self.current_object {
-            Some(name)
-        } else {
-            None
-        }
+    pub fn current_pod(&self) -> Option<&str> {
+        self.current_object.as_ref().and_then(|obj| {
+            if let KObj::Pod { name, .. } = obj {
+                Some(name.as_str())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn run_on_kluster<F, R>(&self, f: F) -> Option<R>

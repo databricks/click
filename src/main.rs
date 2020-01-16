@@ -61,6 +61,7 @@ mod connector;
 mod describe;
 mod env;
 mod error;
+mod kobj;
 mod kube;
 mod parser;
 mod subjaltnames;

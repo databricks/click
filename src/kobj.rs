@@ -11,6 +11,7 @@ use std::io::Write;
 
 /// An object we can have as a "current" thing
 // TODO(nick): This should hold the namespace too
+#[derive(Debug, PartialEq)]
 pub enum KObj {
     Pod {
         name: String,

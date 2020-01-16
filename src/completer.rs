@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use cmd::Cmd;
-use env::{Env, KObj};
+use env::Env;
+use kobj::KObj;
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;

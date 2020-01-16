@@ -16,9 +16,8 @@
 
 use completer;
 use config;
-use describe;
 use kobj::KObj;
-use env::{self, Env, KObj, LastList};
+use env::{self, Env, LastList};
 use kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
@@ -40,7 +39,6 @@ use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
 use rustyline::completion::Pair as RustlinePair;
-use serde::ser::Serialize;
 use serde_json;
 use serde_json::Value;
 
@@ -1715,7 +1713,7 @@ command!(
         if let Some(ref ns) = env.current_object_namespace {
             let mut no_delete_opts = false;
             if let Some(url) = match env.current_object {
-                Some(KObj::Pod) { ref name, .. } => {
+                Some(KObj::Pod { ref name, .. }) => {
                     clickwrite!(writer, "Delete pod {} [y/N]? ", name);
                     Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
                 }

@@ -123,13 +123,11 @@ pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
         };
         let start = if start_str.is_empty() {
             0
+        } else if let Ok(s) = start_str.parse::<usize>() {
+            s
         } else {
-            if let Ok(s) = start_str.parse::<usize>() {
-                s
-            } else {
-                // whatever was before the .. isn't a number, so this isn't a proper range
-                return None;
-            }
+            // whatever was before the .. isn't a number, so this isn't a proper range
+            return None;
         };
 
         if end_str.is_empty() {
@@ -140,18 +138,16 @@ pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
                 // this is a range from, return the range
                 return Some(Box::new(start..));
             }
-        } else {
-            if let Ok(end) = end_str.parse::<usize>() {
-                // also specified an end, return the specified range
-                if inclusive {
-                    return Some(Box::new(start..=end));
-                } else {
-                    return Some(Box::new(start..end));
-                }
+        } else if let Ok(end) = end_str.parse::<usize>() {
+            // also specified an end, return the specified range
+            if inclusive {
+                return Some(Box::new(start..=end));
             } else {
-                // whatever was after the .. isn't a number, so this isn't a proper range
-                return None;
+                return Some(Box::new(start..end));
             }
+        } else {
+            // whatever was after the .. isn't a number, so this isn't a proper range
+            return None;
         };
     }
     None

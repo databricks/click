@@ -541,13 +541,14 @@ Other help topics (type 'help [TOPIC]' for details)
             commands,
         );
         p.process_line("0", ClickWriter::new());
-        assert_eq!(p.env.current_selection(), &ObjectSelection::Single(
-            KObj {
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Single(KObj {
                 name: "ns1".to_string(),
                 namespace: None,
                 typ: ObjType::Node,
-            }
-        ));
+            })
+        );
 
         p.process_line("1", ClickWriter::new());
         assert_eq!(p.env.current_selection(), &ObjectSelection::None);

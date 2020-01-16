@@ -216,7 +216,6 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     }
 }
 
-
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
     if let ObjectSelection::Single(obj) = env.current_selection() {

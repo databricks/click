@@ -64,12 +64,10 @@ impl KObj {
     }
 
     pub fn from_value(value: &Value, typ: ObjType) -> Option<KObj> {
-        val_str_opt("/metadata/name", value).map(|name| {
-            KObj {
-                name: name,
-                namespace: val_str_opt("/metadata/namespace", value),
-                typ,
-            }
+        val_str_opt("/metadata/name", value).map(|name| KObj {
+            name,
+            namespace: val_str_opt("/metadata/namespace", value),
+            typ,
         })
     }
 
@@ -146,15 +144,13 @@ impl KObj {
     pub fn describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
         let namespace = match self.typ {
             ObjType::Node => "",
-            _ => {
-                match self.namespace {
-                    Some(ref ns) => ns,
-                    None => {
-                        clickwrite!(writer, "Don't know namespace for {}\n", self.name());
-                        return;
-                    }
+            _ => match self.namespace {
+                Some(ref ns) => ns,
+                None => {
+                    clickwrite!(writer, "Don't know namespace for {}\n", self.name());
+                    return;
                 }
-            }
+            },
         };
 
         let url = self.url(namespace);

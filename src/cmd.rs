@@ -1260,19 +1260,16 @@ command!(
             pushed_label = true;
         }
 
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                if obj.is(ObjType::Node) {
-                    if pushed_label {
-                        urlstr.push('&');
-                    } else {
-                        urlstr.push('?');
-                    }
+        if let ObjectSelection::Single(obj) = env.current_selection() {
+            if obj.is(ObjType::Node) {
+                if pushed_label {
+                    urlstr.push('&');
+                } else {
+                    urlstr.push('?');
                 }
-                urlstr.push_str("fieldSelector=spec.nodeName=");
-                urlstr.push_str(obj.name());
             }
-            _ => {}
+            urlstr.push_str("fieldSelector=spec.nodeName=");
+            urlstr.push_str(obj.name());
         }
 
         let pl: Option<PodList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
@@ -1302,14 +1299,11 @@ fn pick_container<'a>(obj: &'a KObj, writer: &mut ClickWriter) -> &'a str {
     match obj.typ {
         ObjType::Pod { ref containers, .. } => {
             if containers.len() > 1 {
-                clickwrite!(
-                    writer,
-                    "Pod has multiple containers, picking the first one"
-                );
+                clickwrite!(writer, "Pod has multiple containers, picking the first one");
             }
             containers[0].as_str()
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
@@ -1392,7 +1386,7 @@ command!(
                 clickwrite!(writer, "No logs on ranges yet\n");
                 return;
             }
-            ObjectSelection::None =>{
+            ObjectSelection::None => {
                 clickwrite!(writer, "Need an active selection for logs\n");
                 return;
             }
@@ -1405,7 +1399,10 @@ command!(
         let namespace = match obj.namespace {
             Some(ref ns) => ns,
             None => {
-                clickwrite!(writer, "Current pod has no namespace, this shouldn't be possible.");
+                clickwrite!(
+                    writer,
+                    "Current pod has no namespace, this shouldn't be possible."
+                );
                 return;
             }
         };
@@ -1417,7 +1414,9 @@ command!(
 
         let mut url = format!(
             "/api/v1/namespaces/{}/pods/{}/log?container={}",
-            namespace, obj.name(), cont
+            namespace,
+            obj.name(),
+            cont
         );
         if matches.is_present("follow") {
             url.push_str("&follow=true");
@@ -1426,9 +1425,7 @@ command!(
             url.push_str("&previous=true");
         }
         if matches.is_present("tail") {
-            url.push_str(
-                format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str(),
-            );
+            url.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
         }
         if matches.is_present("since") {
             // all unwraps already validated
@@ -1437,8 +1434,7 @@ command!(
         }
         if matches.is_present("sinceTime") {
             let specified =
-                DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap())
-                .unwrap();
+                DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
             let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
             url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
         }
@@ -1475,11 +1471,7 @@ command!(
                 let tmpdir = match env.tempdir {
                     Ok(ref td) => td,
                     Err(ref e) => {
-                        clickwrite!(
-                            writer,
-                            "Failed to create tempdir: {}\n",
-                            e.description()
-                        );
+                        clickwrite!(writer, "Failed to create tempdir: {}\n", e.description());
                         return;
                     }
                 };
@@ -1534,19 +1526,11 @@ command!(
                             cmd!(editor, file_path)
                         };
                         if let Err(e) = expr.start() {
-                            clickwrite!(
-                                writer,
-                                "Could not start editor: {}\n",
-                                e.description()
-                            );
+                            clickwrite!(writer, "Could not start editor: {}\n", e.description());
                         }
                     }
                     Err(e) => {
-                        clickwrite!(
-                            writer,
-                            "Could not create temp file: {}\n",
-                            e.description()
-                        );
+                        clickwrite!(writer, "Could not create temp file: {}\n", e.description());
                     }
                 }
             } else {
@@ -1635,10 +1619,9 @@ command!(
     noop_complete!(),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
-        if let (Some(ref kluster), Some(ref pod)) = (
-            env.kluster.as_ref(),
-            env.current_pod().as_ref(),
-        ) {
+        if let (Some(ref kluster), Some(ref pod)) =
+            (env.kluster.as_ref(), env.current_pod().as_ref())
+        {
             let mut contargs = if let Some(container) = matches.value_of("container") {
                 vec!["-c", container]
             } else {
@@ -1740,15 +1723,13 @@ command!(
                 let name = obj.name();
                 let namespace = match obj.typ {
                     ObjType::Node => "",
-                    _ => {
-                        match obj.namespace {
-                            Some(ref ns) => ns,
-                            None => {
-                                clickwrite!(writer, "Don't know namespace for {}\n", obj.name());
-                                return;
-                            }
+                    _ => match obj.namespace {
+                        Some(ref ns) => ns,
+                        None => {
+                            clickwrite!(writer, "Don't know namespace for {}\n", obj.name());
+                            return;
                         }
-                    }
+                    },
                 };
                 clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
                 io::stdout().flush().expect("Could not flush stdout");
@@ -1877,9 +1858,11 @@ command!(
     noop_complete!(),
     |_matches, env, writer| {
         if let Some(ref pod) = env.current_pod() {
-            let url = format!("/api/v1/namespaces/{}/pods/{}",
-                              pod.namespace.as_ref().unwrap(),
-                              pod.name());
+            let url = format!(
+                "/api/v1/namespaces/{}/pods/{}",
+                pod.namespace.as_ref().unwrap(),
+                pod.name()
+            );
             let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
             if let Some(pod) = pod_opt {
                 clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
@@ -2708,9 +2691,10 @@ Examples:
         let (pod, ns) = {
             let epod = env.current_pod();
             match epod {
-                Some(p) => {
-                    (p.name().to_string(), p.namespace.as_ref().unwrap().to_string())
-                }
+                Some(p) => (
+                    p.name().to_string(),
+                    p.namespace.as_ref().unwrap().to_string(),
+                ),
                 None => {
                     write!(stderr(), "No active pod").unwrap_or(());
                     return;

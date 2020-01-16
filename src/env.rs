@@ -236,145 +236,73 @@ impl Env {
         self.set_prompt();
     }
 
-    pub fn set_current(&mut self, num: usize) {
+    /// get the item from the last list at the specified index
+    pub fn item_at(&self, index: usize) -> Option<KObj> {
         match self.last_objs {
             LastList::None => {
                 println!("No active object list");
+                None
             }
-            LastList::PodList(ref pl) => {
-                if let Some(pod) = pl.items.get(num) {
-                    let containers = pod
-                        .spec
-                        .containers
-                        .iter()
-                        .map(|cspec| cspec.name.clone())
-                        .collect();
-                    self.current_selection = ObjectSelection::Single(
-                        KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
-                    );
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::NodeList(ref nl) => {
-                if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
-                    self.current_selection = ObjectSelection::Single(
-                        KObj {
-                            name,
-                            namespace: None,
-                            typ: ObjType::Node
-                        }
-                    );
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::DeploymentList(ref dl) => {
-                if let Some(dep) = dl.items.get(num) {
-                    self.current_selection = ObjectSelection::Single(
-                        KObj::from_metadata(&dep.metadata, ObjType::Deployment)
-                    );
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::ServiceList(ref sl) => {
-                if let Some(service) = sl.items.get(num) {
-                    self.current_selection = ObjectSelection::Single(
-                        KObj::from_metadata(&service.metadata, ObjType::Service)
-                    );
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::ReplicaSetList(ref rsl) => {
-                if let Some(ref replicaset) = rsl.items.get(num) {
-                    match KObj::from_value(replicaset, ObjType::ReplicaSet) {
-                        Some(obj) => {
-                            self.current_selection = ObjectSelection::Single(obj)
-                        }
-                        None => {
-                            println!("ReplicaSet has no name in metadata");
-                            self.current_selection = ObjectSelection::None;
-                        }
-                    }
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::StatefulSetList(ref stfs) => {
-                if let Some(ref statefulset) = stfs.items.get(num) {
-                    match KObj::from_value(statefulset, ObjType::StatefulSet) {
-                        Some(obj) => {
-                            self.current_selection = ObjectSelection::Single(obj)
-                        }
-                        None => {
-                            println!("StatefulSet has no name in metadata");
-                            self.current_selection = ObjectSelection::None;
-                        }
-                    }
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::ConfigMapList(ref cml) => {
-                if let Some(ref cm) = cml.items.get(num) {
-                       match KObj::from_value(cm, ObjType::ConfigMap) {
-                        Some(obj) => {
-                            self.current_selection = ObjectSelection::Single(obj)
-                        }
-                        None => {
-                            println!("ConfigMap has no name in metadata");
-                            self.current_selection = ObjectSelection::None;
-                        }
-                    }
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::SecretList(ref sl) => {
-                if let Some(ref secret) = sl.items.get(num) {
-                    match KObj::from_value(secret, ObjType::Secret) {
-                        Some(obj) => {
-                            self.current_selection = ObjectSelection::Single(obj)
-                        }
-                        None => {
-                            println!("Secret has no name in metadata");
-                            self.current_selection = ObjectSelection::None;
-                        }
-                    }
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
-            LastList::JobList(ref jl) => {
-                if let Some(ref job) = jl.items.get(num) {
-                    match KObj::from_value(job, ObjType::Job) {
-                        Some(obj) => {
-                            self.current_selection = ObjectSelection::Single(obj)
-                        }
-                        None => {
-                            println!("Job has no name in metadata");
-                            self.current_selection = ObjectSelection::None;
-                        }
-                    }
-                } else {
-                    self.current_selection = ObjectSelection::None;
-                }
-            }
+            LastList::PodList(ref pl) => pl.items.get(index).map(|pod| {
+                let containers = pod
+                    .spec
+                    .containers
+                    .iter()
+                    .map(|cspec| cspec.name.clone())
+                    .collect();
+                KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
+            }),
+            LastList::NodeList(ref nl) => nl.items.get(index).map(|n| KObj {
+                name: n.metadata.name.clone(),
+                namespace: None,
+                typ: ObjType::Node,
+            }),
+            LastList::DeploymentList(ref dl) => dl
+                .items
+                .get(index)
+                .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment)),
+            LastList::ServiceList(ref sl) => sl
+                .items
+                .get(index)
+                .map(|service| KObj::from_metadata(&service.metadata, ObjType::Service)),
+            LastList::ReplicaSetList(ref rsl) => rsl
+                .items
+                .get(index)
+                .and_then(|replicaset| KObj::from_value(replicaset, ObjType::ReplicaSet)),
+            LastList::StatefulSetList(ref stfs) => stfs
+                .items
+                .get(index)
+                .and_then(|statefulset| KObj::from_value(statefulset, ObjType::StatefulSet)),
+            LastList::ConfigMapList(ref cml) => cml
+                .items
+                .get(index)
+                .and_then(|cm| KObj::from_value(cm, ObjType::ConfigMap)),
+            LastList::SecretList(ref sl) => sl
+                .items
+                .get(index)
+                .and_then(|secret| KObj::from_value(secret, ObjType::Secret)),
+            LastList::JobList(ref jl) => jl
+                .items
+                .get(index)
+                .and_then(|job| KObj::from_value(job, ObjType::Job)),
         }
+    }
+
+    pub fn set_current(&mut self, num: usize) {
+        self.current_selection = match self.item_at(num) {
+            Some(obj) => ObjectSelection::Single(obj),
+            None => ObjectSelection::None,
+        };
         self.set_prompt();
     }
 
     pub fn current_pod(&self) -> Option<&KObj> {
         match self.current_selection {
-            ObjectSelection::Single(ref obj) => {
-                match obj.typ {
-                    ObjType::Pod { .. } => Some(obj),
-                    _ => None,
-                }
-            }
-            _ => None
+            ObjectSelection::Single(ref obj) => match obj.typ {
+                ObjType::Pod { .. } => Some(obj),
+                _ => None,
+            },
+            _ => None,
         }
     }
 

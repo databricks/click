@@ -1,34 +1,40 @@
 use describe;
+use kube::Metadata;
 use output::ClickWriter;
+use values::val_str_opt;
 use Env;
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
 use serde::ser::Serialize;
+use serde_json::Value;
 
 use std::io::Write;
 
-/// An object we can have as a "current" thing
-// TODO(nick): This should hold the namespace too
 #[derive(Debug, PartialEq)]
-pub enum KObj {
-    Pod {
-        name: String,
-        containers: Vec<String>,
-    },
-    Node(String),
-    Deployment(String),
-    Service(String),
-    ReplicaSet(String),
-    StatefulSet(String),
-    ConfigMap(String),
-    Secret(String),
-    Job(String),
+pub enum ObjType {
+    Pod { containers: Vec<String> },
+    Node,
+    Deployment,
+    Service,
+    ReplicaSet,
+    StatefulSet,
+    ConfigMap,
+    Secret,
+    Job,
+}
+
+/// An object we can have as a "current" thing
+#[derive(Debug, PartialEq)]
+pub struct KObj {
+    pub name: String,
+    pub namespace: Option<String>,
+    pub typ: ObjType,
 }
 
 fn maybe_full_describe_output<T: ?Sized>(
-    matches: ArgMatches,
+    matches: &ArgMatches,
     value: &T,
     writer: &mut ClickWriter,
 ) -> bool
@@ -49,102 +55,125 @@ where
 static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 impl KObj {
-    pub fn name(&self) -> &str {
-        match self {
-            KObj::Pod { name, .. } => name,
-            KObj::Node(name)
-            | KObj::Deployment(name)
-            | KObj::Service(name)
-            | KObj::ReplicaSet(name)
-            | KObj::StatefulSet(name)
-            | KObj::ConfigMap(name)
-            | KObj::Secret(name)
-            | KObj::Job(name) => name,
+    pub fn from_metadata(metadata: &Metadata, typ: ObjType) -> KObj {
+        KObj {
+            name: metadata.name.clone(),
+            namespace: metadata.namespace.clone(),
+            typ,
         }
     }
 
+    pub fn from_value(value: &Value, typ: ObjType) -> Option<KObj> {
+        val_str_opt("/metadata/name", value).map(|name| {
+            KObj {
+                name: name,
+                namespace: val_str_opt("/metadata/namespace", value),
+                typ,
+            }
+        })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn type_str(&self) -> &str {
-        match self {
-            KObj::Pod { .. } => "Pod",
-            KObj::Node(_) => "Node",
-            KObj::Deployment(_) => "Deployment",
-            KObj::Service(_) => "Service",
-            KObj::ReplicaSet(_) => "ReplicaSet",
-            KObj::StatefulSet(_) => "StatefulSet",
-            KObj::ConfigMap(_) => "ConfigMap",
-            KObj::Secret(_) => "Secret",
-            KObj::Job(_) => "Job",
+        match self.typ {
+            ObjType::Pod { .. } => "Pod",
+            ObjType::Node => "Node",
+            ObjType::Deployment => "Deployment",
+            ObjType::Service => "Service",
+            ObjType::ReplicaSet => "ReplicaSet",
+            ObjType::StatefulSet => "StatefulSet",
+            ObjType::ConfigMap => "ConfigMap",
+            ObjType::Secret => "Secret",
+            ObjType::Job => "Job",
         }
     }
 
     pub fn prompt_str(&self) -> ANSIString {
-        match self {
-            KObj::Pod { name, .. } => Yellow.bold().paint(name.as_str()),
-            KObj::Node(name) => Blue.bold().paint(name.as_str()),
-            KObj::Deployment(name) => Purple.bold().paint(name.as_str()),
-            KObj::Service(name) => Cyan.bold().paint(name.as_str()),
-            KObj::ReplicaSet(name) => Green.bold().paint(name.as_str()),
-            KObj::StatefulSet(name) => Green.bold().paint(name.as_str()),
-            KObj::ConfigMap(name) => Black.bold().paint(name.as_str()),
-            KObj::Secret(name) => Red.bold().paint(name.as_str()),
-            KObj::Job(name) => Purple.bold().paint(name.as_str()),
+        match self.typ {
+            ObjType::Pod { .. } => Yellow.bold().paint(self.name.as_str()),
+            ObjType::Node => Blue.bold().paint(self.name.as_str()),
+            ObjType::Deployment => Purple.bold().paint(self.name.as_str()),
+            ObjType::Service => Cyan.bold().paint(self.name.as_str()),
+            ObjType::ReplicaSet => Green.bold().paint(self.name.as_str()),
+            ObjType::StatefulSet => Green.bold().paint(self.name.as_str()),
+            ObjType::ConfigMap => Black.bold().paint(self.name.as_str()),
+            ObjType::Secret => Red.bold().paint(self.name.as_str()),
+            ObjType::Job => Purple.bold().paint(self.name.as_str()),
         }
     }
 
-    pub fn info_url(&self, namespace: &str) -> String {
-        match self {
-            KObj::Pod { name, .. } => format!("/api/v1/namespaces/{}/pods/{}", namespace, name),
-            KObj::Node(name) => format!("/api/v1/nodes/{}", name),
-            KObj::Deployment(name) => format!(
+    pub fn is(&self, typ: ObjType) -> bool {
+        self.typ == typ
+    }
+
+    // TODO: Move containers elsewhere so this isn't needed
+    pub fn is_pod(&self) -> bool {
+        if let ObjType::Pod { .. } = self.typ {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn url(&self, namespace: &str) -> String {
+        match self.typ {
+            ObjType::Pod { .. } => format!("/api/v1/namespaces/{}/pods/{}", namespace, self.name),
+            ObjType::Node => format!("/api/v1/nodes/{}", self.name),
+            ObjType::Deployment => format!(
                 "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
-                namespace, name
+                namespace, self.name
             ),
-            KObj::Service(name) => format!("/api/v1/namespaces/{}/services/{}", namespace, name),
-            KObj::ReplicaSet(name) => format!(
+            ObjType::Service => format!("/api/v1/namespaces/{}/services/{}", namespace, self.name),
+            ObjType::ReplicaSet => format!(
                 "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
-                namespace, name
+                namespace, self.name
             ),
-            KObj::StatefulSet(name) => format!(
+            ObjType::StatefulSet => format!(
                 "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
-                namespace, name
+                namespace, self.name
             ),
-            KObj::ConfigMap(name) => {
-                format!("/api/v1/namespaces/{}/configmaps/{}", namespace, name)
+            ObjType::ConfigMap => {
+                format!("/api/v1/namespaces/{}/configmaps/{}", namespace, self.name)
             }
-            KObj::Secret(name) => format!("/api/v1/namespaces/{}/secrets/{}", namespace, name),
-            KObj::Job(name) => format!("/apis/batch/v1/namespaces/{}/jobs/{}", namespace, name),
+            ObjType::Secret => format!("/api/v1/namespaces/{}/secrets/{}", namespace, self.name),
+            ObjType::Job => format!("/apis/batch/v1/namespaces/{}/jobs/{}", namespace, self.name),
         }
     }
 
-    pub fn describe(&self, matches: ArgMatches, env: &Env, writer: &mut ClickWriter) {
-        let namespace = if env.current_object_namespace.is_none() {
-            match self {
-                KObj::Node(_) => "", // not used
-                _ => {
-                    clickwrite!(writer, "Don't know namespace for {}\n", self.name());
-                    return;
+    pub fn describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
+        let namespace = match self.typ {
+            ObjType::Node => "",
+            _ => {
+                match self.namespace {
+                    Some(ref ns) => ns,
+                    None => {
+                        clickwrite!(writer, "Don't know namespace for {}\n", self.name());
+                        return;
+                    }
                 }
             }
-        } else {
-            env.current_object_namespace.as_ref().unwrap()
         };
-        let url = self.info_url(namespace);
+
+        let url = self.url(namespace);
         match env.run_on_kluster(|k| k.get_value(url.as_str())) {
             Some(val) => {
                 if !maybe_full_describe_output(matches, &val, writer) {
-                    match self {
-                        KObj::Pod { .. } => {
+                    match self.typ {
+                        ObjType::Pod { .. } => {
                             clickwrite!(writer, "{}\n", describe::describe_format_pod(val))
                         }
-                        KObj::Node(_) => {
+                        ObjType::Node => {
                             clickwrite!(writer, "{}\n", describe::describe_format_node(val))
                         }
-                        KObj::Secret(_) => {
+                        ObjType::Secret => {
                             clickwrite!(writer, "{}\n", describe::describe_format_secret(val))
                         }
-                        KObj::Service(service) => {
+                        ObjType::Service => {
                             let url =
-                                format!("/api/v1/namespaces/{}/endpoints/{}", namespace, service);
+                                format!("/api/v1/namespaces/{}/endpoints/{}", namespace, self.name);
                             let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
                             clickwrite!(
                                 writer,

@@ -109,9 +109,50 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-// something that can specify objects to operate on
-// enum ObjectSpecifier {
-//     Single(usize),
-//     Range(dyn Iterator<Item=usize>),
-// }
-    
+/// Try and parse a line of the form [N]..[M]. These conform to Rust's range expressions:
+/// https://doc.rust-lang.org/reference/expressions/range-expr.html
+/// If we parse this successfully, we return
+pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
+    if let Some(idx) = line.find("..") {
+        // we have a string with a .., so keep processing
+        let (start_str, end_str) = line.split_at(idx);
+        let (inclusive, end_str) = if end_str.starts_with("..=") {
+            (true, &end_str[3..])
+        } else {
+            (false, &end_str[2..])
+        };
+        let start = if start_str.is_empty() {
+            0
+        } else {
+            if let Ok(s) = start_str.parse::<usize>() {
+                s
+            } else {
+                // whatever was before the .. isn't a number, so this isn't a proper range
+                return None;
+            }
+        };
+
+        if end_str.is_empty() {
+            if inclusive {
+                // invalid range of the form N..=
+                return None;
+            } else {
+                // this is a range from, return the range
+                return Some(Box::new(start..));
+            }
+        } else {
+            if let Ok(end) = end_str.parse::<usize>() {
+                // also specified an end, return the specified range
+                if inclusive {
+                    return Some(Box::new(start..=end));
+                } else {
+                    return Some(Box::new(start..end));
+                }
+            } else {
+                // whatever was after the .. isn't a number, so this isn't a proper range
+                return None;
+            }
+        };
+    }
+    None
+}

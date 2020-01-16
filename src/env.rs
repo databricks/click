@@ -1,11 +1,10 @@
 use config::{self, Alias, ClickConfig, Config};
 use error::KubeError;
-use kobj::KObj;
+use kobj::{KObj, ObjType};
 use kube::{
     ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
     ServiceList, StatefulSetList,
 };
-use values::val_str_opt;
 
 use ansi_term::Colour::{Green, Red, Yellow};
 use rustyline::config as rustyconfig;
@@ -47,6 +46,13 @@ pub struct ExpandedAlias<'a> {
     pub rest: &'a str,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ObjectSelection {
+    Single(KObj),
+    Range(Vec<KObj>),
+    None,
+}
+
 /// Keep track of our repl environment
 pub struct Env {
     pub config: Config,
@@ -56,8 +62,7 @@ pub struct Env {
     pub need_new_editor: bool,
     pub kluster: Option<Kluster>,
     pub namespace: Option<String>,
-    pub current_object: Option<KObj>,
-    pub current_object_namespace: Option<String>,
+    current_selection: ObjectSelection,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
@@ -89,8 +94,7 @@ impl Env {
             need_new_editor: false,
             kluster: None,
             namespace,
-            current_object: None,
-            current_object_namespace: None,
+            current_selection: ObjectSelection::None,
             last_objs: LastList::None,
             ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
@@ -104,6 +108,10 @@ impl Env {
         };
         env.set_context(context.as_ref().map(|x| &**x));
         env
+    }
+
+    pub fn current_selection(&self) -> &ObjectSelection {
+        &self.current_selection
     }
 
     pub fn save_click_config(&mut self) {
@@ -128,9 +136,10 @@ impl Env {
             } else {
                 Green.paint("none")
             },
-            match self.current_object {
-                Some(ref obj) => obj.prompt_str(),
-                None => Yellow.paint("none"),
+            match self.current_selection {
+                ObjectSelection::Single(ref obj) => obj.prompt_str(),
+                ObjectSelection::Range(_) => Yellow.paint("A RANGE!"),
+                ObjectSelection::None => Yellow.paint("none"),
             }
         );
     }
@@ -223,7 +232,7 @@ impl Env {
     }
 
     pub fn clear_current(&mut self) {
-        self.current_object = None;
+        self.current_selection = ObjectSelection::None;
         self.set_prompt();
     }
 
@@ -240,136 +249,133 @@ impl Env {
                         .iter()
                         .map(|cspec| cspec.name.clone())
                         .collect();
-                    self.current_object = Some(KObj::Pod {
-                        name: pod.metadata.name.clone(),
-                        containers,
-                    });
-                    self.current_object_namespace = pod.metadata.namespace.clone();
+                    self.current_selection = ObjectSelection::Single(
+                        KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
+                    );
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::NodeList(ref nl) => {
                 if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
-                    self.current_object = Some(KObj::Node(name));
-                    self.current_object_namespace = None;
+                    self.current_selection = ObjectSelection::Single(
+                        KObj {
+                            name,
+                            namespace: None,
+                            typ: ObjType::Node
+                        }
+                    );
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::DeploymentList(ref dl) => {
                 if let Some(dep) = dl.items.get(num) {
-                    self.current_object = Some(KObj::Deployment(dep.metadata.name.clone()));
-                    self.current_object_namespace = dep.metadata.namespace.clone();
+                    self.current_selection = ObjectSelection::Single(
+                        KObj::from_metadata(&dep.metadata, ObjType::Deployment)
+                    );
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::ServiceList(ref sl) => {
                 if let Some(service) = sl.items.get(num) {
-                    self.current_object = Some(KObj::Service(service.metadata.name.clone()));
-                    self.current_object_namespace = service.metadata.namespace.clone();
+                    self.current_selection = ObjectSelection::Single(
+                        KObj::from_metadata(&service.metadata, ObjType::Service)
+                    );
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::ReplicaSetList(ref rsl) => {
                 if let Some(ref replicaset) = rsl.items.get(num) {
-                    match val_str_opt("/metadata/name", replicaset) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", replicaset);
-                            self.current_object = Some(KObj::ReplicaSet(name));
-                            self.current_object_namespace = namespace;
+                    match KObj::from_value(replicaset, ObjType::ReplicaSet) {
+                        Some(obj) => {
+                            self.current_selection = ObjectSelection::Single(obj)
                         }
                         None => {
                             println!("ReplicaSet has no name in metadata");
-                            self.current_object = None;
+                            self.current_selection = ObjectSelection::None;
                         }
                     }
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::StatefulSetList(ref stfs) => {
                 if let Some(ref statefulset) = stfs.items.get(num) {
-                    match val_str_opt("/metadata/name", statefulset) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", statefulset);
-                            self.current_object = Some(KObj::StatefulSet(name));
-                            self.current_object_namespace = namespace;
+                    match KObj::from_value(statefulset, ObjType::StatefulSet) {
+                        Some(obj) => {
+                            self.current_selection = ObjectSelection::Single(obj)
                         }
                         None => {
                             println!("StatefulSet has no name in metadata");
-                            self.current_object = None;
+                            self.current_selection = ObjectSelection::None;
                         }
                     }
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::ConfigMapList(ref cml) => {
                 if let Some(ref cm) = cml.items.get(num) {
-                    match val_str_opt("/metadata/name", cm) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", cm);
-                            self.current_object = Some(KObj::ConfigMap(name));
-                            self.current_object_namespace = namespace;
+                       match KObj::from_value(cm, ObjType::ConfigMap) {
+                        Some(obj) => {
+                            self.current_selection = ObjectSelection::Single(obj)
                         }
                         None => {
                             println!("ConfigMap has no name in metadata");
-                            self.current_object = None;
+                            self.current_selection = ObjectSelection::None;
                         }
                     }
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::SecretList(ref sl) => {
                 if let Some(ref secret) = sl.items.get(num) {
-                    match val_str_opt("/metadata/name", secret) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", secret);
-                            self.current_object = Some(KObj::Secret(name));
-                            self.current_object_namespace = namespace;
+                    match KObj::from_value(secret, ObjType::Secret) {
+                        Some(obj) => {
+                            self.current_selection = ObjectSelection::Single(obj)
                         }
                         None => {
                             println!("Secret has no name in metadata");
-                            self.current_object = None;
+                            self.current_selection = ObjectSelection::None;
                         }
                     }
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
             LastList::JobList(ref jl) => {
                 if let Some(ref job) = jl.items.get(num) {
-                    match val_str_opt("/metadata/name", job) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", job);
-                            self.current_object = Some(KObj::Job(name));
-                            self.current_object_namespace = namespace;
+                    match KObj::from_value(job, ObjType::Job) {
+                        Some(obj) => {
+                            self.current_selection = ObjectSelection::Single(obj)
                         }
                         None => {
                             println!("Job has no name in metadata");
-                            self.current_object = None;
+                            self.current_selection = ObjectSelection::None;
                         }
                     }
                 } else {
-                    self.current_object = None;
+                    self.current_selection = ObjectSelection::None;
                 }
             }
         }
         self.set_prompt();
     }
 
-    pub fn current_pod(&self) -> Option<&str> {
-        self.current_object.as_ref().and_then(|obj| {
-            if let KObj::Pod { name, .. } = obj {
-                Some(name.as_str())
-            } else {
-                None
+    pub fn current_pod(&self) -> Option<&KObj> {
+        match self.current_selection {
+            ObjectSelection::Single(ref obj) => {
+                match obj.typ {
+                    ObjType::Pod { .. } => Some(obj),
+                    _ => None,
+                }
             }
-        })
+            _ => None
+        }
     }
 
     pub fn run_on_kluster<F, R>(&self, f: F) -> Option<R>

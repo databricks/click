@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use cmd::Cmd;
-use env::Env;
-use kobj::KObj;
+use env::{Env, ObjectSelection};
+use kobj::ObjType;
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
@@ -216,15 +216,18 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     }
 }
 
+
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    if let Some(KObj::Pod { ref containers, .. }) = env.current_object {
-        for cont in containers.iter() {
-            if cont.starts_with(prefix) {
-                v.push(Pair {
-                    display: cont.clone(),
-                    replacement: cont[prefix.len()..].to_string(),
-                });
+    if let ObjectSelection::Single(obj) = env.current_selection() {
+        if let ObjType::Pod { ref containers } = obj.typ {
+            for cont in containers.iter() {
+                if cont.starts_with(prefix) {
+                    v.push(Pair {
+                        display: cont.clone(),
+                        replacement: cont[prefix.len()..].to_string(),
+                    });
+                }
             }
         }
     }

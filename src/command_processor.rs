@@ -2,7 +2,7 @@ use cmd::Cmd;
 use completer::ClickHelper;
 use error::KubeError;
 use output::ClickWriter;
-use parser::Parser;
+use parser::{try_parse_range, Parser};
 
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
@@ -284,6 +284,11 @@ impl CommandProcessor {
                     // There was something typed
                     if let Ok(num) = (cmdstr as &str).parse::<usize>() {
                         env.set_current(num);
+                    } else if let Some(range) = try_parse_range(cmdstr) {
+                        println!("LOOKS LIKE A RANGE");
+                        for i in range {
+                            println!("{}", i);
+                        }
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
                         cmd.exec(env, &mut parts, &mut writer);
@@ -391,8 +396,8 @@ associated editor.
 mod tests {
     use super::*;
     use config::{get_test_config, Alias, ClickConfig};
-    use env::LastList;
-    use kobj::KObj;
+    use env::{LastList, ObjectSelection};
+    use kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
 
@@ -536,10 +541,16 @@ Other help topics (type 'help [TOPIC]' for details)
             commands,
         );
         p.process_line("0", ClickWriter::new());
-        assert_eq!(p.env.current_object, Some(KObj::Node("ns1".to_string())));
+        assert_eq!(p.env.current_selection(), &ObjectSelection::Single(
+            KObj {
+                name: "ns1".to_string(),
+                namespace: None,
+                typ: ObjType::Node,
+            }
+        ));
 
         p.process_line("1", ClickWriter::new());
-        assert_eq!(p.env.current_object, None);
+        assert_eq!(p.env.current_selection(), &ObjectSelection::None);
     }
 
     #[test]

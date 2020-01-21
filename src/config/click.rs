@@ -91,6 +91,10 @@ impl Into<String> for &CompletionType {
     }
 }
 
+fn default_range_sep() -> String {
+    "--- {name} ---".to_string()
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
@@ -103,6 +107,8 @@ pub struct ClickConfig {
     pub completiontype: CompletionType,
     #[serde(default = "Vec::new")]
     pub aliases: Vec<Alias>,
+    #[serde(default = "default_range_sep")]
+    pub range_separator: String,
 }
 
 impl ClickConfig {
@@ -175,6 +181,7 @@ aliases:
         assert_eq!(config.editmode, EditMode::Vi);
         assert_eq!(config.completiontype, CompletionType::List);
         assert_eq!(config.aliases.len(), 1);
+        assert_eq!(config.range_separator, default_range_sep());
         let a = config.aliases.get(0).unwrap();
         assert_eq!(a.alias, "pn");
         assert_eq!(a.expanded, "pods --sort node");

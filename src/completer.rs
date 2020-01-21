@@ -250,10 +250,7 @@ macro_rules! possible_values_completer {
     };
 }
 
-possible_values_completer!(
-    setoptions_values_completer,
-    ["completion_type", "edit_mode", "editor", "terminal"]
-);
+possible_values_completer!(setoptions_values_completer, ::cmd::SET_OPTS);
 possible_values_completer!(
     portforwardaction_values_completer,
     ["list", "output", "stop"]

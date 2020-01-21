@@ -180,6 +180,13 @@ fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
     }
 }
 
+pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
+    table.set_format(TBLFMT.clone());
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(0);
+    }
+}
+
 #[allow(clippy::ptr_arg)]
 pub fn print_table<'a, T>(
     table: &mut Table,

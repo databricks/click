@@ -644,7 +644,7 @@ impl Kluster {
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self, path: &str, body: Option<String>) -> Result<Response, KubeError> {
+    pub fn delete(&self, path: &str, body: Option<&str>) -> Result<Response, KubeError> {
         let url = self.endpoint.join(path)?;
         let req = self.client.delete(url);
         let req = match body {

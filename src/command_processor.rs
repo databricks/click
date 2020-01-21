@@ -156,6 +156,7 @@ impl CommandProcessor {
         commands.push(Box::new(::cmd::Quit::new()));
         commands.push(Box::new(::cmd::Context::new()));
         commands.push(Box::new(::cmd::Contexts::new()));
+        commands.push(Box::new(::cmd::Range::new()));
         commands.push(Box::new(::cmd::Pods::new()));
         commands.push(Box::new(::cmd::Nodes::new()));
         commands.push(Box::new(::cmd::Deployments::new()));
@@ -285,10 +286,14 @@ impl CommandProcessor {
                     if let Ok(num) = (cmdstr as &str).parse::<usize>() {
                         env.set_current(num);
                     } else if let Some(range) = try_parse_range(cmdstr) {
-                        println!("LOOKS LIKE A RANGE");
+                        let mut objs = vec![];
                         for i in range {
-                            println!("{}", i);
+                            match env.item_at(i) {
+                                Some(obj) => objs.push(obj),
+                                None => break,
+                            }
                         }
+                        env.set_range(objs);
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
                         cmd.exec(env, &mut parts, &mut writer);

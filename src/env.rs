@@ -6,7 +6,7 @@ use kube::{
     ServiceList, StatefulSetList,
 };
 
-use ansi_term::Colour::{Green, Red, Yellow};
+use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
 use tempdir::TempDir;
 
@@ -67,6 +67,7 @@ pub struct Env {
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
     pub prompt: String,
+    range_str: Option<String>,
     pub tempdir: std::io::Result<TempDir>,
 }
 
@@ -104,6 +105,7 @@ impl Env {
                 Green.paint("none"),
                 Yellow.paint("none")
             ),
+            range_str: None,
             tempdir: TempDir::new("click"),
         };
         env.set_context(context.as_ref().map(|x| &**x));
@@ -138,7 +140,7 @@ impl Env {
             },
             match self.current_selection {
                 ObjectSelection::Single(ref obj) => obj.prompt_str(),
-                ObjectSelection::Range(_) => Yellow.paint("A RANGE!"),
+                ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
                 ObjectSelection::None => Yellow.paint("none"),
             }
         );
@@ -184,12 +186,12 @@ impl Env {
         self.set_prompt();
     }
 
-    pub fn set_editor(&mut self, editor: &Option<String>) {
-        self.click_config.editor = editor.clone();
+    pub fn set_editor(&mut self, editor: Option<&str>) {
+        self.click_config.editor = editor.map(|s| s.to_string());
     }
 
-    pub fn set_terminal(&mut self, terminal: &Option<String>) {
-        self.click_config.terminal = terminal.clone();
+    pub fn set_terminal(&mut self, terminal: Option<&str>) {
+        self.click_config.terminal = terminal.map(|s| s.to_string());
     }
 
     pub fn set_completion_type(&mut self, comptype: config::CompletionType) {
@@ -233,6 +235,7 @@ impl Env {
 
     pub fn clear_current(&mut self) {
         self.current_selection = ObjectSelection::None;
+        self.range_str = None;
         self.set_prompt();
     }
 
@@ -293,6 +296,23 @@ impl Env {
             Some(obj) => ObjectSelection::Single(obj),
             None => ObjectSelection::None,
         };
+        self.range_str = None;
+        self.set_prompt();
+    }
+
+    pub fn set_range(&mut self, range: Vec<KObj>) {
+        let range_str = if range.is_empty() {
+            format!("Empty range")
+        } else {
+            let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
+            if range.len() > 1 {
+                r.push('s');
+            }
+            r.push_str(" selected");
+            r
+        };
+        self.current_selection = ObjectSelection::Range(range);
+        self.range_str = Some(range_str);
         self.set_prompt();
     }
 
@@ -398,6 +418,7 @@ impl fmt::Display for Env {
   Edit Mode: {}
   Editor: {}
   Terminal: {}
+  Range Separator: {}
 }}",
             if let Some(ref k) = self.kluster {
                 Green.bold().paint(k.name.as_str())
@@ -426,6 +447,7 @@ impl fmt::Display for Env {
                     .as_ref()
                     .unwrap_or(&"<unset, will use xterm>".to_owned())
             ),
+            Green.paint(&self.click_config.range_separator),
         )
     }
 }

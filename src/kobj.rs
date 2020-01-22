@@ -5,7 +5,7 @@ use values::val_str_opt;
 use Env;
 
 use ansi_term::ANSIString;
-use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
+use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
 use serde::ser::Serialize;
 use serde_json::Value;
@@ -97,7 +97,7 @@ impl KObj {
             ObjType::Service => Cyan.bold().paint(self.name.as_str()),
             ObjType::ReplicaSet => Green.bold().paint(self.name.as_str()),
             ObjType::StatefulSet => Green.bold().paint(self.name.as_str()),
-            ObjType::ConfigMap => Black.bold().paint(self.name.as_str()),
+            ObjType::ConfigMap => Purple.bold().paint(self.name.as_str()),
             ObjType::Secret => Red.bold().paint(self.name.as_str()),
             ObjType::Job => Purple.bold().paint(self.name.as_str()),
         }

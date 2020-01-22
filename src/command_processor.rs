@@ -2,7 +2,7 @@ use cmd::Cmd;
 use completer::ClickHelper;
 use error::KubeError;
 use output::ClickWriter;
-use parser::{try_parse_range, Parser};
+use parser::{try_parse_csl, try_parse_range, Parser};
 
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
@@ -294,6 +294,18 @@ impl CommandProcessor {
                             }
                         }
                         env.set_range(objs);
+                    } else if let Some(range) = try_parse_csl(cmdstr) {
+                        let mut objs = vec![];
+                        for i in range {
+                            if let Some(obj) = env.item_at(i) {
+                                objs.push(obj)
+                            }
+                        }
+                        if objs.is_empty() {
+                            env.clear_current();
+                        } else {
+                            env.set_range(objs);
+                        }
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
                         cmd.exec(env, &mut parts, &mut writer);
@@ -370,6 +382,11 @@ impl CommandProcessor {
             );
             clickwrite!(
                 writer,
+                "  ranges              Selecting and operating on multiple \
+                 objects at once\n"
+            );
+            clickwrite!(
+                writer,
                 "  shell               Redirecting and piping click \
                  output to shell commands\n"
             );
@@ -400,13 +417,17 @@ associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
 - 'emacs' Use standard readline/bash/emacs keybindings (do: 'set edit_mode emacs')";
 
-static RANGEHELP: &str = "Ranges are used to operate on more than one object at a time.
+// TODO: Something better than raw escapes maybe?
+static RANGEHELP: &str = "\u{001b}[33;1mRANGES\u{001b}[0m
+Ranges are used to operate on more than one object at a time.
 
+\u{001b}[33;1mSELECTING A RANGE\u{001b}[0m
+You can select a range after running a command like 'pods' or 'services' that return a list
+of objects. There are two formats to select a range: range syntax, or a comma separated list
+of numbers. Once specified the prompt will indicate how many objects you have selected.
 
-Selecting a range:
-
-You can use the rust range syntax to select a range after running a command that returns a list
-of objects like 'pods' or 'services'. The syntax is:
+\u{001b}[32mRange Syntax\u{001b}[0m
+The rust range syntax is:
 
 start..end   (exclusive end)
 start..=end  (inclusive end)
@@ -415,18 +436,29 @@ start..=end  (inclusive end)
 start..      (start to end of list)
 ..           (the whole list)
 
-Once specified the prompt will indicate how many objects you have selected.
+\u{001b}[33mExamples:\u{001b}[0m
+1..3    # select items 1 and 2
+1..=3   # select items 1, 2 and 3
+..4     # select items 0, 1, 2, and 3
+3..     # select items 3 and higher
+..      # select everything in the list
 
+\u{001b}[32mComma Separated List\u{001b}[0m
+You can specify a list of items to select like: '1,3,12' to select items 1, 3, and 12.
+Note that if you want to include spaces, you'll need to quote the string like:
+\"1, 3,  12\"
 
-Commands on ranges:
+\u{001b}[33;1mPRINTING THE CURRENT RANGE\u{001b}[0m
+The 'range' command will print out a table of objects in the current range. This is useful
+to verify your commands will operate on the objects you expect.
+
+\u{001b}[33;1mCOMMANDS ON RANGES\u{001b}[0m
 Once you have selected a range, you can run any of the following commands which will operate on each
 item in the range in turn:
 
 containers, describe, delete, events, exec, logs
 
-
-Range separator:
-
+\u{001b}[33;1mRANGE SEPARATOR\u{001b}[0m
 When printing output for the above commands over a range, Click will print a header for each item.
 The format is defined by the range separator. You can view the current separator with the 'env'
 command, and you can set it via 'set range_separator \"my separator\"'. This string can be templated
@@ -438,13 +470,12 @@ For example:
 > set range_separator \"=== {name}:{namespace} ===\"
 means commands on ranges print the name and namespace of each object along with the '='s characters.
 
-
-Getting logs for a range:
+\u{001b}[33;1mLOGS FOR A RANGE\u{001b}[0m
 When getting logs for a range you may wish to write each pod's logs to its own file. To do so, use
 the '-o' option with logs. The argument you pass to -o can be templated as follows:
 {name}      - replaced with the name of the object
 {namespace} - replaced with the namespace of the object
-{time}      - replaceed with the rfc3339 date and time for when the command was run
+{time}      - replaced with the rfc3339 date and time for when the command was run
 
 For example, if a range was selected the following command would get the last 100 lines of logs for
 each pod in the range, and write it to /tmp/podname-rfc3339date.log:
@@ -545,6 +576,7 @@ mod tests {
 Other help topics (type 'help [TOPIC]' for details)
   completion          Available completion_type values for the 'set' command, and what they mean
   edit_mode           Available edit_mode values for the 'set' command, and what they mean
+  ranges              Selecting and operating on multiple objects at once
   shell               Redirecting and piping click output to shell commands\n"
                 .as_bytes()
         );

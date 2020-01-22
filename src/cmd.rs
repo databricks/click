@@ -1218,7 +1218,9 @@ information about ranges)",
                     ));
                 }
             }
-            ObjectSelection::None => {}
+            ObjectSelection::None => {
+                clickwrite!(writer, "No objects currently active");
+            }
         };
         ::table::print_filled_table(&mut table, writer);
     }

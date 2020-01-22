@@ -152,3 +152,86 @@ pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
     }
     None
 }
+
+/// try and parse a line of comma separated numbers like 1,3,5
+pub fn try_parse_csl(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
+    let mut ret = Vec::new();
+    let l = line.trim();
+    if l.is_empty() {
+        return None;
+    }
+    for item in l.split_terminator(",") {
+        match item.trim().parse::<usize>() {
+            Ok(num) => ret.push(num),
+            Err(_) => return None, // fail as soon as something's not a usize
+        }
+    }
+    Some(Box::new(ret.into_iter()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_parse_csl_test() {
+        let v: Vec<usize> = try_parse_csl("1,2,3").unwrap().collect();
+        assert_eq!(vec!(1,2,3), v);
+
+        let v: Vec<usize> = try_parse_csl("1, 2, 3").unwrap().collect();
+        assert_eq!(vec!(1,2,3), v);
+
+        let v: Vec<usize> = try_parse_csl("1,   7,   3,").unwrap().collect();
+        assert_eq!(vec!(1,7,3), v);
+
+        let v: Vec<usize> = try_parse_csl("1,   7,   3,  ").unwrap().collect();
+        assert_eq!(vec!(1,7,3), v);
+
+        let v: Vec<usize> = try_parse_csl("1").unwrap().collect();
+        assert_eq!(vec!(1), v);
+
+        assert!(try_parse_csl("1,x,2").is_none());
+        assert!(try_parse_csl("pods").is_none());
+        assert!(try_parse_csl("").is_none());
+        assert!(try_parse_csl(",").is_none());
+        assert!(try_parse_csl("1,,2").is_none());
+        assert!(try_parse_csl(",,,").is_none());
+        assert!(try_parse_csl(",1,2,").is_none());
+    }
+
+    #[test]
+    fn try_parse_range_test() {
+        let v: Vec<usize> = try_parse_range("1..3").unwrap().collect();
+        assert_eq!(vec!(1,2), v);
+
+        let v: Vec<usize> = try_parse_range("1..=3").unwrap().collect();
+        assert_eq!(vec!(1,2,3), v);
+
+        let v: Vec<usize> = try_parse_range("..4").unwrap().collect();
+        assert_eq!(vec!(0,1,2,3), v);
+
+        let v: Vec<usize> = try_parse_range("6..4").unwrap().collect();
+        assert!(v.is_empty());
+
+        let v: Vec<usize> = try_parse_range("6..=6").unwrap().collect();
+        assert_eq!(vec!(6), v);
+
+        let mut r = try_parse_range("3..").unwrap();
+        for i in 3..10 {
+            assert_eq!(r.next().unwrap(), i);
+        }
+
+        let mut r = try_parse_range("..").unwrap();
+        for i in 0..10 {
+            assert_eq!(r.next().unwrap(), i);
+        }
+
+        assert!(try_parse_range(",1,2,").is_none());
+        assert!(try_parse_range("1").is_none());
+        assert!(try_parse_range("pods").is_none());
+        assert!(try_parse_range("1.2").is_none());
+        assert!(try_parse_range("1..==2").is_none());
+        assert!(try_parse_range("").is_none());
+        assert!(try_parse_range("   1..=2").is_none());
+    }
+}

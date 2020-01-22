@@ -1193,7 +1193,8 @@ command!(
 command!(
     Range,
     "range",
-    "Print objects that are in the currently selected range",
+    "List the objects that are in the currently selected range (see 'help ranges' for general \
+information about ranges)",
     identity,
     vec!["range"],
     noop_complete!(),
@@ -1592,7 +1593,7 @@ command!(
                 .help(
                     "Write output to a file at the specified path instead of printing it. \
                      This path can be templated with {name}, {namespace}, and {time} to write \
-                     individual files for each pod in a range. (See 'help range').",
+                     individual files for each pod in a range. (See 'help ranges').",
                 )
                 .takes_value(true),
         )

@@ -109,7 +109,7 @@ fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickH
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
-        vec!["completion", "edit_mode", "shell", "pipes", "redirection"],
+        vec!["completion", "edit_mode", "shell", "pipes", "redirection", "ranges"],
     )));
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl
@@ -331,6 +331,9 @@ impl CommandProcessor {
                     "edit_mode" => {
                         clickwrite!(writer, "{}\n", EDITMODEHELP);
                     }
+                    "ranges" => {
+                        clickwrite!(writer, "{}\n", RANGEHELP);
+                    }
                     _ => {
                         clickwrite!(writer, "I don't know anything about {}, sorry\n", hcmd);
                     }
@@ -396,6 +399,57 @@ This controls the style of editing and the standard keymaps to the mode used by 
 associated editor.
 - 'vi' Hit ESC while editing to edit the line using common vi keybindings (do: 'set edit_mode vi')
 - 'emacs' Use standard readline/bash/emacs keybindings (do: 'set edit_mode emacs')";
+
+static RANGEHELP: &str = "Ranges are used to operate on more than one object at a time.
+
+
+Selecting a range:
+
+You can use the rust range syntax to select a range after running a command that returns a list
+of objects like 'pods' or 'services'. The syntax is:
+
+start..end   (exclusive end)
+start..=end  (inclusive end)
+..end        (start at 0, exclusive end)
+..=end       (start at 0, inclusive end)
+start..      (start to end of list)
+..           (the whole list)
+
+Once specified the prompt will indicate how many objects you have selected.
+
+
+Commands on ranges:
+Once you have selected a range, you can run any of the following commands which will operate on each
+item in the range in turn:
+
+containers, describe, delete, events, exec, logs
+
+
+Range separator:
+
+When printing output for the above commands over a range, Click will print a header for each item.
+The format is defined by the range separator. You can view the current separator with the 'env'
+command, and you can set it via 'set range_separator \"my separator\"'. This string can be templated
+as follows:
+{name}      - replaced with the name of the object
+{namespace} - replaced with the namespace of the object
+
+For example:
+> set range_separator \"=== {name}:{namespace} ===\"
+means commands on ranges print the name and namespace of each object along with the '='s characters.
+
+
+Getting logs for a range:
+When getting logs for a range you may wish to write each pod's logs to its own file. To do so, use
+the '-o' option with logs. The argument you pass to -o can be templated as follows:
+{name}      - replaced with the name of the object
+{namespace} - replaced with the namespace of the object
+{time}      - replaceed with the rfc3339 date and time for when the command was run
+
+For example, if a range was selected the following command would get the last 100 lines of logs for
+each pod in the range, and write it to /tmp/podname-rfc3339date.log:
+[context][namespace][5 Pods selected] > logs -t 100 -o \"/tmp/{name}-{time}.log\"
+";
 
 #[cfg(test)]
 mod tests {

@@ -160,7 +160,7 @@ pub fn try_parse_csl(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
     if l.is_empty() {
         return None;
     }
-    for item in l.split_terminator(",") {
+    for item in l.split_terminator(',') {
         match item.trim().parse::<usize>() {
             Ok(num) => ret.push(num),
             Err(_) => return None, // fail as soon as something's not a usize
@@ -176,16 +176,16 @@ mod tests {
     #[test]
     fn try_parse_csl_test() {
         let v: Vec<usize> = try_parse_csl("1,2,3").unwrap().collect();
-        assert_eq!(vec!(1,2,3), v);
+        assert_eq!(vec!(1, 2, 3), v);
 
         let v: Vec<usize> = try_parse_csl("1, 2, 3").unwrap().collect();
-        assert_eq!(vec!(1,2,3), v);
+        assert_eq!(vec!(1, 2, 3), v);
 
         let v: Vec<usize> = try_parse_csl("1,   7,   3,").unwrap().collect();
-        assert_eq!(vec!(1,7,3), v);
+        assert_eq!(vec!(1, 7, 3), v);
 
         let v: Vec<usize> = try_parse_csl("1,   7,   3,  ").unwrap().collect();
-        assert_eq!(vec!(1,7,3), v);
+        assert_eq!(vec!(1, 7, 3), v);
 
         let v: Vec<usize> = try_parse_csl("1").unwrap().collect();
         assert_eq!(vec!(1), v);
@@ -202,13 +202,13 @@ mod tests {
     #[test]
     fn try_parse_range_test() {
         let v: Vec<usize> = try_parse_range("1..3").unwrap().collect();
-        assert_eq!(vec!(1,2), v);
+        assert_eq!(vec!(1, 2), v);
 
         let v: Vec<usize> = try_parse_range("1..=3").unwrap().collect();
-        assert_eq!(vec!(1,2,3), v);
+        assert_eq!(vec!(1, 2, 3), v);
 
         let v: Vec<usize> = try_parse_range("..4").unwrap().collect();
-        assert_eq!(vec!(0,1,2,3), v);
+        assert_eq!(vec!(0, 1, 2, 3), v);
 
         let v: Vec<usize> = try_parse_range("6..4").unwrap().collect();
         assert!(v.is_empty());

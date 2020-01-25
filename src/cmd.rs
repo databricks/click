@@ -538,13 +538,7 @@ fn print_podlist(
                 )
             }),
             "Phase" | "phase" => podlist.items.sort_by(|p1, p2| {
-                if phase_str(p1) < phase_str(p2) {
-                    cmp::Ordering::Less
-                } else if phase_str(p1) < phase_str(p2) {
-                    cmp::Ordering::Greater
-                } else {
-                    cmp::Ordering::Equal
-                }
+                phase_str(p1).cmp(&phase_str(p2))
             }),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
@@ -1203,7 +1197,7 @@ command!(
     Range,
     "range",
     "List the objects that are in the currently selected range (see 'help ranges' for general \
-information about ranges)",
+     information about ranges)",
     identity,
     vec!["range"],
     noop_complete!(),
@@ -1318,7 +1312,7 @@ command!(
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
+                writeln!(stderr(), "{}", s).unwrap_or(());
                 return;
             }
         };
@@ -1398,11 +1392,12 @@ fn write_logs_to_file(
         if amt == 0 {
             break;
         }
-        file.write(&buffer[0..amt])?;
+        file.write_all(&buffer[0..amt])?;
     }
     file.flush().map_err(KubeError::from)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn do_logs(
     obj: &KObj,
     env: &Env,
@@ -1414,7 +1409,7 @@ fn do_logs(
     timeout: Option<Duration>,
     writer: &mut ClickWriter,
 ) {
-    let cont = cont_opt.unwrap_or(pick_container(obj, writer));
+    let cont = cont_opt.unwrap_or_else(|| pick_container(obj, writer));
 
     let url = format!(
         "/api/v1/namespaces/{}/pods/{}/log?container={}{}",
@@ -1678,14 +1673,12 @@ command!(
                             );
                         } else {
                             clickwrite!(writer, "Logs only possible on pods\n");
-                            return;
                         }
                     }
                 );
             }
             ObjectSelection::None => {
                 clickwrite!(writer, "Need an active selection for logs\n");
-                return;
             }
         };
     }
@@ -1730,6 +1723,7 @@ command!(
     }
 );
 
+#[allow(clippy::too_many_arguments)]
 fn do_exec(
     env: &Env,
     pod: &KObj,
@@ -1792,7 +1786,7 @@ fn do_exec(
         };
         let status = command.status().expect("failed to execute kubectl");
         if !status.success() {
-            write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
+            writeln!(stderr(), "kubectl exited abnormally").unwrap_or(());
         }
     }
 }
@@ -1915,7 +1909,6 @@ command!(
                                 );
                             } else {
                                 clickwrite!(writer, "Exec only possible on pods\n");
-                                return;
                             }
                         }
                     );
@@ -1925,7 +1918,7 @@ command!(
                 }
             }
         } else {
-            write!(stderr(), "Need an active context in order to exec.").unwrap_or(());
+            writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
         }
     }
 );
@@ -1961,13 +1954,13 @@ fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter
                     clickwrite!(writer, "Failed to delete: {:?}", x.get_ref());
                 }
             } else {
-                write!(stderr(), "Failed to delete").unwrap_or(());
+                writeln!(stderr(), "Failed to delete").unwrap_or(());
             }
         } else {
             clickwrite!(writer, "Not deleting\n");
         }
     } else {
-        write!(stderr(), "Could not read response, not deleting.").unwrap_or(());
+        writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
     }
 }
 
@@ -2111,9 +2104,7 @@ fn containers_string(pod: &Pod) -> String {
 }
 
 // conainer helper command
-fn print_containers(obj: &KObj,
-                    env: &Env,
-                    writer: &mut ClickWriter,) {
+fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
     let url = format!(
         "/api/v1/namespaces/{}/pods/{}",
         obj.namespace.as_ref().unwrap(),
@@ -2121,8 +2112,7 @@ fn print_containers(obj: &KObj,
     );
     let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
     if let Some(pod) = pod_opt {
-        clickwrite!(writer, "{}",
-                    containers_string(&pod)); // extra newline in returned string
+        clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
     }
 }
 
@@ -2152,7 +2142,6 @@ command!(
                             print_containers(obj, env, writer);
                         } else {
                             clickwrite!(writer, "containers only possible on pods\n");
-                            return;
                         }
                     }
                 );
@@ -2190,7 +2179,7 @@ fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
             clickwrite!(writer, "No events\n");
         }
     } else {
-        write!(stderr(), "Failed to fetch events\n").unwrap_or(());
+        writeln!(stderr(), "Failed to fetch events").unwrap_or(());
     }
 }
 
@@ -2218,7 +2207,6 @@ command!(
             }
             ObjectSelection::None => {
                 clickwrite!(writer, "Need an active selection for events\n");
-                return;
             }
         }
     }
@@ -2392,7 +2380,7 @@ command!(
     }
 );
 
-pub const SET_OPTS: &'static [&'static str] = &[
+pub const SET_OPTS: &[&str] = &[
     "completion_type",
     "edit_mode",
     "editor",

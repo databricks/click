@@ -109,7 +109,14 @@ fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickH
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
-        vec!["completion", "edit_mode", "shell", "pipes", "redirection", "ranges"],
+        vec![
+            "completion",
+            "edit_mode",
+            "shell",
+            "pipes",
+            "redirection",
+            "ranges",
+        ],
     )));
     rl.load_history(hist_path.as_path()).unwrap_or_default();
     rl
@@ -293,7 +300,11 @@ impl CommandProcessor {
                                 None => break,
                             }
                         }
-                        env.set_range(objs);
+                        if objs.is_empty() {
+                            env.clear_current();
+                        } else {
+                            env.set_range(objs);
+                        }
                     } else if let Some(range) = try_parse_csl(cmdstr) {
                         let mut objs = vec![];
                         for i in range {
@@ -548,6 +559,26 @@ mod tests {
         )
     }
 
+    fn make_node(name: &str) -> ::kube::Node {
+        ::kube::Node {
+            metadata: ::kube::Metadata::with_name(name),
+            spec: ::kube::NodeSpec {
+                unschedulable: Some(false),
+            },
+            status: ::kube::NodeStatus {
+                conditions: Vec::new(),
+            },
+        }
+    }
+
+    fn make_node_kobj(name: &str) -> KObj {
+        KObj {
+            name: name.to_string(),
+            namespace: None,
+            typ: ObjType::Node,
+        }
+    }
+
     #[test]
     fn test_help() {
         let mut p = get_processor();
@@ -614,15 +645,7 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let node = ::kube::Node {
-            metadata: ::kube::Metadata::with_name("ns1"),
-            spec: ::kube::NodeSpec {
-                unschedulable: Some(false),
-            },
-            status: ::kube::NodeStatus {
-                conditions: Vec::new(),
-            },
-        };
+        let node = make_node("ns1");
         let nodelist = ::kube::NodeList { items: vec![node] };
         let ll = LastList::NodeList(nodelist);
         env.set_lastlist(ll);
@@ -642,6 +665,75 @@ Other help topics (type 'help [TOPIC]' for details)
         );
 
         p.process_line("1", ClickWriter::new());
+        assert_eq!(p.env.current_selection(), &ObjectSelection::None);
+    }
+
+    #[test]
+    fn range_selection() {
+        let commands: Vec<Box<dyn Cmd>> = Vec::new();
+        let mut env = Env::new(
+            get_test_config(),
+            ClickConfig::default(),
+            PathBuf::from("/tmp/click.conf"),
+        );
+        let node1 = make_node("ns1");
+        let node2 = make_node("ns2");
+        let node3 = make_node("ns3");
+        let nodelist = ::kube::NodeList {
+            items: vec![node1, node2, node3],
+        };
+        let ll = LastList::NodeList(nodelist);
+        env.set_lastlist(ll);
+        let mut p = CommandProcessor::new_with_commands(
+            env,
+            PathBuf::from("/tmp/click.test.hist"),
+            commands,
+        );
+
+        p.process_line("0..=1", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![make_node_kobj("ns1"), make_node_kobj("ns2"),])
+        );
+
+        p.process_line("0..", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![
+                make_node_kobj("ns1"),
+                make_node_kobj("ns2"),
+                make_node_kobj("ns3"),
+            ])
+        );
+
+        p.process_line("0..1", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![make_node_kobj("ns1")])
+        );
+
+        p.process_line("8..10", ClickWriter::new());
+        assert_eq!(p.env.current_selection(), &ObjectSelection::None);
+
+        p.process_line("0,2", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![make_node_kobj("ns1"), make_node_kobj("ns3"),])
+        );
+
+        p.process_line("2,1", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![make_node_kobj("ns3"), make_node_kobj("ns2"),])
+        );
+
+        p.process_line("2,1,6", ClickWriter::new());
+        assert_eq!(
+            p.env.current_selection(),
+            &ObjectSelection::Range(vec![make_node_kobj("ns3"), make_node_kobj("ns2"),])
+        );
+
+        p.process_line("8,10", ClickWriter::new());
         assert_eq!(p.env.current_selection(), &ObjectSelection::None);
     }
 

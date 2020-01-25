@@ -302,7 +302,7 @@ impl Env {
 
     pub fn set_range(&mut self, range: Vec<KObj>) {
         let range_str = if range.is_empty() {
-            format!("Empty range")
+            "Empty range".to_string()
         } else {
             let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
             if range.len() > 1 {

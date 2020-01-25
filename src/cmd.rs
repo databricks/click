@@ -16,8 +16,9 @@
 
 use completer;
 use config;
-use describe;
-use env::{self, Env, KObj, LastList};
+use env::{self, Env, LastList, ObjectSelection};
+use error::KubeError;
+use kobj::{KObj, ObjType};
 use kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
@@ -34,21 +35,24 @@ use chrono::DateTime;
 use clap::{App, AppSettings, Arg, ArgMatches};
 use duct;
 use humantime::parse_duration;
+use hyper::client::Response;
 use prettytable::Cell;
 use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
 use rustyline::completion::Pair as RustlinePair;
-use serde::ser::Serialize;
 use serde_json;
 use serde_json::Value;
+use strfmt::strfmt;
 
 use std;
 use std::cell::RefCell;
 use std::cmp;
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, stderr, BufRead, BufReader, Read, Write};
 use std::iter::Iterator;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -111,7 +115,7 @@ where
             true
         }
         Err(err) => {
-            clickwrite!(writer, "{}\n", err.message);
+            clickwriteln!(writer, "{}", err.message);
             false
         }
     }
@@ -123,6 +127,32 @@ macro_rules! noop_complete {
     };
 }
 
+macro_rules! iter_range {
+    ($range: ident, $writer: ident, $sepfmt: expr, $action: expr) => {
+        let mut fmtvars = HashMap::new();
+        for obj in $range.iter() {
+            fmtvars.insert("name".to_string(), obj.name());
+            fmtvars.insert(
+                "namespace".to_string(),
+                obj.namespace
+                    .as_ref()
+                    .map(|n| n.as_str())
+                    .unwrap_or("[none]"),
+            );
+            match strfmt($sepfmt, &fmtvars) {
+                Ok(sep) => {
+                    clickwriteln!($writer, "{}", sep);
+                    $action(obj)
+                }
+                Err(e) => {
+                    clickwriteln!($writer, "Failed to format separator: {}", e);
+                    return;
+                }
+            }
+        }
+    };
+}
+
 /// Macro for defining a command
 ///
 /// # Args
@@ -131,7 +161,7 @@ macro_rules! noop_complete {
 /// * about: an about string describing the command
 /// * extra_args: closure taking an App that addes any additional argument stuff and returns an App
 /// * aliases: a vector of strs that specify what a user can type to invoke this command
-/// * cmplt_expr: an expression to return possible compeltions for the command
+/// * cmplt_expr: an expression to return possible completions for the command
 /// * cmd_expr: a closure taking matches, env, and writer that runs to execute the command
 ///
 /// # Example
@@ -143,7 +173,7 @@ macro_rules! noop_complete {
 ///         "Quit click",
 ///         identity,
 ///         vec!["q", "quit", "exit"],
-///         noop_complete!,
+///         noop_complete!(),
 ///         |matches, env, writer| {env.quit = true;}
 /// );
 /// # }
@@ -193,10 +223,9 @@ macro_rules! command {
 
             fn write_help(&self, writer: &mut ClickWriter) {
                 if let Err(res) = self.clap.borrow_mut().write_help(writer) {
-                    clickwrite!(writer, "Couldn't print help: {}", res);
+                    clickwriteln!(writer, "Couldn't print help: {}", res);
                 }
-                println!(); // clap print_help doesn't add final newline
-                            // clap write_help doesn't add final newline
+                // clap print_help doesn't add final newline
                 clickwrite!(writer, "\n");
             }
 
@@ -507,6 +536,9 @@ fn print_podlist(
                     |a1, a2| a1.partial_cmp(a2).unwrap(),
                 )
             }),
+            "Phase" | "phase" => podlist
+                .items
+                .sort_by(|p1, p2| phase_str(p1).cmp(&phase_str(p2))),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
                     .status
@@ -547,7 +579,7 @@ fn print_podlist(
                 )
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -649,7 +681,7 @@ fn print_nodelist(
                 n1s.partial_cmp(&n2s).unwrap()
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -774,7 +806,7 @@ fn print_deployments(
                 p1s.partial_cmp(&p2s).unwrap()
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -960,7 +992,7 @@ fn print_servicelist(
                 servswithipportss.sort_by(|s1, s2| (s1.1).1.partial_cmp(&(s2.1).1).unwrap())
             }
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -1125,7 +1157,7 @@ command!(
         let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
         contexts.sort();
         for context in contexts.iter() {
-            clickwrite!(writer, "{}\n", context);
+            clickwriteln!(writer, "{}", context);
         }
     }
 );
@@ -1157,6 +1189,42 @@ command!(
     |matches, env, _| {
         let ns = matches.value_of("namespace");
         env.set_namespace(ns);
+    }
+);
+
+command!(
+    Range,
+    "range",
+    "List the objects that are in the currently selected range (see 'help ranges' for general \
+     information about ranges)",
+    identity,
+    vec!["range"],
+    noop_complete!(),
+    |_, env, writer| {
+        let mut table = Table::new();
+        table.set_titles(row!["Name", "Type", "Namespace"]);
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => {
+                table.add_row(row!(
+                    obj.name(),
+                    obj.type_str(),
+                    obj.namespace.as_ref().map(|n| n.as_str()).unwrap_or("")
+                ));
+            }
+            ObjectSelection::Range(range) => {
+                for obj in range.iter() {
+                    table.add_row(row!(
+                        obj.name(),
+                        obj.type_str(),
+                        obj.namespace.as_ref().map(|n| n.as_str()).unwrap_or("")
+                    ));
+                }
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "No objects currently active");
+            }
+        };
+        ::table::print_filled_table(&mut table, writer);
     }
 );
 
@@ -1243,7 +1311,7 @@ command!(
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
+                writeln!(stderr(), "{}", s).unwrap_or(());
                 return;
             }
         };
@@ -1261,14 +1329,16 @@ command!(
             pushed_label = true;
         }
 
-        if let KObj::Node(ref node) = env.current_object {
-            if pushed_label {
-                urlstr.push('&');
-            } else {
-                urlstr.push('?');
+        if let ObjectSelection::Single(obj) = env.current_selection() {
+            if obj.is(ObjType::Node) {
+                if pushed_label {
+                    urlstr.push('&');
+                } else {
+                    urlstr.push('?');
+                }
+                urlstr.push_str("fieldSelector=spec.nodeName=");
+                urlstr.push_str(obj.name());
             }
-            urlstr.push_str("fieldSelector=spec.nodeName=");
-            urlstr.push_str(node);
         }
 
         let pl: Option<PodList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
@@ -1292,6 +1362,159 @@ command!(
         }
     }
 );
+
+// logs helper commands
+fn pick_container<'a>(obj: &'a KObj, writer: &mut ClickWriter) -> &'a str {
+    match obj.typ {
+        ObjType::Pod { ref containers, .. } => {
+            if containers.len() > 1 {
+                clickwriteln!(writer, "Pod has multiple containers, picking the first one");
+            }
+            containers[0].as_str()
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn write_logs_to_file(
+    env: &Env,
+    path: &PathBuf,
+    mut reader: BufReader<Response>,
+) -> Result<(), KubeError> {
+    let mut file = std::fs::File::create(path)?;
+    let mut buffer = [0; 1024];
+    while !env.ctrlcbool.load(Ordering::SeqCst) {
+        let amt = reader.read(&mut buffer[..])?;
+        if amt == 0 {
+            break;
+        }
+        file.write_all(&buffer[0..amt])?;
+    }
+    file.flush().map_err(KubeError::from)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn do_logs(
+    obj: &KObj,
+    env: &Env,
+    url_args: &str,
+    cont_opt: Option<&str>,
+    output_opt: Option<&str>,
+    editor: bool,
+    editor_opt: Option<&str>,
+    timeout: Option<Duration>,
+    writer: &mut ClickWriter,
+) {
+    let cont = cont_opt.unwrap_or_else(|| pick_container(obj, writer));
+
+    let url = format!(
+        "/api/v1/namespaces/{}/pods/{}/log?container={}{}",
+        obj.namespace.as_ref().unwrap(),
+        obj.name(),
+        cont,
+        url_args
+    );
+    let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
+    if let Some(lreader) = logs_reader {
+        let mut reader = BufReader::new(lreader);
+        let mut line = String::new();
+        env.ctrlcbool.store(false, Ordering::SeqCst);
+        if let Some(output) = output_opt {
+            let mut fmtvars = HashMap::new();
+            fmtvars.insert("name".to_string(), obj.name());
+            fmtvars.insert(
+                "namespace".to_string(),
+                obj.namespace
+                    .as_ref()
+                    .map(|n| n.as_str())
+                    .unwrap_or("[none]"),
+            );
+            let ltime = Local::now().to_rfc3339();
+            fmtvars.insert("time".to_string(), &ltime);
+            match strfmt(output, &fmtvars) {
+                Ok(file_path) => {
+                    let pbuf = file_path.into();
+                    match write_logs_to_file(env, &pbuf, reader) {
+                        Ok(_) => {
+                            println!("Wrote logs to {}", pbuf.to_str().unwrap());
+                        }
+                        Err(e) => {
+                            clickwriteln!(writer, "Error writing logs to file: {}", e);
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    clickwriteln!(writer, "Can't generate output path: {}", e);
+                    return;
+                }
+            }
+        } else if editor {
+            // We're opening in an editor, save to a temp
+            let editor = if let Some(v) = editor_opt {
+                v.to_owned()
+            } else if let Some(ref e) = env.click_config.editor {
+                e.clone()
+            } else {
+                match std::env::var("EDITOR") {
+                    Ok(ed) => ed,
+                    Err(e) => {
+                        clickwriteln!(
+                            writer,
+                            "Could not get EDITOR environment \
+                             variable: {}",
+                            e.description()
+                        );
+                        return;
+                    }
+                }
+            };
+            let tmpdir = match env.tempdir {
+                Ok(ref td) => td,
+                Err(ref e) => {
+                    clickwriteln!(writer, "Failed to create tempdir: {}", e.description());
+                    return;
+                }
+            };
+            let file_path = tmpdir.path().join(format!(
+                "{}_{}_{}.log",
+                obj.name(),
+                cont,
+                Local::now().to_rfc3339()
+            ));
+            if let Err(e) = write_logs_to_file(env, &file_path, reader) {
+                clickwriteln!(writer, "Error writing logs to file: {}", e);
+                return;
+            }
+
+            clickwriteln!(writer, "Logs downloaded, starting editor");
+            let expr = if editor.contains(' ') {
+                // split the whitespace
+                let mut eargs: Vec<&str> = editor.split_whitespace().collect();
+                eargs.push(file_path.to_str().unwrap());
+                duct::cmd(eargs[0], &eargs[1..])
+            } else {
+                cmd!(editor, file_path)
+            };
+            if let Err(e) = expr.start() {
+                clickwriteln!(writer, "Could not start editor: {}", e.description());
+            }
+        } else {
+            while !env.ctrlcbool.load(Ordering::SeqCst) {
+                if let Ok(amt) = reader.read_line(&mut line) {
+                    if amt > 0 {
+                        clickwrite!(writer, "{}", line); // newlines already in line
+                        line.clear();
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+}
 
 command!(
     Logs,
@@ -1353,216 +1576,109 @@ command!(
                 .long("editor")
                 .short("e")
                 .conflicts_with("follow")
+                .conflicts_with("output")
                 .help(
                     "Open fetched logs in an editor rather than printing them out. with \
-                     --editor ARG, ARG is used as the editor command, otherwise the \
+                     --editor ARG, ARG is used as the editor command, otherwise click \
+                     environment editor (see set/env commands) is used, otherwise the \
                      $EDITOR environment variable is used.",
                 )
                 .takes_value(true)
                 .min_values(0),
+        )
+        .arg(
+            Arg::with_name("output")
+                .long("output")
+                .short("o")
+                .conflicts_with("editor")
+                .conflicts_with("follow")
+                .help(
+                    "Write output to a file at the specified path instead of printing it. \
+                     This path can be templated with {name}, {namespace}, and {time} to write \
+                     individual files for each pod in a range. (See 'help ranges').",
+                )
+                .takes_value(true),
         )
     },
     vec!["logs"],
     vec![&completer::container_completer],
     #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
-        let cont = match matches.value_of("container") {
-            Some(c) => c,
-            None => match env.current_object {
-                KObj::Pod { ref containers, .. } => {
-                    if containers.len() == 1 {
-                        containers[0].as_str()
-                    } else {
-                        clickwrite!(
-                            writer,
-                            "Pod has multiple containers, please specify one of: \
-                             {:?}\n",
-                            containers
-                        );
-                        return;
-                    }
-                }
-                _ => {
-                    clickwrite!(writer, "Need an active pod to get logs.\n");
-                    return;
-                }
-            },
-        };
-        match (&env.current_object_namespace, env.current_pod()) {
-            (&Some(ref ns), Some(ref pod)) => {
-                let mut url = format!(
-                    "/api/v1/namespaces/{}/pods/{}/log?container={}",
-                    ns, pod, cont
-                );
-                if matches.is_present("follow") {
-                    url.push_str("&follow=true");
-                }
-                if matches.is_present("previous") {
-                    url.push_str("&previous=true");
-                }
-                if matches.is_present("tail") {
-                    url.push_str(
-                        format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str(),
-                    );
-                }
-                if matches.is_present("since") {
-                    // all unwraps already validated
-                    let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
-                    url.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
-                }
-                if matches.is_present("sinceTime") {
-                    let specified =
-                        DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap())
-                            .unwrap();
-                    let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
-                    url.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
-                }
-                let timeout = if matches.is_present("follow") {
-                    None
-                } else {
-                    Some(Duration::new(1, 0))
-                };
-                let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
-                if let Some(lreader) = logs_reader {
-                    let mut reader = BufReader::new(lreader);
-                    let mut line = String::new();
-                    env.ctrlcbool.store(false, Ordering::SeqCst);
-                    if matches.is_present("editor") {
-                        // We're opening in an editor, save to a temp
-                        let editor = if let Some(v) = matches.value_of("editor") {
-                            v.to_owned()
-                        } else if let Some(ref e) = env.click_config.editor {
-                            e.clone()
-                        } else {
-                            match std::env::var("EDITOR") {
-                                Ok(ed) => ed,
-                                Err(e) => {
-                                    clickwrite!(
-                                        writer,
-                                        "Could not get EDITOR environment \
-                                         variable: {}\n",
-                                        e.description()
-                                    );
-                                    return;
-                                }
-                            }
-                        };
-                        let tmpdir = match env.tempdir {
-                            Ok(ref td) => td,
-                            Err(ref e) => {
-                                clickwrite!(
-                                    writer,
-                                    "Failed to create tempdir: {}\n",
-                                    e.description()
-                                );
-                                return;
-                            }
-                        };
-                        let file_path = tmpdir.path().join(format!(
-                            "{}_{}_{}.log",
-                            pod,
-                            cont,
-                            Local::now().to_rfc3339()
-                        ));
-                        match std::fs::File::create(&file_path) {
-                            Ok(mut file) => {
-                                let mut buffer = [0; 1024];
-                                while !env.ctrlcbool.load(Ordering::SeqCst) {
-                                    match reader.read(&mut buffer[..]) {
-                                        Ok(amt) => {
-                                            if amt == 0 {
-                                                break;
-                                            }
-                                            if let Err(e) = file.write(&buffer[0..amt]) {
-                                                clickwrite!(
-                                                    writer,
-                                                    "Failed to write to file: {}\n",
-                                                    e.description()
-                                                );
-                                                return;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            clickwrite!(
-                                                writer,
-                                                "Failed to read from remote: {}\n",
-                                                e.description()
-                                            );
-                                        }
-                                    }
-                                }
-                                // file is created, run $EDITOR on it
-                                if let Err(e) = file.flush() {
-                                    clickwrite!(
-                                        writer,
-                                        "Could not flush file: {}, data may be absent.\n",
-                                        e.description()
-                                    );
-                                }
-                                clickwrite!(writer, "Starting editor\n");
-                                let expr = if editor.contains(' ') {
-                                    // split the whitespace
-                                    let mut eargs: Vec<&str> = editor.split_whitespace().collect();
-                                    eargs.push(file_path.to_str().unwrap());
-                                    duct::cmd(eargs[0], &eargs[1..])
-                                } else {
-                                    cmd!(editor, file_path)
-                                };
-                                if let Err(e) = expr.start() {
-                                    clickwrite!(
-                                        writer,
-                                        "Could not start editor: {}\n",
-                                        e.description()
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                clickwrite!(
-                                    writer,
-                                    "Could not create temp file: {}\n",
-                                    e.description()
-                                );
-                            }
-                        }
-                    } else {
-                        while !env.ctrlcbool.load(Ordering::SeqCst) {
-                            if let Ok(amt) = reader.read_line(&mut line) {
-                                if amt > 0 {
-                                    clickwrite!(writer, "{}", line); // newlines already in line
-                                    line.clear();
-                                } else {
-                                    break;
-                                }
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {
-                clickwrite!(writer, "Need an active pod to get logs.\n");
-            }
+        let mut url_args = "".to_string();
+        if matches.is_present("follow") {
+            url_args.push_str("&follow=true");
         }
+        if matches.is_present("previous") {
+            url_args.push_str("&previous=true");
+        }
+        if matches.is_present("tail") {
+            url_args.push_str(format!("&tailLines={}", matches.value_of("tail").unwrap()).as_str());
+        }
+        if matches.is_present("since") {
+            // all unwraps already validated
+            let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
+            url_args.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
+        }
+        if matches.is_present("sinceTime") {
+            let specified =
+                DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
+            let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
+            url_args.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
+        }
+        let timeout = if matches.is_present("follow") {
+            None
+        } else {
+            Some(Duration::new(1, 0))
+        };
+
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => {
+                if obj.is_pod() {
+                    do_logs(
+                        obj,
+                        env,
+                        &url_args,
+                        matches.value_of("container"),
+                        matches.value_of("output"),
+                        matches.is_present("editor"),
+                        matches.value_of("editor"),
+                        timeout,
+                        writer,
+                    );
+                } else {
+                    clickwriteln!(writer, "Logs only available on a pod");
+                }
+            }
+            ObjectSelection::Range(range) => {
+                iter_range!(
+                    range,
+                    writer,
+                    &env.click_config.range_separator,
+                    |obj: &KObj| {
+                        if obj.is_pod() {
+                            do_logs(
+                                obj,
+                                env,
+                                &url_args,
+                                matches.value_of("container"),
+                                matches.value_of("output"),
+                                matches.is_present("editor"),
+                                matches.value_of("editor"),
+                                timeout,
+                                writer,
+                            );
+                        } else {
+                            clickwriteln!(writer, "Logs only possible on pods");
+                        }
+                    }
+                );
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "Need an active selection for logs");
+            }
+        };
     }
 );
-
-fn maybe_full_output<T: ?Sized>(matches: ArgMatches, value: &T, writer: &mut ClickWriter) -> bool
-where
-    T: Serialize,
-{
-    if matches.is_present("json") {
-        writer.pretty_color_json(value).unwrap_or(());
-        true
-    } else if matches.is_present("yaml") {
-        writer.print_yaml(value).unwrap_or(());
-        true
-    } else {
-        false
-    }
-}
-
-static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 command!(
     Describe,
@@ -1585,131 +1701,87 @@ command!(
         ),
     vec!["describe"],
     noop_complete!(),
-    #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
-        match env.current_object {
-            KObj::None => {
-                clickwrite!(writer, "No active object to describe\n");
-            }
-            KObj::Pod { ref name, .. } => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    // describe the active pod
-                    let url = format!("/api/v1/namespaces/{}/pods/{}", ns, name);
-                    let pod_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(pval) = pod_value {
-                        if !maybe_full_output(matches, &pval, writer) {
-                            clickwrite!(writer, "{}\n", describe::describe_format_pod(pval));
-                        }
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => obj.describe(&matches, env, writer),
+            ObjectSelection::Range(range) => {
+                iter_range!(
+                    range,
+                    writer,
+                    &env.click_config.range_separator,
+                    |obj: &KObj| {
+                        obj.describe(&matches, env, writer);
                     }
-                } else {
-                    write!(stderr(), "Don't know namespace for {}", name).unwrap_or(());
-                }
+                );
             }
-            KObj::Node(ref node) => {
-                // describe the active node
-                let url = format!("/api/v1/nodes/{}", node);
-                let node_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                if let Some(nval) = node_value {
-                    if !maybe_full_output(matches, &nval, writer) {
-                        clickwrite!(writer, "{}\n", describe::describe_format_node(nval));
-                    }
-                }
-            }
-            KObj::Deployment(ref deployment) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
-                        ns, deployment
-                    );
-                    let dep_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(dval) = dep_value {
-                        if !maybe_full_output(matches, &dval, writer) {
-                            clickwrite!(writer, "{} {}", "Deployment", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::ReplicaSet(ref replicaset) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
-                        ns, replicaset
-                    );
-                    let rs_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(rsval) = rs_value {
-                        if !maybe_full_output(matches, &rsval, writer) {
-                            clickwrite!(writer, "{} {}", "ReplicaSet", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::StatefulSet(ref statefulset) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!(
-                        "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
-                        ns, statefulset
-                    );
-                    let statefulset_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(statefulset_val) = statefulset_value {
-                        if !maybe_full_output(matches, &statefulset_val, writer) {
-                            clickwrite!(writer, "{} {}", "StatefulSet", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::ConfigMap(ref config_map) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/configmaps/{}", ns, config_map);
-                    let cm_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(cval) = cm_value {
-                        if !maybe_full_output(matches, &cval, writer) {
-                            clickwrite!(writer, "{} {}", "ConfigMap", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
-            KObj::Secret(ref secret) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/secrets/{}", ns, secret);
-                    let s_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(sval) = s_value {
-                        if !maybe_full_output(matches, &sval, writer) {
-                            clickwrite!(writer, "{}\n", describe::describe_format_secret(sval));
-                        }
-                    }
-                }
-            }
-            KObj::Service(ref service) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/api/v1/namespaces/{}/services/{}", ns, service);
-                    let service_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(sval) = service_value {
-                        if !maybe_full_output(matches, &sval, writer) {
-                            let url = format!("/api/v1/namespaces/{}/endpoints/{}", ns, service);
-                            let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                            clickwrite!(
-                                writer,
-                                "{}\n",
-                                describe::describe_format_service(sval, endpoint_val)
-                            );
-                        }
-                    }
-                }
-            }
-            KObj::Job(ref job) => {
-                if let Some(ref ns) = env.current_object_namespace {
-                    let url = format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job);
-                    let job_value = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                    if let Some(jobval) = job_value {
-                        if !maybe_full_output(matches, &jobval, writer) {
-                            clickwrite!(writer, "{} {}", "Job", NOTSUPPORTED);
-                        }
-                    }
-                }
-            }
+            ObjectSelection::None => clickwriteln!(writer, "No active object to describe"),
         }
     }
 );
+
+#[allow(clippy::too_many_arguments)]
+fn do_exec(
+    env: &Env,
+    pod: &KObj,
+    kluster_name: &str,
+    cmd: &str,
+    it_arg: &str,
+    cont_opt: &Option<&str>,
+    term_opt: &Option<&str>,
+    do_terminal: bool,
+    writer: &mut ClickWriter,
+) {
+    let ns = pod.namespace.as_ref().unwrap();
+    if do_terminal {
+        let terminal = if let Some(t) = term_opt {
+            t
+        } else if let Some(ref t) = env.click_config.terminal {
+            t
+        } else {
+            "xterm -e"
+        };
+        let mut targs: Vec<&str> = terminal.split_whitespace().collect();
+        let mut kubectl_args = vec![
+            "kubectl",
+            "--namespace",
+            ns,
+            "--context",
+            kluster_name,
+            "exec",
+            it_arg,
+            pod.name(),
+        ];
+        targs.append(&mut kubectl_args);
+        if let Some(cont) = cont_opt {
+            targs.push("-c");
+            targs.push(cont);
+        }
+        targs.push(cmd);
+        clickwriteln!(writer, "Starting on {} in terminal", pod.name());
+        if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
+            clickwriteln!(writer, "Could not launch in terminal: {}", e.description());
+        }
+    } else {
+        let mut command = Command::new("kubectl");
+        command
+            .arg("--namespace")
+            .arg(ns)
+            .arg("--context")
+            .arg(kluster_name)
+            .arg("exec")
+            .arg(it_arg)
+            .arg(pod.name());
+        let command = if let Some(cont) = cont_opt {
+            command.arg("-c").arg(cont).arg(cmd)
+        } else {
+            command.arg(cmd)
+        };
+        let status = command.status().expect("failed to execute kubectl");
+        if !status.success() {
+            writeln!(stderr(), "kubectl exited abnormally").unwrap_or(());
+        }
+    }
+}
 
 command!(
     Exec,
@@ -1736,8 +1808,27 @@ command!(
                 .help(
                     "Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
                      terminal command, otherwise the default is used ('set terminal <value>' to \
-                     specify default)"
+                     specify default). If a range of objects is selected, a new terminal is opened \
+                     for each object."
                 )
+                .takes_value(true)
+                .min_values(0)
+        )
+        .arg(
+            Arg::with_name("tty")
+                .short("T")
+                .long("tty")
+                .help("If stdin is a TTY. Contrary to kubectl, this defaults to TRUE")
+                .validator(valid_bool)
+                .takes_value(true)
+                .min_values(0)
+        )
+        .arg(
+            Arg::with_name("stdin")
+                .short("i")
+                .long("stdin")
+                .help("Pass stdin to the container. Contrary to kubectl, this defaults to TRUE")
+                .validator(valid_bool)
                 .takes_value(true)
                 .min_values(0)
         ),
@@ -1745,68 +1836,125 @@ command!(
     noop_complete!(),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
-        if let (Some(ref kluster), Some(ref ns), Some(ref pod)) = (
-            env.kluster.as_ref(),
-            env.current_object_namespace.as_ref(),
-            env.current_pod().as_ref(),
-        ) {
-            let mut contargs = if let Some(container) = matches.value_of("container") {
-                vec!["-c", container]
-            } else {
-                vec![]
-            };
-            if matches.is_present("terminal") {
-                let terminal = if let Some(t) = matches.value_of("terminal") {
-                    t
-                } else if let Some(ref t) = env.click_config.terminal {
-                    t
+        if let Some(ref kluster) = env.kluster.as_ref() {
+            let tty = if matches.is_present("tty") {
+                if let Some(v) = matches.value_of("tty") {
+                    // already validated
+                    v.parse::<bool>().unwrap()
                 } else {
-                    "xterm -e"
-                };
-                let mut targs: Vec<&str> = terminal.split_whitespace().collect();
-                let mut kubectl_args = vec![
-                    "kubectl",
-                    "--namespace",
-                    ns,
-                    "--context",
-                    &kluster.name,
-                    "exec",
-                    "-it",
-                    pod,
-                ];
-                targs.append(&mut kubectl_args);
-                targs.append(&mut contargs);
-                targs.push(cmd);
-                clickwrite!(writer, "Starting in terminal\n");
-                if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
-                    clickwrite!(
-                        writer,
-                        "Could not launch in terminal: {}\n",
-                        e.description()
-                    );
+                    true
                 }
             } else {
-                let status = Command::new("kubectl")
-                    .arg("--namespace")
-                    .arg(ns)
-                    .arg("--context")
-                    .arg(&kluster.name)
-                    .arg("exec")
-                    .arg("-it")
-                    .arg(pod)
-                    .args(contargs.iter())
-                    .arg(cmd)
-                    .status()
-                    .expect("failed to execute kubectl");
-                if !status.success() {
-                    write!(stderr(), "kubectl exited abnormally\n").unwrap_or(());
+                true
+            };
+            let stdin = if matches.is_present("stdin") {
+                if let Some(v) = matches.value_of("stdin") {
+                    // already validated
+                    v.parse::<bool>().unwrap()
+                } else {
+                    true
+                }
+            } else {
+                true
+            };
+            let it_arg = match (tty, stdin) {
+                (true, true) => "-it",
+                (true, false) => "-t",
+                (false, true) => "-i",
+                (false, false) => "",
+            };
+            match env.current_selection() {
+                ObjectSelection::Single(obj) => {
+                    if obj.is_pod() {
+                        do_exec(
+                            env,
+                            obj,
+                            &kluster.name,
+                            cmd,
+                            it_arg,
+                            &matches.value_of("container"),
+                            &matches.value_of("terminal"),
+                            matches.is_present("terminal"),
+                            writer,
+                        );
+                    } else {
+                        clickwriteln!(writer, "Exec only possible on pods");
+                    }
+                }
+                ObjectSelection::Range(range) => {
+                    iter_range!(
+                        range,
+                        writer,
+                        &env.click_config.range_separator,
+                        |obj: &KObj| {
+                            if obj.is_pod() {
+                                do_exec(
+                                    env,
+                                    obj,
+                                    &kluster.name,
+                                    cmd,
+                                    it_arg,
+                                    &matches.value_of("container"),
+                                    &matches.value_of("terminal"),
+                                    matches.is_present("terminal"),
+                                    writer,
+                                );
+                            } else {
+                                clickwriteln!(writer, "Exec only possible on pods");
+                            }
+                        }
+                    );
+                }
+                ObjectSelection::None => {
+                    clickwriteln!(writer, "No active object to exec on");
                 }
             }
         } else {
-            write!(stderr(), "Need an active pod in order to exec.").unwrap_or(());
+            writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
         }
     }
 );
+
+fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter) {
+    let name = obj.name();
+    let namespace = match obj.typ {
+        ObjType::Node => "",
+        _ => match obj.namespace {
+            Some(ref ns) => ns,
+            None => {
+                clickwriteln!(writer, "Don't know namespace for {}", obj.name());
+                return;
+            }
+        },
+    };
+    clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
+    io::stdout().flush().expect("Could not flush stdout");
+    let mut conf = String::new();
+    if io::stdin().read_line(&mut conf).is_ok() {
+        if conf.trim() == "y" || conf.trim() == "yes" {
+            let url = obj.url(namespace);
+            let body = if obj.is(ObjType::Service) {
+                None
+            } else {
+                Some(delete_body)
+            };
+            let result = env.run_on_kluster(|k| k.delete(url.as_str(), body));
+            if let Some(x) = result {
+                if x.status.is_success() {
+                    clickwriteln!(writer, "Deleted");
+                } else {
+                    clickwriteln!(writer, "Failed to delete: {:?}", x.get_ref());
+                }
+            } else {
+                clickwriteln!(writer, "Failed to delete");
+            }
+        } else {
+            clickwriteln!(writer, "Not deleting");
+        }
+    } else {
+        writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
+    }
+}
 
 command!(
     Delete,
@@ -1843,129 +1991,65 @@ command!(
     },
     vec!["delete"],
     noop_complete!(),
-    #[allow(clippy::cognitive_complexity)]
     |matches, env, writer| {
-        if let Some(ref ns) = env.current_object_namespace {
-            let mut no_delete_opts = false;
-            if let Some(url) = match env.current_object {
-                KObj::Pod { ref name, .. } => {
-                    clickwrite!(writer, "Delete pod {} [y/N]? ", name);
-                    Some(format!("/api/v1/namespaces/{}/pods/{}", ns, name))
-                }
-                KObj::Deployment(ref dep) => {
-                    clickwrite!(writer, "Delete deployment {} [y/N]? ", dep);
-                    Some(format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
-                        ns, dep
-                    ))
-                }
-                KObj::ReplicaSet(ref repset) => {
-                    clickwrite!(writer, "Delete replica set {} [y/N]? ", repset);
-                    Some(format!(
-                        "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
-                        ns, repset
-                    ))
-                }
-                KObj::StatefulSet(ref statefulset) => {
-                    clickwrite!(writer, "Delete stateful set {} [y/N]? ", statefulset);
-                    Some(format!(
-                        "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
-                        ns, statefulset
-                    ))
-                }
-                KObj::Service(ref service) => {
-                    clickwrite!(writer, "Delete service {} [y/N]? ", service);
-                    no_delete_opts = true;
-                    Some(format!("/api/v1/namespaces/{}/services/{}", ns, service))
-                }
-                KObj::ConfigMap(ref cm) => {
-                    clickwrite!(writer, "Delete configmap {} [y/N]? ", cm);
-                    Some(format!("/api/v1/namespaces/{}/configmaps/{}", ns, cm))
-                }
-                KObj::Secret(ref secret) => {
-                    clickwrite!(writer, "Delete secret {} [y/N]? ", secret);
-                    Some(format!("/api/v1/namespaces/{}/secrets/{}", ns, secret))
-                }
-                KObj::Node(ref node) => {
-                    clickwrite!(writer, "Delete node {} [y/N]? ", node);
-                    Some(format!("/api/v1/nodes/{}", node))
-                }
-                KObj::Job(ref job) => {
-                    clickwrite!(writer, "Delete job {} [y/N]? ", job);
-                    Some(format!("/apis/batch/v1/namespaces/{}/jobs/{}", ns, job))
-                }
-                KObj::None => {
-                    write!(stderr(), "No active object\n").unwrap_or(());
-                    None
-                }
-            } {
-                io::stdout().flush().expect("Could not flush stdout");
-                let mut conf = String::new();
-                if io::stdin().read_line(&mut conf).is_ok() {
-                    if conf.trim() == "y" || conf.trim() == "yes" {
-                        let mut policy = "Foreground";
-                        if let Some(cascade) = matches.value_of("cascade") {
-                            if !(cascade.parse::<bool>()).unwrap() {
-                                // safe as validated
-                                policy = "Orphan";
-                            }
-                        }
-                        let delete_body = if no_delete_opts {
-                            None
-                        } else {
-                            let mut delete_body = json!({
-                                "kind":"DeleteOptions",
-                                "apiVersion":"v1",
-                                "propagationPolicy": policy
-                            });
-                            if let Some(grace) = matches.value_of("grace") {
-                                let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
-                                if graceu32 == 0 {
-                                    // don't allow zero, make it one.  zero is force delete which
-                                    // can mess things up.
-                                    delete_body
-                                        .as_object_mut()
-                                        .unwrap()
-                                        .insert("gracePeriodSeconds".to_owned(), json!(1));
-                                } else {
-                                    // already validated that it's a legit number
-                                    delete_body
-                                        .as_object_mut()
-                                        .unwrap()
-                                        .insert("gracePeriodSeconds".to_owned(), json!(graceu32));
-                                }
-                            } else if matches.is_present("force") {
-                                delete_body
-                                    .as_object_mut()
-                                    .unwrap()
-                                    .insert("gracePeriodSeconds".to_owned(), json!(0));
-                            } else if matches.is_present("now") {
-                                delete_body
-                                    .as_object_mut()
-                                    .unwrap()
-                                    .insert("gracePeriodSeconds".to_owned(), json!(1));
-                            }
-                            Some(delete_body.to_string())
-                        };
-                        let result = env.run_on_kluster(|k| k.delete(url.as_str(), delete_body));
-                        if let Some(x) = result {
-                            if x.status.is_success() {
-                                clickwrite!(writer, "Deleted\n");
-                            } else {
-                                clickwrite!(writer, "Failed to delete: {:?}", x.get_ref());
-                            }
-                        } else {
-                            write!(stderr(), "Failed to delete").unwrap_or(());
-                        }
-                    } else {
-                        clickwrite!(writer, "Not deleting\n");
-                    }
-                } else {
-                    write!(stderr(), "Could not read response, not deleting.").unwrap_or(());
-                }
+        let mut policy = "Foreground";
+        if let Some(cascade) = matches.value_of("cascade") {
+            if !(cascade.parse::<bool>()).unwrap() {
+                // safe as validated
+                policy = "Orphan";
             }
-        } else {
-            write!(stderr(), "No active namespace").unwrap_or(()); // TODO: Can you delete without a namespace?
+        }
+        let mut delete_body = json!({
+            "kind":"DeleteOptions",
+            "apiVersion":"v1",
+            "propagationPolicy": policy
+        });
+        if let Some(grace) = matches.value_of("grace") {
+            let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
+            if graceu32 == 0 {
+                // don't allow zero, make it one.  zero is force delete which
+                // can mess things up.
+                delete_body
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("gracePeriodSeconds".to_owned(), json!(1));
+            } else {
+                // already validated that it's a legit number
+                delete_body
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("gracePeriodSeconds".to_owned(), json!(graceu32));
+            }
+        } else if matches.is_present("force") {
+            delete_body
+                .as_object_mut()
+                .unwrap()
+                .insert("gracePeriodSeconds".to_owned(), json!(0));
+        } else if matches.is_present("now") {
+            delete_body
+                .as_object_mut()
+                .unwrap()
+                .insert("gracePeriodSeconds".to_owned(), json!(1));
+        }
+        let delete_body = delete_body.to_string();
+
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => {
+                delete_obj(env, obj, &delete_body, writer);
+            }
+            ObjectSelection::Range(range) => {
+                iter_range!(
+                    range,
+                    writer,
+                    &env.click_config.range_separator,
+                    |obj: &KObj| {
+                        delete_obj(env, obj, &delete_body, writer);
+                    }
+                );
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "No active object to delete");
+            }
         }
     }
 );
@@ -2011,6 +2095,19 @@ fn containers_string(pod: &Pod) -> String {
     buf
 }
 
+// conainer helper command
+fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+    let url = format!(
+        "/api/v1/namespaces/{}/pods/{}",
+        obj.namespace.as_ref().unwrap(),
+        obj.name()
+    );
+    let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
+    if let Some(pod) = pod_opt {
+        clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
+    }
+}
+
 command!(
     Containers,
     "containers",
@@ -2019,18 +2116,31 @@ command!(
     vec!["conts", "containers"],
     noop_complete!(),
     |_matches, env, writer| {
-        if let Some(ref ns) = env.current_object_namespace {
-            if let Some(ref pod) = env.current_pod() {
-                let url = format!("/api/v1/namespaces/{}/pods/{}", ns, pod);
-                let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
-                if let Some(pod) = pod_opt {
-                    clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => {
+                if obj.is_pod() {
+                    print_containers(obj, env, writer);
+                } else {
+                    clickwriteln!(writer, "containers only possible on a Pod");
                 }
-            } else {
-                write!(stderr(), "No active pod").unwrap_or(());
             }
-        } else {
-            write!(stderr(), "No active namespace").unwrap_or(());
+            ObjectSelection::Range(range) => {
+                iter_range!(
+                    range,
+                    writer,
+                    &env.click_config.range_separator,
+                    |obj: &KObj| {
+                        if obj.is_pod() {
+                            print_containers(obj, env, writer);
+                        } else {
+                            clickwriteln!(writer, "containers only possible on pods");
+                        }
+                    }
+                );
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "No active object");
+            }
         }
     }
 );
@@ -2045,6 +2155,26 @@ fn format_event(event: &Event) -> String {
     )
 }
 
+fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+    let ns = obj.namespace.as_ref().unwrap();
+    let url = format!(
+        "/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
+        ns, obj.name(), ns
+    );
+    let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
+    if let Some(el) = oel {
+        if !el.items.is_empty() {
+            for e in el.items.iter() {
+                clickwriteln!(writer, "{}", format_event(e));
+            }
+        } else {
+            clickwriteln!(writer, "No events");
+        }
+    } else {
+        clickwriteln!(writer, "Failed to fetch events");
+    }
+}
+
 command!(
     Events,
     "events",
@@ -2052,27 +2182,25 @@ command!(
     identity,
     vec!["events"],
     noop_complete!(),
-    |_matches, env, writer| if let Some(ref ns) = env.current_object_namespace {
-        if let Some(ref pod) = env.current_pod() {
-            let url = format!("/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
-                                   ns,pod,ns);
-            let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
-            if let Some(el) = oel {
-                if !el.items.is_empty() {
-                    for e in el.items.iter() {
-                        clickwrite!(writer, "{}\n", format_event(e));
-                    }
-                } else {
-                    clickwrite!(writer, "No events\n");
-                }
-            } else {
-                write!(stderr(), "Failed to fetch events\n").unwrap_or(());
+    |_matches, env, writer| {
+        match env.current_selection() {
+            ObjectSelection::Single(obj) => {
+                print_events(obj, env, writer);
             }
-        } else {
-            write!(stderr(), "No active pod\n").unwrap_or(());
+            ObjectSelection::Range(range) => {
+                iter_range!(
+                    range,
+                    writer,
+                    &env.click_config.range_separator,
+                    |obj: &KObj| {
+                        print_events(obj, env, writer);
+                    }
+                );
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "Need an active selection for events");
+            }
         }
-    } else {
-        write!(stderr(), "No active namespace\n").unwrap_or(());
     }
 );
 
@@ -2226,7 +2354,7 @@ command!(
             );
             env.set_lastlist(LastList::ServiceList(filtered));
         } else {
-            clickwrite!(writer, "no services\n");
+            clickwriteln!(writer, "no services");
             env.set_lastlist(LastList::None);
         }
     }
@@ -2240,28 +2368,48 @@ command!(
     vec!["env"],
     noop_complete!(),
     |_matches, env, writer| {
-        clickwrite!(writer, "{}\n", env);
+        clickwriteln!(writer, "{}", env);
     }
 );
+
+pub const SET_OPTS: &[&str] = &[
+    "completion_type",
+    "edit_mode",
+    "editor",
+    "terminal",
+    "range_separator",
+];
 
 command!(
     SetCmd,
     "set",
     "Set click options. (See 'help completion' and 'help edit_mode' for more information",
-    |clap: App<'static, 'static>| clap
-        .arg(
+    |clap: App<'static, 'static>| {
+        clap.arg(
             Arg::with_name("option")
                 .help("The click option to set")
                 .required(true)
                 .index(1)
-                .possible_values(&["completion_type", "edit_mode", "editor", "terminal"])
+                .possible_values(SET_OPTS),
         )
         .arg(
             Arg::with_name("value")
                 .help("The value to set the option to")
                 .required(true)
-                .index(2)
-        ),
+                .index(2),
+        )
+        .after_help(
+            "Note that if your value contains a -, you'll need to tell click it's not an option by
+passing '--' before.
+
+Example:
+  # Set the range_separator (needs the '--' after set since the value contains a -)
+  set -- range_separator \"---- {name} [{namespace}] ----\"
+
+  # set edit_mode
+  set edit_mode emacs",
+        )
+    },
     vec!["set"],
     vec![&completer::setoptions_values_completer],
     |matches, env, writer| {
@@ -2294,10 +2442,13 @@ command!(
                 }
             },
             "editor" => {
-                env.set_editor(&Some(value.to_owned()));
+                env.set_editor(Some(value));
             }
             "terminal" => {
-                env.set_terminal(&Some(value.to_owned()));
+                env.set_terminal(Some(value));
+            }
+            "range_separator" => {
+                env.click_config.range_separator = value.to_string();
             }
             _ => {
                 // this shouldn't happen
@@ -2306,7 +2457,7 @@ command!(
             }
         }
         if !failed {
-            clickwrite!(writer, "Set {} to {}\n", option, value);
+            clickwriteln!(writer, "Set {} to '{}'", option, value);
         }
     }
 );
@@ -2797,7 +2948,7 @@ command!(
     vec!["utc"],
     noop_complete!(),
     |_, _, writer| {
-        clickwrite!(writer, "{}\n", Utc::now());
+        clickwriteln!(writer, "{}", Utc::now());
     }
 );
 
@@ -2851,22 +3002,18 @@ Examples:
     |matches, env, writer| {
         let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
 
-        let pod = {
+        let (pod, ns) = {
             let epod = env.current_pod();
             match epod {
-                Some(p) => p.clone(),
+                Some(p) => (
+                    p.name().to_string(),
+                    p.namespace.as_ref().unwrap().to_string(),
+                ),
                 None => {
                     write!(stderr(), "No active pod").unwrap_or(());
                     return;
                 }
             }
-        };
-
-        let ns = if let Some(ref ns) = env.current_object_namespace {
-            ns.clone()
-        } else {
-            write!(stderr(), "No current namespace").unwrap_or(());
-            return;
         };
 
         let context = if let Some(ref kluster) = env.kluster {
@@ -2915,7 +3062,7 @@ Examples:
                 });
 
                 let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
-                clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
+                clickwriteln!(writer, "Forwarding port(s): {}", pvec.join(", "));
 
                 env.add_port_forward(env::PortForward {
                     child: child,
@@ -3010,12 +3157,11 @@ command!(
                     clickwrite!(writer, "Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
 
                     if output {
-                        clickwrite!(writer, " Output:\n{}", *pf.output.lock().unwrap());
+                        clickwriteln!(writer, " Output:{}", *pf.output.lock().unwrap());
                     }
                 }
                 None => {
-                    write!(stderr(), "Invalid index (try without args to get a list)")
-                        .unwrap_or(());
+                    clickwriteln!(writer, "Invalid index (try without args to get a list)");
                     return;
                 }
             }
@@ -3028,7 +3174,7 @@ command!(
                     if conf.trim() == "y" || conf.trim() == "yes" {
                         match env.stop_port_forward(i) {
                             Ok(()) => {
-                                clickwrite!(writer, "Stopped\n");
+                                clickwriteln!(writer, "Stopped");
                             }
                             Err(e) => {
                                 write!(stderr(), "Failed to stop: {}", e.description())
@@ -3036,10 +3182,10 @@ command!(
                             }
                         }
                     } else {
-                        clickwrite!(writer, "Not stopping\n");
+                        clickwriteln!(writer, "Not stopping");
                     }
                 } else {
-                    write!(stderr(), "Could not read response, not stopping.").unwrap_or(());
+                    clickwriteln!(writer, "Could not read response, not stopping.");
                 }
             } else {
                 clickwrite!(writer, "\n"); // just flush the above description
@@ -3201,10 +3347,10 @@ Examples:
                 alias: alias.to_owned(),
                 expanded: expanded.to_owned(),
             });
-            clickwrite!(writer, "aliased {} = '{}'\n", alias, expanded);
+            clickwriteln!(writer, "aliased {} = '{}'", alias, expanded);
         } else {
             for alias in env.click_config.aliases.iter() {
-                clickwrite!(writer, "alias {} = '{}'\n", alias.alias, alias.expanded);
+                clickwriteln!(writer, "alias {} = '{}'", alias.alias, alias.expanded);
             }
         }
     }
@@ -3224,9 +3370,9 @@ command!(
     |matches, env, writer| {
         let alias = matches.value_of("alias").unwrap(); // safe, required
         if env.remove_alias(alias) {
-            clickwrite!(writer, "unaliased: {}\n", alias);
+            clickwriteln!(writer, "unaliased: {}", alias);
         } else {
-            clickwrite!(writer, "no such alias: {}\n", alias);
+            clickwriteln!(writer, "no such alias: {}", alias);
         }
     }
 );

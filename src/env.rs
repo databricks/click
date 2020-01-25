@@ -1,12 +1,12 @@
 use config::{self, Alias, ClickConfig, Config};
 use error::KubeError;
+use kobj::{KObj, ObjType};
 use kube::{
     ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
     ServiceList, StatefulSetList,
 };
-use values::val_str_opt;
 
-use ansi_term::Colour::{Black, Blue, Cyan, Green, Purple, Red, Yellow};
+use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
 use tempdir::TempDir;
 
@@ -16,24 +16,6 @@ use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-
-/// An object we can have as a "current" thing
-#[derive(Debug, PartialEq)]
-pub enum KObj {
-    None,
-    Pod {
-        name: String,
-        containers: Vec<String>,
-    },
-    Node(String),
-    Deployment(String),
-    Service(String),
-    ReplicaSet(String),
-    StatefulSet(String),
-    ConfigMap(String),
-    Secret(String),
-    Job(String),
-}
 
 pub enum LastList {
     None,
@@ -64,6 +46,13 @@ pub struct ExpandedAlias<'a> {
     pub rest: &'a str,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ObjectSelection {
+    Single(KObj),
+    Range(Vec<KObj>),
+    None,
+}
+
 /// Keep track of our repl environment
 pub struct Env {
     pub config: Config,
@@ -73,12 +62,12 @@ pub struct Env {
     pub need_new_editor: bool,
     pub kluster: Option<Kluster>,
     pub namespace: Option<String>,
-    pub current_object: KObj,
-    pub current_object_namespace: Option<String>,
+    current_selection: ObjectSelection,
     last_objs: LastList,
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
     pub prompt: String,
+    range_str: Option<String>,
     pub tempdir: std::io::Result<TempDir>,
 }
 
@@ -106,8 +95,7 @@ impl Env {
             need_new_editor: false,
             kluster: None,
             namespace,
-            current_object: KObj::None,
-            current_object_namespace: None,
+            current_selection: ObjectSelection::None,
             last_objs: LastList::None,
             ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
@@ -117,10 +105,15 @@ impl Env {
                 Green.paint("none"),
                 Yellow.paint("none")
             ),
+            range_str: None,
             tempdir: TempDir::new("click"),
         };
         env.set_context(context.as_ref().map(|x| &**x));
         env
+    }
+
+    pub fn current_selection(&self) -> &ObjectSelection {
+        &self.current_selection
     }
 
     pub fn save_click_config(&mut self) {
@@ -145,17 +138,10 @@ impl Env {
             } else {
                 Green.paint("none")
             },
-            match self.current_object {
-                KObj::None => Yellow.paint("none"),
-                KObj::Pod { ref name, .. } => Yellow.bold().paint(name.as_str()),
-                KObj::Node(ref name) => Blue.bold().paint(name.as_str()),
-                KObj::Deployment(ref name) => Purple.bold().paint(name.as_str()),
-                KObj::Service(ref name) => Cyan.bold().paint(name.as_str()),
-                KObj::ReplicaSet(ref name) => Green.bold().paint(name.as_str()),
-                KObj::StatefulSet(ref name) => Green.bold().paint(name.as_str()),
-                KObj::ConfigMap(ref name) => Black.bold().paint(name.as_str()),
-                KObj::Secret(ref name) => Red.bold().paint(name.as_str()),
-                KObj::Job(ref name) => Purple.bold().paint(name.as_str()),
+            match self.current_selection {
+                ObjectSelection::Single(ref obj) => obj.prompt_str(),
+                ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
+                ObjectSelection::None => Yellow.paint("none"),
             }
         );
     }
@@ -200,12 +186,12 @@ impl Env {
         self.set_prompt();
     }
 
-    pub fn set_editor(&mut self, editor: &Option<String>) {
-        self.click_config.editor = editor.clone();
+    pub fn set_editor(&mut self, editor: Option<&str>) {
+        self.click_config.editor = editor.map(|s| s.to_string());
     }
 
-    pub fn set_terminal(&mut self, terminal: &Option<String>) {
-        self.click_config.terminal = terminal.clone();
+    pub fn set_terminal(&mut self, terminal: Option<&str>) {
+        self.click_config.terminal = terminal.map(|s| s.to_string());
     }
 
     pub fn set_completion_type(&mut self, comptype: config::CompletionType) {
@@ -248,150 +234,95 @@ impl Env {
     }
 
     pub fn clear_current(&mut self) {
-        self.current_object = KObj::None;
+        self.current_selection = ObjectSelection::None;
+        self.range_str = None;
         self.set_prompt();
     }
 
-    pub fn set_current(&mut self, num: usize) {
+    /// get the item from the last list at the specified index
+    pub fn item_at(&self, index: usize) -> Option<KObj> {
         match self.last_objs {
             LastList::None => {
                 println!("No active object list");
+                None
             }
-            LastList::PodList(ref pl) => {
-                if let Some(pod) = pl.items.get(num) {
-                    let containers = pod
-                        .spec
-                        .containers
-                        .iter()
-                        .map(|cspec| cspec.name.clone())
-                        .collect();
-                    self.current_object = KObj::Pod {
-                        name: pod.metadata.name.clone(),
-                        containers,
-                    };
-                    self.current_object_namespace = pod.metadata.namespace.clone();
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::NodeList(ref nl) => {
-                if let Some(name) = nl.items.get(num).map(|n| n.metadata.name.clone()) {
-                    self.current_object = KObj::Node(name);
-                    self.current_object_namespace = None;
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::DeploymentList(ref dl) => {
-                if let Some(dep) = dl.items.get(num) {
-                    self.current_object = KObj::Deployment(dep.metadata.name.clone());
-                    self.current_object_namespace = dep.metadata.namespace.clone();
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::ServiceList(ref sl) => {
-                if let Some(service) = sl.items.get(num) {
-                    self.current_object = KObj::Service(service.metadata.name.clone());
-                    self.current_object_namespace = service.metadata.namespace.clone();
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::ReplicaSetList(ref rsl) => {
-                if let Some(ref replicaset) = rsl.items.get(num) {
-                    match val_str_opt("/metadata/name", replicaset) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", replicaset);
-                            self.current_object = KObj::ReplicaSet(name);
-                            self.current_object_namespace = namespace;
-                        }
-                        None => {
-                            println!("ReplicaSet has no name in metadata");
-                            self.current_object = KObj::None;
-                        }
-                    }
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::StatefulSetList(ref stfs) => {
-                if let Some(ref statefulset) = stfs.items.get(num) {
-                    match val_str_opt("/metadata/name", statefulset) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", statefulset);
-                            self.current_object = KObj::StatefulSet(name);
-                            self.current_object_namespace = namespace;
-                        }
-                        None => {
-                            println!("StatefulSet has no name in metadata");
-                            self.current_object = KObj::None;
-                        }
-                    }
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::ConfigMapList(ref cml) => {
-                if let Some(ref cm) = cml.items.get(num) {
-                    match val_str_opt("/metadata/name", cm) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", cm);
-                            self.current_object = KObj::ConfigMap(name);
-                            self.current_object_namespace = namespace;
-                        }
-                        None => {
-                            println!("ConfigMap has no name in metadata");
-                            self.current_object = KObj::None;
-                        }
-                    }
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::SecretList(ref sl) => {
-                if let Some(ref secret) = sl.items.get(num) {
-                    match val_str_opt("/metadata/name", secret) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", secret);
-                            self.current_object = KObj::Secret(name);
-                            self.current_object_namespace = namespace;
-                        }
-                        None => {
-                            println!("Secret has no name in metadata");
-                            self.current_object = KObj::None;
-                        }
-                    }
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
-            LastList::JobList(ref jl) => {
-                if let Some(ref job) = jl.items.get(num) {
-                    match val_str_opt("/metadata/name", job) {
-                        Some(name) => {
-                            let namespace = val_str_opt("/metadata/namespace", job);
-                            self.current_object = KObj::Job(name);
-                            self.current_object_namespace = namespace;
-                        }
-                        None => {
-                            println!("Job has no name in metadata");
-                            self.current_object = KObj::None;
-                        }
-                    }
-                } else {
-                    self.current_object = KObj::None;
-                }
-            }
+            LastList::PodList(ref pl) => pl.items.get(index).map(|pod| {
+                let containers = pod
+                    .spec
+                    .containers
+                    .iter()
+                    .map(|cspec| cspec.name.clone())
+                    .collect();
+                KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
+            }),
+            LastList::NodeList(ref nl) => nl.items.get(index).map(|n| KObj {
+                name: n.metadata.name.clone(),
+                namespace: None,
+                typ: ObjType::Node,
+            }),
+            LastList::DeploymentList(ref dl) => dl
+                .items
+                .get(index)
+                .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment)),
+            LastList::ServiceList(ref sl) => sl
+                .items
+                .get(index)
+                .map(|service| KObj::from_metadata(&service.metadata, ObjType::Service)),
+            LastList::ReplicaSetList(ref rsl) => rsl
+                .items
+                .get(index)
+                .and_then(|replicaset| KObj::from_value(replicaset, ObjType::ReplicaSet)),
+            LastList::StatefulSetList(ref stfs) => stfs
+                .items
+                .get(index)
+                .and_then(|statefulset| KObj::from_value(statefulset, ObjType::StatefulSet)),
+            LastList::ConfigMapList(ref cml) => cml
+                .items
+                .get(index)
+                .and_then(|cm| KObj::from_value(cm, ObjType::ConfigMap)),
+            LastList::SecretList(ref sl) => sl
+                .items
+                .get(index)
+                .and_then(|secret| KObj::from_value(secret, ObjType::Secret)),
+            LastList::JobList(ref jl) => jl
+                .items
+                .get(index)
+                .and_then(|job| KObj::from_value(job, ObjType::Job)),
         }
+    }
+
+    pub fn set_current(&mut self, num: usize) {
+        self.current_selection = match self.item_at(num) {
+            Some(obj) => ObjectSelection::Single(obj),
+            None => ObjectSelection::None,
+        };
+        self.range_str = None;
         self.set_prompt();
     }
 
-    pub fn current_pod(&self) -> Option<&String> {
-        if let KObj::Pod { ref name, .. } = self.current_object {
-            Some(name)
+    pub fn set_range(&mut self, range: Vec<KObj>) {
+        let range_str = if range.is_empty() {
+            "Empty range".to_string()
         } else {
-            None
+            let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
+            if range.len() > 1 {
+                r.push('s');
+            }
+            r.push_str(" selected");
+            r
+        };
+        self.current_selection = ObjectSelection::Range(range);
+        self.range_str = Some(range_str);
+        self.set_prompt();
+    }
+
+    pub fn current_pod(&self) -> Option<&KObj> {
+        match self.current_selection {
+            ObjectSelection::Single(ref obj) => match obj.typ {
+                ObjType::Pod { .. } => Some(obj),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
@@ -487,6 +418,7 @@ impl fmt::Display for Env {
   Edit Mode: {}
   Editor: {}
   Terminal: {}
+  Range Separator: {}
 }}",
             if let Some(ref k) = self.kluster {
                 Green.bold().paint(k.name.as_str())
@@ -515,6 +447,7 @@ impl fmt::Display for Env {
                     .as_ref()
                     .unwrap_or(&"<unset, will use xterm>".to_owned())
             ),
+            Green.paint(&self.click_config.range_separator),
         )
     }
 }

@@ -537,6 +537,15 @@ fn print_podlist(
                     |a1, a2| a1.partial_cmp(a2).unwrap(),
                 )
             }),
+            "Phase" | "phase" => podlist.items.sort_by(|p1, p2| {
+                if phase_str(p1) < phase_str(p2) {
+                    cmp::Ordering::Less
+                } else if phase_str(p1) < phase_str(p2) {
+                    cmp::Ordering::Greater
+                } else {
+                    cmp::Ordering::Equal
+                }
+            }),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
                     .status

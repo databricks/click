@@ -147,7 +147,7 @@ impl KObj {
             _ => match self.namespace {
                 Some(ref ns) => ns,
                 None => {
-                    clickwrite!(writer, "Don't know namespace for {}\n", self.name());
+                    clickwriteln!(writer, "Don't know namespace for {}", self.name());
                     return;
                 }
             },
@@ -159,29 +159,29 @@ impl KObj {
                 if !maybe_full_describe_output(matches, &val, writer) {
                     match self.typ {
                         ObjType::Pod { .. } => {
-                            clickwrite!(writer, "{}\n", describe::describe_format_pod(val))
+                            clickwriteln!(writer, "{}", describe::describe_format_pod(val))
                         }
                         ObjType::Node => {
-                            clickwrite!(writer, "{}\n", describe::describe_format_node(val))
+                            clickwriteln!(writer, "{}", describe::describe_format_node(val))
                         }
                         ObjType::Secret => {
-                            clickwrite!(writer, "{}\n", describe::describe_format_secret(val))
+                            clickwriteln!(writer, "{}", describe::describe_format_secret(val))
                         }
                         ObjType::Service => {
                             let url =
                                 format!("/api/v1/namespaces/{}/endpoints/{}", namespace, self.name);
                             let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                            clickwrite!(
+                            clickwriteln!(
                                 writer,
-                                "{}\n",
+                                "{}",
                                 describe::describe_format_service(val, endpoint_val)
                             )
                         }
-                        _ => clickwrite!(writer, "{} {}", self.type_str(), NOTSUPPORTED),
+                        _ => clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED),
                     }
                 }
             }
-            None => clickwrite!(writer, "Failed to fetch info from cluster"),
+            None => clickwriteln!(writer, "Failed to fetch info from cluster"),
         }
     }
 }

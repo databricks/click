@@ -115,7 +115,7 @@ where
             true
         }
         Err(err) => {
-            clickwrite!(writer, "{}\n", err.message);
+            clickwriteln!(writer, "{}", err.message);
             false
         }
     }
@@ -141,11 +141,11 @@ macro_rules! iter_range {
             );
             match strfmt($sepfmt, &fmtvars) {
                 Ok(sep) => {
-                    clickwrite!($writer, "{}\n", sep);
+                    clickwriteln!($writer, "{}", sep);
                     $action(obj)
                 }
                 Err(e) => {
-                    clickwrite!($writer, "Failed to format separator: {}", e);
+                    clickwriteln!($writer, "Failed to format separator: {}", e);
                     return;
                 }
             }
@@ -223,10 +223,9 @@ macro_rules! command {
 
             fn write_help(&self, writer: &mut ClickWriter) {
                 if let Err(res) = self.clap.borrow_mut().write_help(writer) {
-                    clickwrite!(writer, "Couldn't print help: {}", res);
+                    clickwriteln!(writer, "Couldn't print help: {}", res);
                 }
-                println!(); // clap print_help doesn't add final newline
-                            // clap write_help doesn't add final newline
+                // clap print_help doesn't add final newline
                 clickwrite!(writer, "\n");
             }
 
@@ -537,9 +536,9 @@ fn print_podlist(
                     |a1, a2| a1.partial_cmp(a2).unwrap(),
                 )
             }),
-            "Phase" | "phase" => podlist.items.sort_by(|p1, p2| {
-                phase_str(p1).cmp(&phase_str(p2))
-            }),
+            "Phase" | "phase" => podlist
+                .items
+                .sort_by(|p1, p2| phase_str(p1).cmp(&phase_str(p2))),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
                     .status
@@ -580,7 +579,7 @@ fn print_podlist(
                 )
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -682,7 +681,7 @@ fn print_nodelist(
                 n1s.partial_cmp(&n2s).unwrap()
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -807,7 +806,7 @@ fn print_deployments(
                 p1s.partial_cmp(&p2s).unwrap()
             }),
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -993,7 +992,7 @@ fn print_servicelist(
                 servswithipportss.sort_by(|s1, s2| (s1.1).1.partial_cmp(&(s2.1).1).unwrap())
             }
             _ => {
-                clickwrite!(
+                clickwriteln!(
                     writer,
                     "Invalid sort col: {}, this is a bug, please report it",
                     sortcol
@@ -1158,7 +1157,7 @@ command!(
         let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
         contexts.sort();
         for context in contexts.iter() {
-            clickwrite!(writer, "{}\n", context);
+            clickwriteln!(writer, "{}", context);
         }
     }
 );
@@ -1222,7 +1221,7 @@ command!(
                 }
             }
             ObjectSelection::None => {
-                clickwrite!(writer, "No objects currently active");
+                clickwriteln!(writer, "No objects currently active");
             }
         };
         ::table::print_filled_table(&mut table, writer);
@@ -1369,10 +1368,7 @@ fn pick_container<'a>(obj: &'a KObj, writer: &mut ClickWriter) -> &'a str {
     match obj.typ {
         ObjType::Pod { ref containers, .. } => {
             if containers.len() > 1 {
-                clickwrite!(
-                    writer,
-                    "Pod has multiple containers, picking the first one\n"
-                );
+                clickwriteln!(writer, "Pod has multiple containers, picking the first one");
             }
             containers[0].as_str()
         }
@@ -1443,13 +1439,13 @@ fn do_logs(
                             println!("Wrote logs to {}", pbuf.to_str().unwrap());
                         }
                         Err(e) => {
-                            clickwrite!(writer, "Error writing logs to file: {}", e);
+                            clickwriteln!(writer, "Error writing logs to file: {}", e);
                             return;
                         }
                     }
                 }
                 Err(e) => {
-                    clickwrite!(writer, "Can't generate output path: {}", e);
+                    clickwriteln!(writer, "Can't generate output path: {}", e);
                     return;
                 }
             }
@@ -1463,10 +1459,10 @@ fn do_logs(
                 match std::env::var("EDITOR") {
                     Ok(ed) => ed,
                     Err(e) => {
-                        clickwrite!(
+                        clickwriteln!(
                             writer,
                             "Could not get EDITOR environment \
-                             variable: {}\n",
+                             variable: {}",
                             e.description()
                         );
                         return;
@@ -1476,7 +1472,7 @@ fn do_logs(
             let tmpdir = match env.tempdir {
                 Ok(ref td) => td,
                 Err(ref e) => {
-                    clickwrite!(writer, "Failed to create tempdir: {}\n", e.description());
+                    clickwriteln!(writer, "Failed to create tempdir: {}", e.description());
                     return;
                 }
             };
@@ -1487,11 +1483,11 @@ fn do_logs(
                 Local::now().to_rfc3339()
             ));
             if let Err(e) = write_logs_to_file(env, &file_path, reader) {
-                clickwrite!(writer, "Error writing logs to file: {}", e);
+                clickwriteln!(writer, "Error writing logs to file: {}", e);
                 return;
             }
 
-            clickwrite!(writer, "Logs downloaded, starting editor\n");
+            clickwriteln!(writer, "Logs downloaded, starting editor");
             let expr = if editor.contains(' ') {
                 // split the whitespace
                 let mut eargs: Vec<&str> = editor.split_whitespace().collect();
@@ -1501,7 +1497,7 @@ fn do_logs(
                 cmd!(editor, file_path)
             };
             if let Err(e) = expr.start() {
-                clickwrite!(writer, "Could not start editor: {}\n", e.description());
+                clickwriteln!(writer, "Could not start editor: {}", e.description());
             }
         } else {
             while !env.ctrlcbool.load(Ordering::SeqCst) {
@@ -1650,7 +1646,7 @@ command!(
                         writer,
                     );
                 } else {
-                    clickwrite!(writer, "Logs only available on a pod\n");
+                    clickwriteln!(writer, "Logs only available on a pod");
                 }
             }
             ObjectSelection::Range(range) => {
@@ -1672,13 +1668,13 @@ command!(
                                 writer,
                             );
                         } else {
-                            clickwrite!(writer, "Logs only possible on pods\n");
+                            clickwriteln!(writer, "Logs only possible on pods");
                         }
                     }
                 );
             }
             ObjectSelection::None => {
-                clickwrite!(writer, "Need an active selection for logs\n");
+                clickwriteln!(writer, "Need an active selection for logs");
             }
         };
     }
@@ -1718,7 +1714,7 @@ command!(
                     }
                 );
             }
-            ObjectSelection::None => clickwrite!(writer, "No active object to describe\n"),
+            ObjectSelection::None => clickwriteln!(writer, "No active object to describe"),
         }
     }
 );
@@ -1761,13 +1757,9 @@ fn do_exec(
             targs.push(cont);
         }
         targs.push(cmd);
-        clickwrite!(writer, "Starting on {} in terminal\n", pod.name());
+        clickwriteln!(writer, "Starting on {} in terminal", pod.name());
         if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
-            clickwrite!(
-                writer,
-                "Could not launch in terminal: {}\n",
-                e.description()
-            );
+            clickwriteln!(writer, "Could not launch in terminal: {}", e.description());
         }
     } else {
         let mut command = Command::new("kubectl");
@@ -1886,7 +1878,7 @@ command!(
                             writer,
                         );
                     } else {
-                        clickwrite!(writer, "Exec only possible on pods\n");
+                        clickwriteln!(writer, "Exec only possible on pods");
                     }
                 }
                 ObjectSelection::Range(range) => {
@@ -1908,13 +1900,13 @@ command!(
                                     writer,
                                 );
                             } else {
-                                clickwrite!(writer, "Exec only possible on pods\n");
+                                clickwriteln!(writer, "Exec only possible on pods");
                             }
                         }
                     );
                 }
                 ObjectSelection::None => {
-                    clickwrite!(writer, "No active object to exec on");
+                    clickwriteln!(writer, "No active object to exec on");
                 }
             }
         } else {
@@ -1930,7 +1922,7 @@ fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter
         _ => match obj.namespace {
             Some(ref ns) => ns,
             None => {
-                clickwrite!(writer, "Don't know namespace for {}\n", obj.name());
+                clickwriteln!(writer, "Don't know namespace for {}", obj.name());
                 return;
             }
         },
@@ -1949,15 +1941,15 @@ fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter
             let result = env.run_on_kluster(|k| k.delete(url.as_str(), body));
             if let Some(x) = result {
                 if x.status.is_success() {
-                    clickwrite!(writer, "Deleted\n");
+                    clickwriteln!(writer, "Deleted");
                 } else {
-                    clickwrite!(writer, "Failed to delete: {:?}", x.get_ref());
+                    clickwriteln!(writer, "Failed to delete: {:?}", x.get_ref());
                 }
             } else {
-                writeln!(stderr(), "Failed to delete").unwrap_or(());
+                clickwriteln!(writer, "Failed to delete");
             }
         } else {
-            clickwrite!(writer, "Not deleting\n");
+            clickwriteln!(writer, "Not deleting");
         }
     } else {
         writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
@@ -2056,7 +2048,7 @@ command!(
                 );
             }
             ObjectSelection::None => {
-                clickwrite!(writer, "No active object to delete");
+                clickwriteln!(writer, "No active object to delete");
             }
         }
     }
@@ -2129,7 +2121,7 @@ command!(
                 if obj.is_pod() {
                     print_containers(obj, env, writer);
                 } else {
-                    clickwrite!(writer, "containers only possible on a Pod\n");
+                    clickwriteln!(writer, "containers only possible on a Pod");
                 }
             }
             ObjectSelection::Range(range) => {
@@ -2141,13 +2133,13 @@ command!(
                         if obj.is_pod() {
                             print_containers(obj, env, writer);
                         } else {
-                            clickwrite!(writer, "containers only possible on pods\n");
+                            clickwriteln!(writer, "containers only possible on pods");
                         }
                     }
                 );
             }
             ObjectSelection::None => {
-                clickwrite!(writer, "No active object\n");
+                clickwriteln!(writer, "No active object");
             }
         }
     }
@@ -2173,13 +2165,13 @@ fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
     if let Some(el) = oel {
         if !el.items.is_empty() {
             for e in el.items.iter() {
-                clickwrite!(writer, "{}\n", format_event(e));
+                clickwriteln!(writer, "{}", format_event(e));
             }
         } else {
-            clickwrite!(writer, "No events\n");
+            clickwriteln!(writer, "No events");
         }
     } else {
-        writeln!(stderr(), "Failed to fetch events").unwrap_or(());
+        clickwriteln!(writer, "Failed to fetch events");
     }
 }
 
@@ -2206,7 +2198,7 @@ command!(
                 );
             }
             ObjectSelection::None => {
-                clickwrite!(writer, "Need an active selection for events\n");
+                clickwriteln!(writer, "Need an active selection for events");
             }
         }
     }
@@ -2362,7 +2354,7 @@ command!(
             );
             env.set_lastlist(LastList::ServiceList(filtered));
         } else {
-            clickwrite!(writer, "no services\n");
+            clickwriteln!(writer, "no services");
             env.set_lastlist(LastList::None);
         }
     }
@@ -2376,7 +2368,7 @@ command!(
     vec!["env"],
     noop_complete!(),
     |_matches, env, writer| {
-        clickwrite!(writer, "{}\n", env);
+        clickwriteln!(writer, "{}", env);
     }
 );
 
@@ -2465,7 +2457,7 @@ Example:
             }
         }
         if !failed {
-            clickwrite!(writer, "Set {} to '{}'\n", option, value);
+            clickwriteln!(writer, "Set {} to '{}'", option, value);
         }
     }
 );
@@ -2956,7 +2948,7 @@ command!(
     vec!["utc"],
     noop_complete!(),
     |_, _, writer| {
-        clickwrite!(writer, "{}\n", Utc::now());
+        clickwriteln!(writer, "{}", Utc::now());
     }
 );
 
@@ -3070,7 +3062,7 @@ Examples:
                 });
 
                 let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
-                clickwrite!(writer, "Forwarding port(s): {}\n", pvec.join(", "));
+                clickwriteln!(writer, "Forwarding port(s): {}", pvec.join(", "));
 
                 env.add_port_forward(env::PortForward {
                     child: child,
@@ -3165,12 +3157,11 @@ command!(
                     clickwrite!(writer, "Pod: {}, Port(s): {}", pf.pod, pf.ports.join(", "));
 
                     if output {
-                        clickwrite!(writer, " Output:\n{}", *pf.output.lock().unwrap());
+                        clickwriteln!(writer, " Output:{}", *pf.output.lock().unwrap());
                     }
                 }
                 None => {
-                    write!(stderr(), "Invalid index (try without args to get a list)")
-                        .unwrap_or(());
+                    clickwriteln!(writer, "Invalid index (try without args to get a list)");
                     return;
                 }
             }
@@ -3183,7 +3174,7 @@ command!(
                     if conf.trim() == "y" || conf.trim() == "yes" {
                         match env.stop_port_forward(i) {
                             Ok(()) => {
-                                clickwrite!(writer, "Stopped\n");
+                                clickwriteln!(writer, "Stopped");
                             }
                             Err(e) => {
                                 write!(stderr(), "Failed to stop: {}", e.description())
@@ -3191,10 +3182,10 @@ command!(
                             }
                         }
                     } else {
-                        clickwrite!(writer, "Not stopping\n");
+                        clickwriteln!(writer, "Not stopping");
                     }
                 } else {
-                    write!(stderr(), "Could not read response, not stopping.").unwrap_or(());
+                    clickwriteln!(writer, "Could not read response, not stopping.");
                 }
             } else {
                 clickwrite!(writer, "\n"); // just flush the above description
@@ -3356,10 +3347,10 @@ Examples:
                 alias: alias.to_owned(),
                 expanded: expanded.to_owned(),
             });
-            clickwrite!(writer, "aliased {} = '{}'\n", alias, expanded);
+            clickwriteln!(writer, "aliased {} = '{}'", alias, expanded);
         } else {
             for alias in env.click_config.aliases.iter() {
-                clickwrite!(writer, "alias {} = '{}'\n", alias.alias, alias.expanded);
+                clickwriteln!(writer, "alias {} = '{}'", alias.alias, alias.expanded);
             }
         }
     }
@@ -3379,9 +3370,9 @@ command!(
     |matches, env, writer| {
         let alias = matches.value_of("alias").unwrap(); // safe, required
         if env.remove_alias(alias) {
-            clickwrite!(writer, "unaliased: {}\n", alias);
+            clickwriteln!(writer, "unaliased: {}", alias);
         } else {
-            clickwrite!(writer, "no such alias: {}\n", alias);
+            clickwriteln!(writer, "no such alias: {}", alias);
         }
     }
 );

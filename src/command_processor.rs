@@ -219,7 +219,7 @@ impl CommandProcessor {
                     break;
                 }
                 Err(e) => {
-                    clickwrite!(writer, "Error reading input: {}\n", e);
+                    clickwriteln!(writer, "Error reading input: {}", e);
                     break;
                 }
             }
@@ -323,7 +323,7 @@ impl CommandProcessor {
                     } else if cmdstr == "help" {
                         self.show_help(&mut parts, &mut writer);
                     } else {
-                        clickwrite!(writer, "Unknown command\n");
+                        clickwriteln!(writer, "Unknown command");
                     }
                 }
 
@@ -346,60 +346,60 @@ impl CommandProcessor {
                 match hcmd {
                     // match for meta topics (add new topics to the ClickHelper above!)
                     "pipes" | "redirection" | "shell" => {
-                        clickwrite!(writer, "{}\n", SHELLP);
+                        clickwriteln!(writer, "{}", SHELLP);
                     }
                     "completion" => {
-                        clickwrite!(writer, "{}\n", COMPLETIONHELP);
+                        clickwriteln!(writer, "{}", COMPLETIONHELP);
                     }
                     "edit_mode" => {
-                        clickwrite!(writer, "{}\n", EDITMODEHELP);
+                        clickwriteln!(writer, "{}", EDITMODEHELP);
                     }
                     "ranges" => {
-                        clickwrite!(writer, "{}\n", RANGEHELP);
+                        clickwriteln!(writer, "{}", RANGEHELP);
                     }
                     _ => {
-                        clickwrite!(writer, "I don't know anything about {}, sorry\n", hcmd);
+                        clickwriteln!(writer, "I don't know anything about {}, sorry", hcmd);
                     }
                 }
             }
         } else {
-            clickwrite!(
+            clickwriteln!(
                 writer,
-                "Available commands (type 'help [COMMAND]' for details):\n"
+                "Available commands (type 'help [COMMAND]' for details):"
             );
             let spacer = "                  ";
             for c in self.commands.iter() {
-                clickwrite!(
+                clickwriteln!(
                     writer,
-                    "  {}{}{}\n",
+                    "  {}{}{}",
                     c.get_name(),
                     &spacer[0..(20 - c.get_name().len())],
                     c.about()
                 );
             }
-            clickwrite!(
+            clickwriteln!(
                 writer,
-                "\nOther help topics (type 'help [TOPIC]' for details)\n"
+                "\nOther help topics (type 'help [TOPIC]' for details)"
             );
-            clickwrite!(
+            clickwriteln!(
                 writer,
                 "  completion          Available completion_type values \
-                 for the 'set' command, and what they mean\n"
+                 for the 'set' command, and what they mean"
             );
-            clickwrite!(
+            clickwriteln!(
                 writer,
                 "  edit_mode           Available edit_mode values for \
-                 the 'set' command, and what they mean\n"
+                 the 'set' command, and what they mean"
             );
-            clickwrite!(
+            clickwriteln!(
                 writer,
                 "  ranges              Selecting and operating on multiple \
-                 objects at once\n"
+                 objects at once"
             );
-            clickwrite!(
+            clickwriteln!(
                 writer,
                 "  shell               Redirecting and piping click \
-                 output to shell commands\n"
+                 output to shell commands"
             );
         }
     }
@@ -529,7 +529,7 @@ mod tests {
         }
 
         fn write_help(&self, writer: &mut ClickWriter) {
-            clickwrite!(writer, "HELP\n");
+            clickwriteln!(writer, "HELP");
         }
 
         fn about(&self) -> &'static str {

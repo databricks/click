@@ -44,6 +44,19 @@ macro_rules! clickwrite {
     };
 }
 
+macro_rules! clickwriteln {
+    ($writer:expr) => {
+        writeln!($writer);
+    };
+    ($writer:expr, $fmt:expr) => {
+        if writeln!($writer, $fmt).is_ok() {}
+    };
+
+    ($writer:expr, $fmt:expr, $($arg:tt)*) => {
+        if writeln!($writer, $fmt, $($arg)*).is_ok() {}
+    };
+}
+
 struct PipeProc {
     pipe: PipeWriter,
     expr: Handle,

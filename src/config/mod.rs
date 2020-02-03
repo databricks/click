@@ -13,3 +13,4 @@ pub use self::kube::Config;
 
 pub use self::kubefile::AuthProvider;
 pub use self::kubefile::ContextConf;
+pub use self::kubefile::{ExecAuth, ExecProvider};

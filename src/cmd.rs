@@ -1500,6 +1500,7 @@ fn do_logs(
                 clickwriteln!(writer, "Could not start editor: {}", e.description());
             }
         } else {
+            // TODO: This needs to use a channel to not block forever on -f now
             while !env.ctrlcbool.load(Ordering::SeqCst) {
                 if let Ok(amt) = reader.read_line(&mut line) {
                     if amt > 0 {

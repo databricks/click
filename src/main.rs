@@ -69,6 +69,9 @@ mod subjaltnames;
 mod table;
 mod values;
 
+#[cfg(test)]
+mod duct_mock;
+
 use clap::{App, Arg};
 
 use std::error::Error;

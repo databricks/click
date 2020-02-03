@@ -30,6 +30,7 @@ use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
 
+use std::cell::RefCell;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
@@ -37,7 +38,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use config::AuthProvider;
+use config::{AuthProvider, ExecAuth, ExecProvider};
 use connector::ClickSslConnector;
 use error::{KubeErrNo, KubeError};
 
@@ -382,6 +383,7 @@ pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
     AuthProvider(Box<AuthProvider>),
+    ExecProvider(ExecProvider),
 }
 
 impl KlusterAuth {
@@ -395,6 +397,10 @@ impl KlusterAuth {
 
     pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
         KlusterAuth::AuthProvider(Box::new(auth_provider))
+    }
+
+    pub fn with_exec_provider(exec_provider: ExecProvider) -> KlusterAuth {
+        KlusterAuth::ExecProvider(exec_provider)
     }
 }
 
@@ -413,12 +419,20 @@ impl ClientCertKey {
     }
 }
 
+// Hold either a Bearer or Basic auth header
+enum AuthHeader {
+    Basic(Basic),
+    Bearer(Bearer),
+}
+
 pub struct Kluster {
     pub name: String,
     endpoint: Url,
     auth: Option<KlusterAuth>,
-    client: Client,
-    connector: ClickSslConnector<TlsClient>,
+    root_cert: Option<String>,
+    insecure: bool,
+    client: RefCell<Client>,
+    connector: RefCell<ClickSslConnector<TlsClient>>,
 }
 
 // NoCertificateVerification struct/impl taken from the rustls example code
@@ -513,24 +527,63 @@ impl Kluster {
         }
     }
 
-    fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
+    fn handle_exec_provider(&self, exec_provider: &ExecProvider) {
+        let (auth, was_expired) = exec_provider.get_auth();
+        match auth {
+            ExecAuth::Token(_) => {} // handled below
+            ExecAuth::ClientCertKey { cert, key } => {
+                if was_expired {
+                    // need a new cert/key, so make a new client
+                    let tlsclient = Kluster::make_tlsclient(
+                        &self.root_cert,
+                        &Some(ClientCertKey::with_cert_and_key(cert, key)),
+                        self.insecure,
+                    );
+                    let mut new_client =
+                        Client::with_connector(self.connector.borrow().copy(tlsclient.clone()));
+                    let new_connector = self.connector.borrow().copy(tlsclient);
+                    new_client.set_read_timeout(Some(Duration::new(20, 0)));
+                    new_client.set_write_timeout(Some(Duration::new(20, 0)));
+                    *self.client.borrow_mut() = new_client;
+                    *self.connector.borrow_mut() = new_connector;
+                }
+            }
+        }
+    }
+
+    fn get_auth_header(&self) -> Option<AuthHeader> {
         match self.auth {
-            Some(KlusterAuth::Token(ref token)) => req.header(Authorization(Bearer {
+            Some(KlusterAuth::Token(ref token)) => Some(AuthHeader::Bearer(Bearer {
                 token: token.clone(),
             })),
             Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
                 match auth_provider.ensure_token() {
-                    Some(token) => req.header(Authorization(Bearer { token })),
+                    Some(token) => Some(AuthHeader::Bearer(Bearer { token })),
                     None => {
                         print_token_err();
-                        req
+                        None
                     }
                 }
             }
-            Some(KlusterAuth::UserPass(ref user, ref pass)) => req.header(Authorization(Basic {
+            Some(KlusterAuth::UserPass(ref user, ref pass)) => Some(AuthHeader::Basic(Basic {
                 username: user.clone(),
                 password: Some(pass.clone()),
             })),
+            Some(KlusterAuth::ExecProvider(ref exec_provider)) => {
+                let (auth, _) = exec_provider.get_auth();
+                match auth {
+                    ExecAuth::Token(token) => Some(AuthHeader::Bearer(Bearer { token })),
+                    ExecAuth::ClientCertKey { .. } => None, // handled above
+                }
+            }
+            None => None,
+        }
+    }
+
+    fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
+        match self.get_auth_header() {
+            Some(AuthHeader::Basic(header)) => req.header(Authorization(header)),
+            Some(AuthHeader::Bearer(header)) => req.header(Authorization(header)),
             None => req,
         }
     }
@@ -544,11 +597,10 @@ impl Kluster {
         insecure: bool,
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
-        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
         let mut endpoint = Url::parse(server)?;
         let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
         let mut client = Client::with_connector(Kluster::make_connector(
-            tlsclient,
+            tlsclient.clone(),
             dns_host.clone(),
             ip.clone(),
         ));
@@ -558,14 +610,20 @@ impl Kluster {
             name: name.to_owned(),
             endpoint,
             auth,
-            client,
-            connector: Kluster::make_connector(tlsclient2, dns_host, ip),
+            root_cert: cert_opt,
+            insecure,
+            client: RefCell::new(client),
+            connector: RefCell::new(Kluster::make_connector(tlsclient, dns_host, ip)),
         })
     }
 
     fn send_req(&self, path: &str) -> Result<Response, KubeError> {
         let url = self.endpoint.join(path)?;
-        let req = self.client.get(url);
+        if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
+            self.handle_exec_provider(exec_provider);
+        }
+        let client = self.client.borrow();
+        let req = client.get(url);
         let req = self.add_auth_header(req);
         req.send().map_err(KubeError::from)
     }
@@ -598,42 +656,24 @@ impl Kluster {
     /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
     /// like printing logs)
     pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
-        if timeout.is_some() {
-            let url = self.endpoint.join(path)?;
-            let mut req = Request::with_connector(Method::Get, url, &self.connector)?;
-            {
-                // scope for mutable borrow of req
-                let headers = req.headers_mut();
-                // we should clean this up to use add_auth_header
-                match self.auth {
-                    Some(KlusterAuth::Token(ref token)) => {
-                        headers.set(Authorization(Bearer {
-                            token: token.clone(),
-                        }));
-                    }
-                    Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
-                        match auth_provider.ensure_token() {
-                            Some(token) => headers.set(Authorization(Bearer { token })),
-                            None => print_token_err(),
-                        }
-                    }
-                    Some(KlusterAuth::UserPass(ref user, ref pass)) => {
-                        headers.set(Authorization(Basic {
-                            username: user.clone(),
-                            password: Some(pass.clone()),
-                        }));
-                    }
-                    None => {}
-                }
-            }
-            req.set_read_timeout(timeout)?;
-            let next = req.start()?;
-            let resp = next.send().map_err(KubeError::from)?;
-            self.check_resp(resp)
-        } else {
-            let resp = self.send_req(path)?;
-            self.check_resp(resp)
+        // this has to be implemented in this gross way since we can't set timeouts on invidual
+        // requests on the client
+        let url = self.endpoint.join(path)?;
+        let mut req = Request::with_connector(Method::Get, url, &*self.connector.borrow())?;
+        {
+            // scope for mutable borrow of req
+            let headers = req.headers_mut();
+            match self.get_auth_header() {
+                Some(AuthHeader::Basic(header)) => headers.set(Authorization(header)),
+                Some(AuthHeader::Bearer(header)) => headers.set(Authorization(header)),
+                None => {}
+            };
         }
+        // None here means don't timeout, which we set for logs follow
+        req.set_read_timeout(timeout)?;
+        let next = req.start()?;
+        let resp = next.send().map_err(KubeError::from)?;
+        self.check_resp(resp)
     }
 
     /// Get a serde_json::Value
@@ -646,7 +686,11 @@ impl Kluster {
     /// Issue an HTTP DELETE request to the specified path
     pub fn delete(&self, path: &str, body: Option<&str>) -> Result<Response, KubeError> {
         let url = self.endpoint.join(path)?;
-        let req = self.client.delete(url);
+        if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
+            self.handle_exec_provider(exec_provider);
+        }
+        let client = self.client.borrow();
+        let req = client.delete(url);
         let req = match body {
             Some(ref b) => {
                 let hyper_body = Body::BufBody(b.as_bytes(), b.len());

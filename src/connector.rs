@@ -37,6 +37,14 @@ impl<S: SslClient> ClickSslConnector<S> {
         ClickSslConnector { ssl: s, host_addr }
     }
 
+    /// Make a copy of this connector with a new tlsclient
+    pub fn copy(&self, ssl: S) -> ClickSslConnector<S> {
+        ClickSslConnector {
+            ssl,
+            host_addr: self.host_addr.clone(),
+        }
+    }
+
     fn click_connect(&self, host: &str, port: u16, scheme: &str) -> Result<HttpStream> {
         let addr = match self.host_addr {
             Some((ref target_host, ref ip)) => {

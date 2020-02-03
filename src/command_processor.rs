@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 /// Things the can come after a | or > char in input
+#[derive(Debug, PartialEq)]
 enum RightExpr<'a> {
     None,
     /// pipe to command with args
@@ -795,6 +796,67 @@ Other help topics (type 'help [TOPIC]' for details)
         assert_eq!(contents, "Called with foo\n");
 
         dir.close().unwrap();
+    }
+
+    #[test]
+    fn unexpected_chars() {
+        let p = parse_line("test || this");
+        assert!(p.is_err());
+        assert_eq!(
+            p.err().unwrap().description(),
+            "Parse error at 5: unexpected ||"
+        );
+
+        let p = parse_line("test >>> this");
+        assert!(p.is_err());
+        assert_eq!(
+            p.err().unwrap().description(),
+            "Parse error at 5: unexpected >>"
+        );
+
+        let p = parse_line("test >>>> this");
+        assert!(p.is_err());
+        assert_eq!(
+            p.err().unwrap().description(),
+            "Parse error at 5: unexpected >>"
+        );
+
+        let p = build_parser_expr("a * b", std::ops::Range { start: 2, end: 5 });
+        assert!(p.is_err());
+        assert_eq!(
+            p.err().unwrap().description(),
+            "Parse error at 2: unexpected separator"
+        );
+    }
+
+    #[test]
+    fn build_parser_exp() {
+        let p = build_parser_expr("a | b", std::ops::Range { start: 2, end: 5 });
+        assert!(p.is_ok());
+        let r = p.unwrap();
+        assert_eq!(r.0, "a ");
+        assert_eq!(r.1, RightExpr::Pipe(" b"));
+
+        let p = build_parser_expr("a > b", std::ops::Range { start: 2, end: 5 });
+        assert!(p.is_ok());
+        let r = p.unwrap();
+        assert_eq!(r.0, "a ");
+        assert_eq!(r.1, RightExpr::Redir("b"));
+
+        let p = build_parser_expr("a >> b", std::ops::Range { start: 2, end: 6 });
+        assert!(p.is_ok());
+        let r = p.unwrap();
+        assert_eq!(r.0, "a ");
+        assert_eq!(r.1, RightExpr::Append("b"));
+    }
+
+    #[test]
+    fn hist_ignore() {
+        let mut p = get_processor();
+        let buf = vec![];
+        let writer = ClickWriter::with_buffer(buf, false);
+        p.process_line(" testcmd", writer);
+        assert_eq!(p.rl.history().len(), 0);
     }
 
     #[test]

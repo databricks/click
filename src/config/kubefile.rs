@@ -15,7 +15,7 @@
 //! Code to handle reading and representing .kube/config files.
 
 use chrono::{DateTime, Local, TimeZone};
-use duct::cmd;
+use rustls::{Certificate, PrivateKey};
 use serde_json::{self, Value};
 use serde_yaml;
 
@@ -24,8 +24,12 @@ use std::fs::File;
 use std::io::Read;
 
 use error::KubeError;
-//use kube::{Kluster, KlusterAuth};
-//use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+
+// During testing we use a mock clock to be time independent.
+#[cfg(not(test))]
+use duct::cmd as ductcmd;
+#[cfg(test)]
+use duct_mock::cmd as ductcmd;
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -107,6 +111,8 @@ pub struct UserConf {
 
     #[serde(rename = "auth-provider")]
     pub auth_provider: Option<AuthProvider>,
+
+    pub exec: Option<ExecConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -257,7 +263,7 @@ impl AuthProvider {
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
                     .unwrap_or_else(|| vec![]);
-                match cmd(conf_cmd, &args).read() {
+                match ductcmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         self.parse_output_and_update(output.as_str(), token, expiry);
                     }
@@ -282,6 +288,173 @@ impl AuthProvider {
             self.update_token(&mut token, &mut expiry)
         }
         token.clone()
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+pub struct NameValue {
+    name: String,
+    value: String,
+}
+
+/// config for running a command, as defined here:
+/// https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/client-go/tools/clientcmd/api/v1/types.go#L183
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+pub struct ExecConfig {
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<Vec<NameValue>>,
+    #[serde(rename = "apiVersion")]
+    api_version: Option<String>,
+}
+
+/// Result of executing above. Schema defined here:
+/// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.17/#tokenrequest-v1-authentication-k8s-io
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct ExecResult {
+    kind: Option<String>,
+    #[serde(rename = "apiVersion")]
+    api_version: Option<String>,
+    status: Option<ExecResultStatus>,
+}
+
+#[derive(Deserialize)]
+struct ExecResultStatus {
+    #[serde(rename = "expirationTimestamp")]
+    expiration: Option<DateTime<Local>>,
+    token: Option<String>,
+    #[serde(rename = "clientCertificateData")]
+    pub client_certificate_data: Option<String>,
+    #[serde(rename = "clientKeyData")]
+    pub client_key_data: Option<String>,
+}
+
+impl ExecConfig {
+    fn exec(&self) -> Result<ExecResult, KubeError> {
+        match self.command {
+            Some(ref command) => {
+                let expr = if let Some(args) = &self.args {
+                    ductcmd(command, args)
+                } else {
+                    let args: Vec<String> = vec![];
+                    ductcmd(command, args)
+                };
+                let expr = if let Some(env) = &self.env {
+                    let env = env.iter().map(|nv| (&nv.name, &nv.value));
+                    expr.full_env(env)
+                } else {
+                    expr
+                };
+
+                serde_json::from_reader(expr.reader()?).map_err(KubeError::from)
+            }
+            None => Err(KubeError::ConfigFileError(
+                "No command specified in exec config".to_string(),
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExecAuth {
+    Token(String),
+    ClientCertKey { cert: Certificate, key: PrivateKey },
+}
+
+impl ExecAuth {
+    fn default() -> ExecAuth {
+        ExecAuth::Token("".to_string())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecProvider {
+    pub auth: RefCell<Option<ExecAuth>>,
+    pub expiry: RefCell<Option<DateTime<Local>>>,
+    pub config: ExecConfig,
+}
+
+impl ExecProvider {
+    pub fn new(config: ExecConfig) -> ExecProvider {
+        ExecProvider {
+            auth: RefCell::new(None),
+            expiry: RefCell::new(None),
+            config,
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        let expiry = self.expiry.borrow();
+        match *expiry {
+            Some(e) => {
+                let now = Local::now();
+                e < now
+            }
+            None => true,
+        }
+    }
+
+    fn update_auth(&self) {
+        match self.config.exec() {
+            Ok(result) => {
+                match result.status {
+                    Some(status) => {
+                        if status.expiration.is_none() {
+                            eprintln!(
+                                "exec command returned no expiration. future commands will refetch token."
+                            );
+                        }
+                        if let Some(token) = status.token {
+                            *self.auth.borrow_mut() = Some(ExecAuth::Token(token));
+                        } else if let Some(cert) = status.client_certificate_data {
+                            if status.client_key_data.is_none() {
+                                eprintln!("exec returned certificate but no key, can't auth.");
+                                return;
+                            }
+                            let key = status.client_key_data.unwrap();
+
+                            let cert = ::certs::get_cert_from_pem(&cert);
+                            if cert.is_none() {
+                                eprintln!("Can't decode returned certificate data.");
+                                return;
+                            }
+
+                            let key = ::certs::get_key_from_str(&key);
+                            if key.is_none() {
+                                eprintln!("Can't decode returned key data.");
+                                return;
+                            }
+                            *self.auth.borrow_mut() = Some(ExecAuth::ClientCertKey {
+                                cert: cert.unwrap(), // checked above
+                                key: key.unwrap(),   // checked above
+                            });
+                        }
+                        *self.expiry.borrow_mut() = status.expiration;
+                    }
+                    None => {
+                        eprintln!("No status block returned by exec, can't update auth");
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Error running specified exec command: {}", e);
+            }
+        }
+    }
+
+    pub fn get_auth(&self) -> (ExecAuth, bool) {
+        let was_expired = if self.is_expired() {
+            self.update_auth();
+            true
+        } else {
+            false
+        };
+        // TODO: Fix kube.rs to be able to handle an option here
+        match &*self.auth.borrow() {
+            Some(auth) => (auth.clone(), was_expired),
+            None => (ExecAuth::default(), was_expired),
+        }
     }
 }
 
@@ -343,6 +516,19 @@ users:
         cmd-path: /bin/gcloud
         expiry-key: '{.credential.token_expiry}'
         token-key: '{.credential.access_token}'
+- name: exec
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - --region
+      - us-west-2
+      - eks
+      - get-token
+      - --cluster-name
+      - test-cluster
+      command: aws
+      env: null
 ";
 
     fn contains_cluster(config: &Config, cluster: Cluster) -> bool {
@@ -484,6 +670,7 @@ users:
                     username: None,
                     password: None,
                     auth_provider: None,
+                    exec: None,
                 }
             }
         ));
@@ -500,6 +687,7 @@ users:
                     username: None,
                     password: None,
                     auth_provider: None,
+                    exec: None,
                 }
             }
         ));
@@ -516,6 +704,7 @@ users:
                     username: None,
                     password: None,
                     auth_provider: None,
+                    exec: None,
                 }
             }
         ));
@@ -532,6 +721,7 @@ users:
                     username: Some("user".to_string()),
                     password: Some("hunter2".to_string()),
                     auth_provider: None,
+                    exec: None,
                 }
             }
         ));
@@ -690,5 +880,37 @@ users:
             },
         };
         assert!(!ap.is_expired());
+    }
+
+    #[test]
+    fn exec_parse() {
+        let config = Config::from_reader(TEST_CONFIG.as_bytes()).unwrap();
+        let exec_config = config.users.iter().find(|u| u.name == "exec");
+        assert!(exec_config.is_some());
+        let provider = ExecProvider {
+            auth: RefCell::new(None),
+            expiry: RefCell::new(None),
+            config: exec_config.unwrap().conf.exec.as_ref().unwrap().clone(),
+        };
+
+        let (auth, was_expired) = provider.get_auth();
+        assert!(was_expired);
+        assert_eq!(auth, ExecAuth::Token("testtoken".to_string()));
+    }
+
+    #[test]
+    fn exec_expired() {
+        let config = Config::from_reader(TEST_CONFIG.as_bytes()).unwrap();
+        let exec_config = config.users.iter().find(|u| u.name == "exec");
+        assert!(exec_config.is_some());
+        let provider = ExecProvider {
+            auth: RefCell::new(Some(ExecAuth::Token("old-token".to_string()))),
+            expiry: RefCell::new(Some(Local::now() - chrono::Duration::hours(1))),
+            config: exec_config.unwrap().conf.exec.as_ref().unwrap().clone(),
+        };
+
+        let (auth, was_expired) = provider.get_auth();
+        assert!(was_expired);
+        assert_eq!(auth, ExecAuth::Token("testtoken".to_string()));
     }
 }

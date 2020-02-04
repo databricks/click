@@ -19,7 +19,8 @@
 // passthrough.
 
 use std::io;
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 use hyper::error::Result;
 use hyper::net::{HttpStream, HttpsStream, NetworkConnector, SslClient};
@@ -27,14 +28,23 @@ use hyper::net::{HttpStream, HttpsStream, NetworkConnector, SslClient};
 pub struct ClickSslConnector<S: SslClient> {
     ssl: S,
     host_addr: Option<(String, String)>,
+    connect_timeout: Duration,
 }
 
 impl<S: SslClient> ClickSslConnector<S> {
     /// Create a new connector using the provided SSL implementation.  host_addr should be a tuple
     /// of (hostname,ip_address), and for that hostname we will short-circuit DNS and just map to
     /// the specified IP.
-    pub fn new(s: S, host_addr: Option<(String, String)>) -> ClickSslConnector<S> {
-        ClickSslConnector { ssl: s, host_addr }
+    pub fn new(
+        s: S,
+        host_addr: Option<(String, String)>,
+        connect_timeout: Duration,
+    ) -> ClickSslConnector<S> {
+        ClickSslConnector {
+            ssl: s,
+            host_addr,
+            connect_timeout,
+        }
     }
 
     /// Make a copy of this connector with a new tlsclient
@@ -42,6 +52,7 @@ impl<S: SslClient> ClickSslConnector<S> {
         ClickSslConnector {
             ssl,
             host_addr: self.host_addr.clone(),
+            connect_timeout: self.connect_timeout,
         }
     }
 
@@ -56,13 +67,20 @@ impl<S: SslClient> ClickSslConnector<S> {
             }
             None => (host, port),
         };
-        Ok(match scheme {
-            "http" => Ok(HttpStream(TcpStream::connect(&addr)?)),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Invalid scheme for Http",
-            )),
-        }?)
+        let addrs = addr.to_socket_addrs()?;
+        let mut last_err = io::Error::new(io::ErrorKind::InvalidInput, "Invalid scheme for Http");
+        match scheme {
+            "http" => {
+                for addr in addrs {
+                    match TcpStream::connect_timeout(&addr, self.connect_timeout) {
+                        Ok(stream) => return Ok(HttpStream(stream)),
+                        Err(e) => last_err = e,
+                    }
+                }
+                Err(last_err.into())
+            }
+            _ => Err(last_err.into()),
+        }
     }
 }
 

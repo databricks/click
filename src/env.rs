@@ -156,7 +156,7 @@ impl Env {
 
     pub fn set_context(&mut self, ctx: Option<&str>) {
         if let Some(cname) = ctx {
-            self.kluster = match self.config.cluster_for_context(cname) {
+            self.kluster = match self.config.cluster_for_context(cname, &self.click_config) {
                 Ok(k) => Some(k),
                 Err(e) => {
                     println!(

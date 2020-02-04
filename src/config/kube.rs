@@ -23,6 +23,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 
 use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+use config::ClickConfig;
 use error::{KubeErrNo, KubeError};
 use kube::{ClientCertKey, Kluster, KlusterAuth};
 
@@ -314,7 +315,11 @@ impl Config {
         })
     }
 
-    pub fn cluster_for_context(&self, context_name: &str) -> Result<Kluster, KubeError> {
+    pub fn cluster_for_context(
+        &self,
+        context_name: &str,
+        click_conf: &ClickConfig,
+    ) -> Result<Kluster, KubeError> {
         let context = self
             .contexts
             .get(context_name)
@@ -376,6 +381,8 @@ impl Config {
             auth,
             client_cert_key,
             cluster.insecure_skip_tls_verify,
+            click_conf.connect_timeout_secs,
+            click_conf.read_timeout_secs,
         )
     }
 }

@@ -95,6 +95,14 @@ fn default_range_sep() -> String {
     "--- {name} ---".to_string()
 }
 
+fn default_connect_timeout() -> u32 {
+    10
+}
+
+fn default_read_timeout() -> u32 {
+    20
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
@@ -109,6 +117,11 @@ pub struct ClickConfig {
     pub aliases: Vec<Alias>,
     #[serde(default = "default_range_sep")]
     pub range_separator: String,
+
+    #[serde(default = "default_connect_timeout")]
+    pub connect_timeout_secs: u32,
+    #[serde(default = "default_read_timeout")]
+    pub read_timeout_secs: u32,
 }
 
 impl ClickConfig {
@@ -185,6 +198,8 @@ aliases:
         let a = config.aliases.get(0).unwrap();
         assert_eq!(a.alias, "pn");
         assert_eq!(a.expanded, "pods --sort node");
+        assert_eq!(config.connect_timeout_secs, default_connect_timeout());
+        assert_eq!(config.read_timeout_secs, default_read_timeout());
     }
 
     #[test]

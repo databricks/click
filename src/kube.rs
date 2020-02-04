@@ -519,11 +519,12 @@ impl Kluster {
         tlsclient: TlsClient,
         dns_host: Option<String>,
         ip: Option<String>,
+        connect_timeout: Duration,
     ) -> ClickSslConnector<TlsClient> {
         if let (Some(host), Some(ip_addr)) = (dns_host, ip) {
-            ClickSslConnector::new(tlsclient, Some((host, ip_addr)))
+            ClickSslConnector::new(tlsclient, Some((host, ip_addr)), connect_timeout)
         } else {
-            ClickSslConnector::new(tlsclient, None)
+            ClickSslConnector::new(tlsclient, None, connect_timeout)
         }
     }
 
@@ -595,6 +596,8 @@ impl Kluster {
         auth: Option<KlusterAuth>,
         client_cert_key: Option<ClientCertKey>,
         insecure: bool,
+        connect_timeout_secs: u32,
+        read_timeout_secs: u32,
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
         let mut endpoint = Url::parse(server)?;
@@ -603,9 +606,10 @@ impl Kluster {
             tlsclient.clone(),
             dns_host.clone(),
             ip.clone(),
+            Duration::new(connect_timeout_secs.into(), 0),
         ));
-        client.set_read_timeout(Some(Duration::new(20, 0)));
-        client.set_write_timeout(Some(Duration::new(20, 0)));
+        client.set_read_timeout(Some(Duration::new(read_timeout_secs.into(), 0)));
+        client.set_write_timeout(Some(Duration::new(read_timeout_secs.into(), 0)));
         Ok(Kluster {
             name: name.to_owned(),
             endpoint,
@@ -613,7 +617,12 @@ impl Kluster {
             root_cert: cert_opt,
             insecure,
             client: RefCell::new(client),
-            connector: RefCell::new(Kluster::make_connector(tlsclient, dns_host, ip)),
+            connector: RefCell::new(Kluster::make_connector(
+                tlsclient,
+                dns_host,
+                ip,
+                Duration::new(connect_timeout_secs.into(), 0),
+            )),
         })
     }
 

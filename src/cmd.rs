@@ -1506,7 +1506,7 @@ fn do_logs(
                     let mut line = String::new();
                     if let Ok(amt) = reader.read_line(&mut line) {
                         if amt > 0 {
-                            if let Err(_) = sender.send(line) {
+                            if sender.send(line).is_err() {
                                 // probably user hit ctrl-c, just stop
                                 break;
                             }

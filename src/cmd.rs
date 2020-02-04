@@ -55,8 +55,8 @@ use std::iter::Iterator;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -1500,14 +1500,16 @@ fn do_logs(
                 clickwriteln!(writer, "Could not start editor: {}", e.description());
             }
         } else {
-            // TODO: This needs to use a channel to not block forever on -f now
             let (sender, receiver) = channel();
             thread::spawn(move || {
                 loop {
                     let mut line = String::new();
                     if let Ok(amt) = reader.read_line(&mut line) {
                         if amt > 0 {
-                            sender.send(line).unwrap();
+                            if sender.send(line).is_err() {
+                                // probably user hit ctrl-c, just stop
+                                break;
+                            }
                         } else {
                             break;
                         }

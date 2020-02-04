@@ -589,6 +589,7 @@ impl Kluster {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: &str,
         cert_opt: Option<String>,

@@ -56,6 +56,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
@@ -1417,7 +1418,6 @@ fn do_logs(
     let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
     if let Some(lreader) = logs_reader {
         let mut reader = BufReader::new(lreader);
-        let mut line = String::new();
         env.ctrlcbool.store(false, Ordering::SeqCst);
         if let Some(output) = output_opt {
             let mut fmtvars = HashMap::new();
@@ -1501,16 +1501,31 @@ fn do_logs(
             }
         } else {
             // TODO: This needs to use a channel to not block forever on -f now
-            while !env.ctrlcbool.load(Ordering::SeqCst) {
-                if let Ok(amt) = reader.read_line(&mut line) {
-                    if amt > 0 {
-                        clickwrite!(writer, "{}", line); // newlines already in line
-                        line.clear();
+            let (sender, receiver) = channel();
+            thread::spawn(move || {
+                loop {
+                    let mut line = String::new();
+                    if let Ok(amt) = reader.read_line(&mut line) {
+                        if amt > 0 {
+                            sender.send(line).unwrap();
+                        } else {
+                            break;
+                        }
                     } else {
                         break;
                     }
-                } else {
-                    break;
+                }
+            });
+            while !env.ctrlcbool.load(Ordering::SeqCst) {
+                match receiver.recv_timeout(Duration::new(1, 0)) {
+                    Ok(line) => {
+                        clickwrite!(writer, "{}", line); // newlines already in line
+                    }
+                    Err(e) => {
+                        if let RecvTimeoutError::Disconnected = e {
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -1533,6 +1548,8 @@ command!(
                 .short("f")
                 .long("follow")
                 .help("Follow the logs as new records arrive (stop with ^C)")
+                .conflicts_with("editor")
+                .conflicts_with("output")
                 .takes_value(false),
         )
         .arg(

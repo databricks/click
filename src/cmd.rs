@@ -1500,7 +1500,6 @@ fn do_logs(
                 clickwriteln!(writer, "Could not start editor: {}", e.description());
             }
         } else {
-            // TODO: This needs to use a channel to not block forever on -f now
             let (sender, receiver) = channel();
             thread::spawn(move || {
                 loop {

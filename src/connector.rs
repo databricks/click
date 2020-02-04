@@ -52,7 +52,7 @@ impl<S: SslClient> ClickSslConnector<S> {
         ClickSslConnector {
             ssl,
             host_addr: self.host_addr.clone(),
-            connect_timeout: self.connect_timeout.clone(),
+            connect_timeout: self.connect_timeout,
         }
     }
 

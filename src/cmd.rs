@@ -1648,7 +1648,7 @@ command!(
         let timeout = if matches.is_present("follow") {
             None
         } else {
-            Some(Duration::new(1, 0))
+            Some(Duration::new(20, 0)) // TODO what's a reasonable timeout here?
         };
 
         match env.current_selection() {

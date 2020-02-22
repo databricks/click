@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ring::der;
+use ring::io::der;
 use untrusted::{Input, Reader};
 use webpki;
 
@@ -48,7 +48,7 @@ enum GeneralName<'a> {
 }
 
 fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
-    use ring::der::CONTEXT_SPECIFIC;
+    use self::der::CONTEXT_SPECIFIC;
     const DNS_NAME_TAG: u8 = CONTEXT_SPECIFIC | 2;
     const IP_ADDRESS_TAG: u8 = CONTEXT_SPECIFIC | 7;
 
@@ -133,11 +133,11 @@ fn recurse_reader<'a>(reader: &mut Reader<'a>, vec: &mut Vec<SubjAltName<'a>>) {
                                         GeneralName::IPAddress(input) => {
                                             if input.len() >= 4 {
                                                 let mut a = [0; 4];
-                                                let mut i = input.iter();
-                                                a[0] = *i.next().unwrap();
-                                                a[1] = *i.next().unwrap();
-                                                a[2] = *i.next().unwrap();
-                                                a[3] = *i.next().unwrap();
+                                                let mut r = Reader::new(input);
+                                                a[0] = r.read_byte().unwrap();
+                                                a[1] = r.read_byte().unwrap();
+                                                a[2] = r.read_byte().unwrap();
+                                                a[3] = r.read_byte().unwrap();
                                                 vec.push(SubjAltName::IPAddress(a));
                                             }
                                         }

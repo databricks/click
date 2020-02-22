@@ -40,6 +40,7 @@ extern crate duct_sh;
 extern crate humantime;
 extern crate hyper;
 extern crate hyper_sync_rustls;
+extern crate log;
 extern crate os_pipe;
 extern crate regex;
 extern crate ring;
@@ -84,6 +85,7 @@ use env::Env;
 use output::ClickWriter;
 
 fn main() {
+    env_logger::init();
     // Command line arg parsing for click itself
     let matches = App::new("Click")
         .version(crate_version!())

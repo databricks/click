@@ -20,7 +20,7 @@ use chrono::DateTime;
 use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::client::{Body, RequestBuilder};
-use hyper::error::{Error as HyperError};
+use hyper::error::Error as HyperError;
 use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
@@ -532,11 +532,7 @@ impl Kluster {
 
     fn create_new_client(&self, client_cert_key: &Option<ClientCertKey>) {
         // need a new cert/key, so make a new client
-        let tlsclient = Kluster::make_tlsclient(
-            &self.root_cert,
-            client_cert_key,
-            self.insecure,
-        );
+        let tlsclient = Kluster::make_tlsclient(&self.root_cert, client_cert_key, self.insecure);
         let mut new_client =
             Client::with_connector(self.connector.borrow().copy(tlsclient.clone()));
         let new_connector = self.connector.borrow().copy(tlsclient);
@@ -649,19 +645,17 @@ impl Kluster {
     fn send(&self, path: &str) -> Result<Response, KubeError> {
         match self.send_req(path) {
             Ok(resp) => Ok(resp),
-            Err(e) => {
-                match &e {
-                    HyperError::Io(ref io_err) => {
-                        if io_err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.create_new_client(&self.client_cert_key);
-                            self.send_req(path).map_err(KubeError::from)
-                        } else {
-                            Err(KubeError::from(e))
-                        }
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.send_req(path).map_err(KubeError::from)
+                    } else {
+                        Err(KubeError::from(e))
                     }
-                    _ => Err(KubeError::from(e))
                 }
-            }
+                _ => Err(KubeError::from(e)),
+            },
         }
     }
 
@@ -692,9 +686,12 @@ impl Kluster {
 
     /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
     /// like printing logs)
-    pub fn get_read(&self, path: &str,
-                    timeout: Option<Duration>,
-                    retry: bool) -> Result<Response, KubeError> {
+    pub fn get_read(
+        &self,
+        path: &str,
+        timeout: Option<Duration>,
+        retry: bool,
+    ) -> Result<Response, KubeError> {
         // this has to be implemented in this gross way since we can't set timeouts on invidual
         // requests on the client
         let url = self.endpoint.join(path)?;
@@ -712,19 +709,17 @@ impl Kluster {
         req.set_read_timeout(timeout)?;
         match req.start()?.send() {
             Ok(resp) => self.check_resp(resp),
-            Err(e) => {
-                match &e {
-                    HyperError::Io(ref io_err) => {
-                        if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.create_new_client(&self.client_cert_key);
-                            self.get_read(path, timeout, false)
-                        } else {
-                            Err(KubeError::from(e))
-                        }
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.get_read(path, timeout, false)
+                    } else {
+                        Err(KubeError::from(e))
                     }
-                    _ => Err(KubeError::from(e))
                 }
-            }
+                _ => Err(KubeError::from(e)),
+            },
         }
     }
 
@@ -736,10 +731,12 @@ impl Kluster {
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self,
-                  path: &str,
-                  body: Option<&str>,
-                  retry: bool) -> Result<Response, KubeError> {
+    pub fn delete(
+        &self,
+        path: &str,
+        body: Option<&str>,
+        retry: bool,
+    ) -> Result<Response, KubeError> {
         let url = self.endpoint.join(path)?;
         if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
             self.handle_exec_provider(exec_provider);
@@ -756,19 +753,17 @@ impl Kluster {
         let req = self.add_auth_header(req);
         match req.send() {
             Ok(resp) => Ok(resp),
-            Err(e) => {
-                match &e {
-                    HyperError::Io(ref io_err) => {
-                        if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
-                            self.create_new_client(&self.client_cert_key);
-                            self.delete(path, body, false)
-                        } else {
-                            Err(KubeError::from(e))
-                        }
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.delete(path, body, false)
+                    } else {
+                        Err(KubeError::from(e))
                     }
-                    _ => Err(KubeError::from(e))
                 }
-            }
+                _ => Err(KubeError::from(e)),
+            },
         }
     }
 

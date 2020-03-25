@@ -75,7 +75,6 @@ mod duct_mock;
 
 use clap::{App, Arg};
 
-use std::error::Error;
 use std::path::PathBuf;
 
 use command_processor::CommandProcessor;
@@ -172,7 +171,7 @@ fn main() {
         Err(e) => {
             println!(
                 "Could not load kubernetes config. Cannot continue.  Error was: {}",
-                e.description()
+                e
             );
             return;
         }

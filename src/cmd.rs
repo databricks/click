@@ -49,7 +49,6 @@ use std;
 use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
-use std::error::Error;
 use std::io::{self, stderr, BufRead, BufReader, Read, Write};
 use std::iter::Iterator;
 use std::path::PathBuf;
@@ -283,30 +282,26 @@ fn identity<T>(t: T) -> T {
 
 /// a clap validator for u32
 fn valid_u32(s: String) -> Result<(), String> {
-    s.parse::<u32>()
-        .map(|_| ())
-        .map_err(|e| e.description().to_owned())
+    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// a clap validator for duration
 fn valid_duration(s: String) -> Result<(), String> {
     parse_duration(s.as_str())
         .map(|_| ())
-        .map_err(|e| e.description().to_owned())
+        .map_err(|e| e.to_string())
 }
 
 /// a clap validator for rfc3339 dates
 fn valid_date(s: String) -> Result<(), String> {
     DateTime::parse_from_rfc3339(s.as_str())
         .map(|_| ())
-        .map_err(|e| e.description().to_owned())
+        .map_err(|e| e.to_string())
 }
 
 /// a clap validator for boolean
 fn valid_bool(s: String) -> Result<(), String> {
-    s.parse::<bool>()
-        .map(|_| ())
-        .map_err(|e| e.description().to_owned())
+    s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Check if a pod has a waiting container
@@ -1209,7 +1204,7 @@ command!(
                 table.add_row(row!(
                     obj.name(),
                     obj.type_str(),
-                    obj.namespace.as_ref().map(|n| n.as_str()).unwrap_or("")
+                    obj.namespace.as_deref().unwrap_or("")
                 ));
             }
             ObjectSelection::Range(range) => {
@@ -1217,7 +1212,7 @@ command!(
                     table.add_row(row!(
                         obj.name(),
                         obj.type_str(),
-                        obj.namespace.as_ref().map(|n| n.as_str()).unwrap_or("")
+                        obj.namespace.as_deref().unwrap_or("")
                     ));
                 }
             }
@@ -1424,10 +1419,7 @@ fn do_logs(
             fmtvars.insert("name".to_string(), obj.name());
             fmtvars.insert(
                 "namespace".to_string(),
-                obj.namespace
-                    .as_ref()
-                    .map(|n| n.as_str())
-                    .unwrap_or("[none]"),
+                obj.namespace.as_deref().unwrap_or("[none]"),
             );
             let ltime = Local::now().to_rfc3339();
             fmtvars.insert("time".to_string(), &ltime);
@@ -1463,7 +1455,7 @@ fn do_logs(
                             writer,
                             "Could not get EDITOR environment \
                              variable: {}",
-                            e.description()
+                            e
                         );
                         return;
                     }
@@ -1472,7 +1464,7 @@ fn do_logs(
             let tmpdir = match env.tempdir {
                 Ok(ref td) => td,
                 Err(ref e) => {
-                    clickwriteln!(writer, "Failed to create tempdir: {}", e.description());
+                    clickwriteln!(writer, "Failed to create tempdir: {}", e);
                     return;
                 }
             };
@@ -1497,7 +1489,7 @@ fn do_logs(
                 cmd!(editor, file_path)
             };
             if let Err(e) = expr.start() {
-                clickwriteln!(writer, "Could not start editor: {}", e.description());
+                clickwriteln!(writer, "Could not start editor: {}", e);
             }
         } else {
             let (sender, receiver) = channel();
@@ -1779,7 +1771,7 @@ fn do_exec(
         targs.push(cmd);
         clickwriteln!(writer, "Starting on {} in terminal", pod.name());
         if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
-            clickwriteln!(writer, "Could not launch in terminal: {}", e.description());
+            clickwriteln!(writer, "Could not launch in terminal: {}", e);
         }
     } else {
         let mut command = Command::new("kubectl");
@@ -2992,7 +2984,7 @@ command!(
                         for part in parts {
                             if part != "" {
                                 if let Err(e) = part.parse::<u32>() {
-                                    return Err(e.description().to_owned());
+                                    return Err(e.to_string());
                                 }
                             }
                         }
@@ -3073,8 +3065,7 @@ Examples:
                                 }
                             }
                             Err(e) => {
-                                write!(stderr(), "Error reading child output: {}", e.description())
-                                    .unwrap_or(());
+                                write!(stderr(), "Error reading child output: {}", e).unwrap_or(());
                                 break;
                             }
                         }
@@ -3095,7 +3086,7 @@ Examples:
                 write!(
                     stderr(),
                     "Couldn't execute kubectl, not forwarding.  Error is: {}",
-                    e.description()
+                    e
                 )
                 .unwrap_or(());
             }
@@ -3146,10 +3137,7 @@ command!(
         .arg(
             Arg::with_name("index")
                 .help("Index (from 'port-forwards list') of port forward to take action on")
-                .validator(|s: String| s
-                    .parse::<usize>()
-                    .map(|_| ())
-                    .map_err(|e| e.description().to_owned()))
+                .validator(|s: String| s.parse::<usize>().map(|_| ()).map_err(|e| e.to_string()))
                 .required(false)
                 .index(2)
         )
@@ -3197,8 +3185,7 @@ command!(
                                 clickwriteln!(writer, "Stopped");
                             }
                             Err(e) => {
-                                write!(stderr(), "Failed to stop: {}", e.description())
-                                    .unwrap_or(());
+                                write!(stderr(), "Failed to stop: {}", e).unwrap_or(());
                             }
                         }
                     } else {

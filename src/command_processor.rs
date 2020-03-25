@@ -10,7 +10,6 @@ use rustyline::Editor;
 
 use env::Env;
 
-use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Range;
@@ -260,7 +259,7 @@ impl CommandProcessor {
                     RightExpr::None => {} // do nothing
                     RightExpr::Pipe(cmd) => {
                         if let Err(e) = writer.setup_pipe(cmd) {
-                            println!("{}", e.description());
+                            println!("{}", e);
                             return writer.finish_output();
                         }
                     }
@@ -803,29 +802,29 @@ Other help topics (type 'help [TOPIC]' for details)
         let p = parse_line("test || this");
         assert!(p.is_err());
         assert_eq!(
-            p.err().unwrap().description(),
-            "Parse error at 5: unexpected ||"
+            p.err().unwrap().to_string(),
+            "Parse Error: Parse error at 5: unexpected ||"
         );
 
         let p = parse_line("test >>> this");
         assert!(p.is_err());
         assert_eq!(
-            p.err().unwrap().description(),
-            "Parse error at 5: unexpected >>"
+            p.err().unwrap().to_string(),
+            "Parse Error: Parse error at 5: unexpected >>"
         );
 
         let p = parse_line("test >>>> this");
         assert!(p.is_err());
         assert_eq!(
-            p.err().unwrap().description(),
-            "Parse error at 5: unexpected >>"
+            p.err().unwrap().to_string(),
+            "Parse Error: Parse error at 5: unexpected >>"
         );
 
         let p = build_parser_expr("a * b", std::ops::Range { start: 2, end: 5 });
         assert!(p.is_err());
         assert_eq!(
-            p.err().unwrap().description(),
-            "Parse error at 2: unexpected separator"
+            p.err().unwrap().to_string(),
+            "Parse Error: Parse error at 2: unexpected separator"
         );
     }
 

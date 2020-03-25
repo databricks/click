@@ -1415,7 +1415,7 @@ fn do_logs(
         cont,
         url_args
     );
-    let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout));
+    let logs_reader = env.run_on_kluster(|k| k.get_read(url.as_str(), timeout, true));
     if let Some(lreader) = logs_reader {
         let mut reader = BufReader::new(lreader);
         env.ctrlcbool.store(false, Ordering::SeqCst);
@@ -1958,7 +1958,7 @@ fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter
             } else {
                 Some(delete_body)
             };
-            let result = env.run_on_kluster(|k| k.delete(url.as_str(), body));
+            let result = env.run_on_kluster(|k| k.delete(url.as_str(), body, true));
             if let Some(x) = result {
                 if x.status.is_success() {
                     clickwriteln!(writer, "Deleted");

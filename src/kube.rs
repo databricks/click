@@ -20,6 +20,7 @@ use chrono::DateTime;
 use hyper::client::request::Request;
 use hyper::client::response::Response;
 use hyper::client::{Body, RequestBuilder};
+use hyper::error::{Error as HyperError};
 use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
@@ -430,6 +431,7 @@ pub struct Kluster {
     endpoint: Url,
     auth: Option<KlusterAuth>,
     root_cert: Option<String>,
+    client_cert_key: Option<ClientCertKey>,
     insecure: bool,
     client: RefCell<Client>,
     connector: RefCell<ClickSslConnector<TlsClient>>,
@@ -528,25 +530,30 @@ impl Kluster {
         }
     }
 
+    fn create_new_client(&self, client_cert_key: &Option<ClientCertKey>) {
+        // need a new cert/key, so make a new client
+        let tlsclient = Kluster::make_tlsclient(
+            &self.root_cert,
+            client_cert_key,
+            self.insecure,
+        );
+        let mut new_client =
+            Client::with_connector(self.connector.borrow().copy(tlsclient.clone()));
+        let new_connector = self.connector.borrow().copy(tlsclient);
+        new_client.set_read_timeout(Some(Duration::new(20, 0)));
+        new_client.set_write_timeout(Some(Duration::new(20, 0)));
+        *self.client.borrow_mut() = new_client;
+        *self.connector.borrow_mut() = new_connector;
+    }
+
     fn handle_exec_provider(&self, exec_provider: &ExecProvider) {
         let (auth, was_expired) = exec_provider.get_auth();
         match auth {
             ExecAuth::Token(_) => {} // handled below
             ExecAuth::ClientCertKey { cert, key } => {
                 if was_expired {
-                    // need a new cert/key, so make a new client
-                    let tlsclient = Kluster::make_tlsclient(
-                        &self.root_cert,
-                        &Some(ClientCertKey::with_cert_and_key(cert, key)),
-                        self.insecure,
-                    );
-                    let mut new_client =
-                        Client::with_connector(self.connector.borrow().copy(tlsclient.clone()));
-                    let new_connector = self.connector.borrow().copy(tlsclient);
-                    new_client.set_read_timeout(Some(Duration::new(20, 0)));
-                    new_client.set_write_timeout(Some(Duration::new(20, 0)));
-                    *self.client.borrow_mut() = new_client;
-                    *self.connector.borrow_mut() = new_connector;
+                    let client_cert_key = Some(ClientCertKey::with_cert_and_key(cert, key));
+                    self.create_new_client(&client_cert_key);
                 }
             }
         }
@@ -616,6 +623,7 @@ impl Kluster {
             endpoint,
             auth,
             root_cert: cert_opt,
+            client_cert_key,
             insecure,
             client: RefCell::new(client),
             connector: RefCell::new(Kluster::make_connector(
@@ -627,7 +635,7 @@ impl Kluster {
         })
     }
 
-    fn send_req(&self, path: &str) -> Result<Response, KubeError> {
+    fn send_req(&self, path: &str) -> Result<Response, HyperError> {
         let url = self.endpoint.join(path)?;
         if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
             self.handle_exec_provider(exec_provider);
@@ -635,7 +643,26 @@ impl Kluster {
         let client = self.client.borrow();
         let req = client.get(url);
         let req = self.add_auth_header(req);
-        req.send().map_err(KubeError::from)
+        req.send()
+    }
+
+    fn send(&self, path: &str) -> Result<Response, KubeError> {
+        match self.send_req(path) {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                match &e {
+                    HyperError::Io(ref io_err) => {
+                        if io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                            self.create_new_client(&self.client_cert_key);
+                            self.send_req(path).map_err(KubeError::from)
+                        } else {
+                            Err(KubeError::from(e))
+                        }
+                    }
+                    _ => Err(KubeError::from(e))
+                }
+            }
+        }
     }
 
     fn check_resp(&self, resp: Response) -> Result<Response, KubeError> {
@@ -658,14 +685,16 @@ impl Kluster {
     where
         for<'de> T: Deserialize<'de>,
     {
-        let resp = self.send_req(path)?;
+        let resp = self.send(path)?;
         let resp = self.check_resp(resp)?;
         serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
     /// like printing logs)
-    pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
+    pub fn get_read(&self, path: &str,
+                    timeout: Option<Duration>,
+                    retry: bool) -> Result<Response, KubeError> {
         // this has to be implemented in this gross way since we can't set timeouts on invidual
         // requests on the client
         let url = self.endpoint.join(path)?;
@@ -681,20 +710,36 @@ impl Kluster {
         }
         // None here means don't timeout, which we set for logs follow
         req.set_read_timeout(timeout)?;
-        let next = req.start()?;
-        let resp = next.send().map_err(KubeError::from)?;
-        self.check_resp(resp)
+        match req.start()?.send() {
+            Ok(resp) => self.check_resp(resp),
+            Err(e) => {
+                match &e {
+                    HyperError::Io(ref io_err) => {
+                        if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                            self.create_new_client(&self.client_cert_key);
+                            self.get_read(path, timeout, false)
+                        } else {
+                            Err(KubeError::from(e))
+                        }
+                    }
+                    _ => Err(KubeError::from(e))
+                }
+            }
+        }
     }
 
     /// Get a serde_json::Value
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
-        let resp = self.send_req(path)?;
+        let resp = self.send(path)?;
         let resp = self.check_resp(resp)?;
         serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self, path: &str, body: Option<&str>) -> Result<Response, KubeError> {
+    pub fn delete(&self,
+                  path: &str,
+                  body: Option<&str>,
+                  retry: bool) -> Result<Response, KubeError> {
         let url = self.endpoint.join(path)?;
         if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
             self.handle_exec_provider(exec_provider);
@@ -709,7 +754,22 @@ impl Kluster {
             None => req,
         };
         let req = self.add_auth_header(req);
-        req.send().map_err(KubeError::from)
+        match req.send() {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                match &e {
+                    HyperError::Io(ref io_err) => {
+                        if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                            self.create_new_client(&self.client_cert_key);
+                            self.delete(path, body, false)
+                        } else {
+                            Err(KubeError::from(e))
+                        }
+                    }
+                    _ => Err(KubeError::from(e))
+                }
+            }
+        }
     }
 
     /// Get all namespaces in this cluster

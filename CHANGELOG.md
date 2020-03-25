@@ -1,3 +1,18 @@
+0.5
+====
+This release includes two major new features, ranges and an --exec command. It also has lots of
+small fixes and cleanup.
+
+Features:
+* Ranges: Type `help ranges` at the prompt for details. In a nutshell, you can now select multiple
+  objects at once and operate on all of them.
+* `--exec` can now be passed to run a one off command (useful for using click in scripts)
+* The kubernetes "exec-provider" style config is now fully supported, which should fix a number of
+  authentication issues.
+
+Bug fixes:
+* Set timeouts properly for all requests (especially for logs)
+
 0.4.3
 =====
 

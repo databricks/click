@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "click"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "ansi_term 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "atomicwrites 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",

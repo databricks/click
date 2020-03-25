@@ -22,7 +22,6 @@ use rustls::{Certificate, PrivateKey};
 use rustls::{ClientConfig, ClientSession, Session};
 use untrusted::{Input, Reader};
 
-use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::net::{IpAddr, TcpStream};
@@ -111,7 +110,7 @@ pub fn get_cert_from_pem(pem: &str) -> Option<Certificate> {
         Some(body) => match ::base64::decode(body.as_str()) {
             Ok(der_vec) => Some(Certificate(der_vec)),
             Err(e) => {
-                println!("Failed to decode cert: {}", e.description());
+                println!("Failed to decode cert: {}", e.to_string());
                 None
             }
         },

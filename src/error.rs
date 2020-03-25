@@ -97,22 +97,6 @@ impl fmt::Display for KubeError {
 }
 
 impl error::Error for KubeError {
-    fn description(&self) -> &str {
-        match *self {
-            KubeError::ParseErr(ref s) => s,
-            KubeError::Kube(ref err) => err.description(),
-            KubeError::KubeServerError(ref s) => s,
-            KubeError::ConfigFileError(ref s) => s,
-            KubeError::DecodeError(ref err) => err.description(),
-            KubeError::Io(ref err) => err.description(),
-            KubeError::HyperParse(ref err) => err.description(),
-            KubeError::HyperErr(ref err) => err.description(),
-            KubeError::SerdeJson(ref err) => err.description(),
-            KubeError::SerdeYaml(ref err) => err.description(),
-            KubeError::JoinPathsError(ref err) => err.description(),
-        }
-    }
-
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             KubeError::ParseErr(_) => None,

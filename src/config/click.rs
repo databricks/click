@@ -16,7 +16,6 @@
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use rustyline::config as rustyconfig;
 
-use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -158,10 +157,7 @@ impl ClickConfig {
         let af = AtomicFile::new(path, AllowOverwrite);
         af.write(|mut f| serde_yaml::to_writer(&mut f, &self))
             .map_err(|e| {
-                KubeError::ConfigFileError(format!(
-                    "Failed to write config file: {}",
-                    e.description()
-                ))
+                KubeError::ConfigFileError(format!("Failed to write config file: {}", e))
             })?;
         Ok(())
     }

@@ -18,7 +18,6 @@
 use std::collections::HashMap;
 use std::convert::From;
 use std::env;
-use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
@@ -185,17 +184,13 @@ fn cert_key_from_data(
         let mut cert_enc = ::base64::decode(client_cert_data)?;
         cert_enc.retain(|&i| i != 0);
         let cert_pem = String::from_utf8(cert_enc).map_err(|e| {
-            KubeError::ConfigFileError(format!(
-                "Invalid utf8 data in certificate: {}",
-                e.description()
-            ))
+            KubeError::ConfigFileError(format!("Invalid utf8 data in certificate: {}", e))
         })?;
         let cert = get_cert_from_pem(cert_pem.as_str());
         let mut key_enc = ::base64::decode(key_data)?;
         key_enc.retain(|&i| i != 0);
-        let key_str = String::from_utf8(key_enc).map_err(|e| {
-            KubeError::ConfigFileError(format!("Invalid utf8 data in key: {}", e.description()))
-        })?;
+        let key_str = String::from_utf8(key_enc)
+            .map_err(|e| KubeError::ConfigFileError(format!("Invalid utf8 data in key: {}", e)))?;
         let key = get_key_from_str(key_str.as_str());
         match (cert, key) {
             (Some(c), Some(k)) => Ok(ClientCertKey::with_cert_and_key(c, k)),
@@ -247,8 +242,7 @@ impl Config {
                                 println!(
                                     "Invalid server cert path for cluster {}: {}.\nAny contexts \
                                      using this cluster will be unavailable.",
-                                    cluster.name,
-                                    e.description()
+                                    cluster.name, e
                                 );
                             }
                         }
@@ -259,7 +253,7 @@ impl Config {
                             let cert_pem = String::from_utf8(cert).map_err(|e| {
                                 KubeError::ConfigFileError(format!(
                                     "Invalid utf8 data in certificate: {}",
-                                    e.description()
+                                    e
                                 ))
                             })?;
                             cluster_map.insert(
@@ -268,10 +262,7 @@ impl Config {
                             );
                         }
                         Err(e) => {
-                            println!(
-                                "Invalid certificate data, could not base64 decode: {}",
-                                e.description()
-                            );
+                            println!("Invalid certificate data, could not base64 decode: {}", e);
                         }
                     },
                     (None, None) => {

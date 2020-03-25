@@ -737,6 +737,23 @@ impl Kluster {
         body: Option<&str>,
         retry: bool,
     ) -> Result<Response, KubeError> {
+        match self.inner_delete(path, body) {
+            Ok(resp) => Ok(resp),
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.inner_delete(path, body).map_err(KubeError::from)
+                    } else {
+                        Err(KubeError::from(e))
+                    }
+                }
+                _ => Err(KubeError::from(e)),
+            },
+        }
+    }
+
+    fn inner_delete(&self, path: &str, body: Option<&str>) -> Result<Response, HyperError> {
         let url = self.endpoint.join(path)?;
         if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
             self.handle_exec_provider(exec_provider);
@@ -751,20 +768,7 @@ impl Kluster {
             None => req,
         };
         let req = self.add_auth_header(req);
-        match req.send() {
-            Ok(resp) => Ok(resp),
-            Err(e) => match &e {
-                HyperError::Io(ref io_err) => {
-                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
-                        self.create_new_client(&self.client_cert_key);
-                        self.delete(path, body, false)
-                    } else {
-                        Err(KubeError::from(e))
-                    }
-                }
-                _ => Err(KubeError::from(e)),
-            },
-        }
+        req.send()
     }
 
     /// Get all namespaces in this cluster

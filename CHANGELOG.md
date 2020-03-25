@@ -1,5 +1,9 @@
-0.5
-====
+0.5.1
+======
+Small bugfix release, fixing issue with `delete`
+
+0.5.0
+======
 This release includes two major new features, ranges and an --exec command. It also has lots of
 small fixes and cleanup.
 

@@ -102,7 +102,7 @@ fn default_read_timeout() -> u32 {
     20
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
@@ -121,6 +121,23 @@ pub struct ClickConfig {
     pub connect_timeout_secs: u32,
     #[serde(default = "default_read_timeout")]
     pub read_timeout_secs: u32,
+}
+
+impl Default for ClickConfig {
+    fn default() -> ClickConfig {
+        ClickConfig {
+            namespace: None,
+            context: None,
+            editor: None,
+            terminal: None,
+            editmode: EditMode::default(),
+            completiontype: CompletionType::default(),
+            aliases: vec![],
+            range_separator: default_range_sep(),
+            connect_timeout_secs: default_connect_timeout(),
+            read_timeout_secs: default_read_timeout(),
+        }
+    }
 }
 
 impl ClickConfig {
@@ -204,6 +221,9 @@ aliases:
         assert_eq!(config.namespace, None);
         assert_eq!(config.editmode, EditMode::Emacs);
         assert_eq!(config.completiontype, CompletionType::Circular);
+        assert_eq!(config.read_timeout_secs, default_read_timeout());
+        assert_eq!(config.connect_timeout_secs, default_connect_timeout());
+        assert_eq!(config.range_separator, default_range_sep());
     }
 
     #[test]

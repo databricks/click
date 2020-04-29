@@ -1768,6 +1768,7 @@ fn do_exec(
             targs.push("-c");
             targs.push(cont);
         }
+        targs.push("--");
         targs.push(cmd);
         clickwriteln!(writer, "Starting on {} in terminal", pod.name());
         if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
@@ -1784,13 +1785,26 @@ fn do_exec(
             .arg(it_arg)
             .arg(pod.name());
         let command = if let Some(cont) = cont_opt {
-            command.arg("-c").arg(cont).arg(cmd)
+            command.arg("-c").arg(cont).arg("--").arg(cmd)
         } else {
-            command.arg(cmd)
+            command.arg("--").arg(cmd)
         };
-        let status = command.status().expect("failed to execute kubectl");
-        if !status.success() {
-            writeln!(stderr(), "kubectl exited abnormally").unwrap_or(());
+        match command.status() {
+            Ok(s) => {
+                if !s.success() {
+                    writeln!(stderr(), "kubectl exited abnormally").unwrap_or(());
+                }
+            }
+            Err(e) => {
+                if let io::ErrorKind::NotFound = e.kind() {
+                    writeln!(
+                        stderr(),
+                        "Could not find kubectl binary. Is it in your PATH?"
+                    )
+                    .unwrap_or(());
+                    return;
+                }
+            }
         }
     }
 }
@@ -3083,12 +3097,24 @@ Examples:
                 });
             }
             Err(e) => {
-                write!(
-                    stderr(),
-                    "Couldn't execute kubectl, not forwarding.  Error is: {}",
-                    e
-                )
-                .unwrap_or(());
+                match e.kind() {
+                    io::ErrorKind::NotFound => {
+                        writeln!(
+                            stderr(),
+                            "Could not find kubectl binary. Is it in your PATH?"
+                        )
+                            .unwrap_or(());
+                        return;
+                    }
+                    _ => {
+                        write!(
+                            stderr(),
+                            "Couldn't execute kubectl, not forwarding.  Error is: {}",
+                            e
+                        )
+                            .unwrap_or(());
+                    }
+                }
             }
         }
     }

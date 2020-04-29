@@ -1,3 +1,8 @@
+0.5.2
+======
+* Fix issues #140 (invalid default timeouts) and #141 (Poor experience when kubectl isn't in path)
+* Switch to call kubectl exec with `--` before the command since the old way is deprecated
+
 0.5.1
 ======
 Small bugfix release, fixing issue with `delete`

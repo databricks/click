@@ -3096,26 +3096,23 @@ Examples:
                     output: output,
                 });
             }
-            Err(e) => {
-                match e.kind() {
-                    io::ErrorKind::NotFound => {
-                        writeln!(
-                            stderr(),
-                            "Could not find kubectl binary. Is it in your PATH?"
-                        )
-                            .unwrap_or(());
-                        return;
-                    }
-                    _ => {
-                        write!(
-                            stderr(),
-                            "Couldn't execute kubectl, not forwarding.  Error is: {}",
-                            e
-                        )
-                            .unwrap_or(());
-                    }
+            Err(e) => match e.kind() {
+                io::ErrorKind::NotFound => {
+                    writeln!(
+                        stderr(),
+                        "Could not find kubectl binary. Is it in your PATH?"
+                    )
+                    .unwrap_or(());
                 }
-            }
+                _ => {
+                    write!(
+                        stderr(),
+                        "Couldn't execute kubectl, not forwarding.  Error is: {}",
+                        e
+                    )
+                    .unwrap_or(());
+                }
+            },
         }
     }
 );

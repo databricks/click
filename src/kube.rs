@@ -789,3 +789,55 @@ fn print_token_err() {
          Also please report this error on the Click github page."
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn null_last_timestamp() {
+        let event_list_json = r#"
+{
+  "kind": "EventList",
+  "apiVersion": "v1",
+  "metadata": {
+    "selfLink": "/api/v1/namespaces/default/events",
+    "resourceVersion": "123"
+  },
+  "items": [
+    {
+      "metadata": {
+        "name": "test_pod.160c9d9f5b3dca2b",
+        "namespace": "default",
+        "selfLink": "/api/v1/namespaces/default/events/test_pod.160c9d9f5b3dca2b",
+        "uid": "7b20eb20",
+        "resourceVersion": "123",
+        "creationTimestamp": "2020-05-07T02:21:16Z"
+      },
+      "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "test_pod",
+        "uid": "951eab98",
+        "apiVersion": "v1",
+        "resourceVersion": "123"
+      },
+      "count": 3,
+      "reason": "Scheduled",
+      "message": "message about a pod",
+      "source": {
+        "component": "default-scheduler"
+      },
+      "firstTimestamp": null,
+      "lastTimestamp": null,
+      "type": "Normal",
+      "eventTime": "2020-05-07T02:21:16.311067Z",
+      "action": "Binding",
+      "reportingInstance": "default-scheduler"
+    }
+  ]
+}"#;
+        let el: EventList = serde_json::from_str(event_list_json).unwrap();
+        assert!(el.items.get(0).unwrap().last_timestamp.is_none());
+    }
+}

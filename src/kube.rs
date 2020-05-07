@@ -217,7 +217,7 @@ pub struct Event {
     pub message: String,
     pub reason: String,
     #[serde(rename = "lastTimestamp")]
-    pub last_timestamp: DateTime<Utc>,
+    pub last_timestamp: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]

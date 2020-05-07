@@ -2174,7 +2174,12 @@ command!(
 fn format_event(event: &Event) -> String {
     format!(
         "{} - {}\n count: {}\n reason: {}\n",
-        event.last_timestamp.with_timezone(&Local),
+        event
+            .last_timestamp
+            .map(|x| x.with_timezone(&Local))
+            .as_ref()
+            .map(|x| x as &dyn std::fmt::Display)
+            .unwrap_or_else(|| &"unknown" as &dyn std::fmt::Display),
         event.message,
         event.count,
         event.reason

@@ -2181,7 +2181,7 @@ fn format_event(event: &Event) -> String {
             .map(|x| x as &dyn std::fmt::Display)
             .unwrap_or_else(|| &"unknown" as &dyn std::fmt::Display),
         event.message,
-        event.count,
+        event.count.unwrap_or_else(|| 1),
         event.reason
     )
 }

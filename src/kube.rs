@@ -213,7 +213,7 @@ pub struct PodList {
 // Events
 #[derive(Debug, Deserialize)]
 pub struct Event {
-    pub count: u32,
+    pub count: Option<u32>,
     pub message: String,
     pub reason: String,
     #[serde(rename = "lastTimestamp")]

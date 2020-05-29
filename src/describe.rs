@@ -120,10 +120,7 @@ where
                 ref path,
                 ref default,
             } => val_str(path, v, default),
-            DescItem::Valu64 {
-                ref path,
-                default,
-            } => val_u64(path, v, default).to_string().into(),
+            DescItem::Valu64 { ref path, default } => val_u64(path, v, default).to_string().into(),
             DescItem::KeyValStr {
                 ref parent,
                 secret_vals,
@@ -605,9 +602,15 @@ fn get_container_str(v: &Value) -> Cow<str> {
     let mut buf = String::new();
     if let Some(container_array) = v.as_array() {
         for container in container_array.iter() {
-            buf.push_str(format!("  Name: {}\n", val_str("/name", container, "<No Name>")).as_str());
             buf.push_str(
-                format!("    Image:\t{}\n", val_str("/image", container, "<No Image>")).as_str(),
+                format!("  Name: {}\n", val_str("/name", container, "<No Name>")).as_str(),
+            );
+            buf.push_str(
+                format!(
+                    "    Image:\t{}\n",
+                    val_str("/image", container, "<No Image>")
+                )
+                .as_str(),
             );
         }
     }

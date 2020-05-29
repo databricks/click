@@ -32,6 +32,10 @@ pub enum DescItem<'a> {
         path: &'a str,
         default: &'a str,
     },
+    Valu64 {
+        path: &'a str,
+        default: u64,
+    },
     KeyValStr {
         parent: &'a str,
         secret_vals: bool,
@@ -116,6 +120,10 @@ where
                 ref path,
                 ref default,
             } => val_str(path, v, default),
+            DescItem::Valu64 {
+                ref path,
+                default,
+            } => val_u64(path, v, default).to_string().into(),
             DescItem::KeyValStr {
                 ref parent,
                 secret_vals,
@@ -331,7 +339,7 @@ pub fn describe_format_node(v: Value) -> String {
             DescItem::CustomFunc {
                 path: None,
                 func: &node_access_url,
-                default: "N/A>",
+                default: "<N/A>",
             },
         ),
         (
@@ -586,6 +594,116 @@ pub fn describe_format_secret(v: Value) -> String {
             DescItem::KeyValStr {
                 parent: "/data",
                 secret_vals: true,
+            },
+        ),
+    ];
+    describe_object(&v, fields.into_iter())
+}
+
+/// Get container info out of container array
+fn get_container_str(v: &Value) -> Cow<str> {
+    let mut buf = String::new();
+    if let Some(container_array) = v.as_array() {
+        for container in container_array.iter() {
+            buf.push_str(format!("  Name: {}\n", val_str("/name", container, "<No Name>")).as_str());
+            buf.push_str(
+                format!("    Image:\t{}\n", val_str("/image", container, "<No Image>")).as_str(),
+            );
+        }
+    }
+    buf.into()
+}
+
+/// Get status messages out of 'conditions' array
+fn get_message_str(v: &Value) -> Cow<str> {
+    let mut buf = String::new();
+    if let Some(condition_array) = v.as_array() {
+        for condition in condition_array.iter() {
+            let msg = val_str("/message", condition, "<No Message>");
+            let colour = match &*msg {
+                "Deployment has minimum availability." => Colour::Green,
+                _ => Colour::Yellow,
+            };
+            buf.push_str(format!("  Message: {}\n", colour.paint(msg).to_string()).as_str());
+        }
+    }
+    buf.into()
+}
+
+/// Utility function to describe a deployment
+pub fn describe_format_deployment(v: Value) -> String {
+    let fields = vec![
+        (
+            "Name:\t\t",
+            DescItem::MetadataValStr {
+                path: "/name",
+                default: "<No Name>",
+            },
+        ),
+        (
+            "Namespace:\t",
+            DescItem::MetadataValStr {
+                path: "/namespace",
+                default: "<No Name>",
+            },
+        ),
+        ("Created at:\t", DescItem::ObjectCreated),
+        (
+            "Generation:\t",
+            DescItem::Valu64 {
+                path: "/metadata/generation",
+                default: 0,
+            },
+        ),
+        (
+            "Labels:\t",
+            DescItem::KeyValStr {
+                parent: "/metadata/labels",
+                secret_vals: false,
+            },
+        ),
+        (
+            "Desired Replicas:\t",
+            DescItem::Valu64 {
+                path: "/spec/replicas",
+                default: 0,
+            },
+        ),
+        (
+            "Current Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/replicas",
+                default: 0,
+            },
+        ),
+        (
+            "Up To Date Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/updatedReplicas",
+                default: 0,
+            },
+        ),
+        (
+            "Available Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/availableReplicas",
+                default: 0,
+            },
+        ),
+        (
+            "\nContainers:\n",
+            DescItem::CustomFunc {
+                path: Some("/spec/template/spec/containers"),
+                func: &get_container_str,
+                default: "<No Containers>",
+            },
+        ),
+        (
+            "Messages:\n",
+            DescItem::CustomFunc {
+                path: Some("/status/conditions"),
+                func: &get_message_str,
+                default: "<No Messages>",
             },
         ),
     ];

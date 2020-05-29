@@ -164,6 +164,9 @@ impl KObj {
                         ObjType::Node => {
                             clickwriteln!(writer, "{}", describe::describe_format_node(val))
                         }
+                        ObjType::Deployment => {
+                            clickwriteln!(writer, "{}", describe::describe_format_deployment(val))
+                        }
                         ObjType::Secret => {
                             clickwriteln!(writer, "{}", describe::describe_format_secret(val))
                         }

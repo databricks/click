@@ -1,3 +1,8 @@
+0.5.3
+======
+* Fix hyper-rust-tls version issue (thanks @schuermannator)
+* `events` now deals with fields that can be missing
+
 0.5.2
 ======
 * Fix issues #140 (invalid default timeouts) and #141 (Poor experience when kubectl isn't in path)

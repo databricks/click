@@ -1136,7 +1136,7 @@ command!(
                     (context, row)
                 })
                 .collect();
-            table.set_format(TBLFMT.clone());
+            table.set_format(*TBLFMT);
             ::table::print_table(&mut table, &ctxs, writer);
         }
     }
@@ -3146,7 +3146,7 @@ fn print_pfs(pfs: std::slice::Iter<env::PortForward>) {
 
         table.add_row(Row::new(row));
     }
-    table.set_format(TBLFMT.clone());
+    table.set_format(*TBLFMT);
     table.printstd();
 }
 

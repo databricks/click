@@ -262,7 +262,7 @@ impl AuthProvider {
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
-                    .unwrap_or_else(|| vec![]);
+                    .unwrap_or_else(Vec::new);
                 match ductcmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         self.parse_output_and_update(output.as_str(), token, expiry);

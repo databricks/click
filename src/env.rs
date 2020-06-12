@@ -108,7 +108,7 @@ impl Env {
             range_str: None,
             tempdir: TempDir::new("click"),
         };
-        env.set_context(context.as_ref().map(|x| &**x));
+        env.set_context(context.as_deref());
         env
     }
 

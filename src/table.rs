@@ -181,7 +181,7 @@ fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
 }
 
 pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
-    table.set_format(TBLFMT.clone());
+    table.set_format(*TBLFMT);
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(0);
     }
@@ -197,7 +197,7 @@ pub fn print_table<'a, T>(
         let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
         table.add_row(Row::new(row_vec));
     }
-    table.set_format(TBLFMT.clone());
+    table.set_format(*TBLFMT);
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(0);
     }

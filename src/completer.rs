@@ -12,49 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use Env;
+use cmd::Cmd;
+use env::{Env, ObjectSelection};
+use kobj::ObjType;
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Context, Helper, Result};
 
-use cmd::Cmd;
+use std::rc::Rc;
 
-pub struct ClickHelper<'a> {
-    commands: &'a Vec<Box<Cmd>>,
-    env: &'a ::Env,
+pub struct ClickHelper {
+    commands: Vec<Box<dyn Cmd>>,
+    help_topics: Vec<&'static str>,
+    env: Option<Rc<Env>>,
 }
 
-impl<'a> Helper for ClickHelper<'a> {}
+impl Helper for ClickHelper {}
 
-impl<'a> Highlighter for ClickHelper<'a> {}
+impl Highlighter for ClickHelper {}
 
-impl<'a> Hinter for ClickHelper<'a> {
+impl Hinter for ClickHelper {
     fn hint(&self, _line: &str, _pos: usize, _context: &Context) -> Option<String> {
         None
     }
 }
 
-
-
-impl<'a> ClickHelper<'a> {
-    /// Create a new ClickHelper.  We use a raw pointer here because this needs to hold onto a
-    /// reference to the env while the main loop is executing, but the main loop also needs to
-    /// mutate the env, so the borrow checker complains with safe code.  However, the main loop is
-    /// blocked while line-reading (and therefore completion) is ongoing, so using the env read-only
-    /// in the complete function below is safe. TODO: File an issue with rustyline to allow a
-    /// user-pointer to be passed to readline, which would obviate the need for this
-    pub fn new(commands: &'a Vec<Box<Cmd>>, env: *const ::Env) -> ClickHelper<'a> {
+impl ClickHelper {
+    /// Create a new completer. help_topics are any extra things you can type after 'help' that
+    /// aren't commands
+    pub fn new(commands: Vec<Box<dyn Cmd>>, help_topics: Vec<&'static str>) -> ClickHelper {
         ClickHelper {
-            commands: commands,
-            env: unsafe { &*env },
+            commands,
+            help_topics,
+            env: None,
         }
+    }
+
+    pub fn set_env(&mut self, env: Option<Rc<Env>>) {
+        self.env = env;
     }
 }
 
-impl<'a> ClickHelper<'a> {
-    fn get_exact_command(&self, line: &str) -> Option<&Box<Cmd>> {
+impl ClickHelper {
+    #[allow(clippy::borrowed_box)]
+    fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
         for cmd in self.commands.iter() {
             if cmd.is(line) {
                 return Some(cmd);
@@ -62,17 +65,39 @@ impl<'a> ClickHelper<'a> {
         }
         None
     }
+
+    fn get_command_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for cmd in self.commands.iter() {
+            if cmd.get_name().starts_with(line) {
+                candidates.push(Pair {
+                    display: cmd.get_name().to_owned(),
+                    replacement: cmd.get_name().to_owned(),
+                });
+            }
+        }
+    }
+
+    fn get_help_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
+        for topic in self.help_topics.iter() {
+            if topic.starts_with(line) {
+                candidates.push(Pair {
+                    display: (*topic).to_string(),
+                    replacement: (*topic).to_string(),
+                });
+            }
+        }
+    }
 }
 
 /// Does the short option (an Option<char>) from clap match
 pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
     match long {
         Some(lstr) => lstr.starts_with(prefix),
-        None => false
+        None => false,
     }
 }
 
-impl<'a> Completer for ClickHelper<'a> {
+impl Completer for ClickHelper {
     type Candidate = Pair;
     fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
         let mut v = Vec::new();
@@ -96,10 +121,10 @@ impl<'a> Completer for ClickHelper<'a> {
                     let (pos, prefix) = match split.next_back() {
                         Some(back) => {
                             // there was a command typed and also something after it
-                            if line.ends_with(" ") {
+                            if line.ends_with(' ') {
                                 // ending with a space means complete a positional
-                                let mut count = split.filter(|s| !s.starts_with("-")).count();
-                                if !back.starts_with("-") {
+                                let mut count = split.filter(|s| !s.starts_with('-')).count();
+                                if !back.starts_with('-') {
                                     // if the last thing didn't have a -, it's a positional arg
                                     // that we need to count
                                     count += 1;
@@ -107,10 +132,13 @@ impl<'a> Completer for ClickHelper<'a> {
                                 (count, "")
                             } else if back == "-" {
                                 // a lone - completes with another -
-                                return Ok((line.len(), vec![Pair {
-                                    display: "-".to_owned(),
-                                    replacement: "-".to_owned(),
-                                }]));
+                                return Ok((
+                                    line.len(),
+                                    vec![Pair {
+                                        display: "-".to_owned(),
+                                        replacement: "-".to_owned(),
+                                    }],
+                                ));
                             } else if back.starts_with("--") {
                                 // last thing is a long option, complete on available options
                                 let mut opts = cmd.complete_option(&back[2..]);
@@ -118,33 +146,40 @@ impl<'a> Completer for ClickHelper<'a> {
                                     // add in help completion
                                     opts.push(Pair {
                                         display: "--help".to_owned(),
-                                        replacement: "help"[(back.len()-2)..].to_owned(),
+                                        replacement: "help"[(back.len() - 2)..].to_owned(),
                                     });
                                 }
                                 return Ok((line.len(), opts));
-                            }
-                            else {
+                            } else {
                                 // last thing isn't an option, figure out which positional we're at
-                                (split.filter(|s| !s.starts_with("-")).count(),
-                                 back)
+                                (split.filter(|s| !s.starts_with('-')).count(), back)
                             }
                         }
-                        None => {
-                            (0, "")
-                        }
+                        None => (0, ""),
                     };
                     // here the last thing typed wasn't a '-' option, so we ask the command to
                     // do completion
-                    let opts = cmd.try_complete(pos, prefix, self.env);
-                    return Ok((line.len(), opts));
+                    if let Some(ref env) = self.env {
+                        let opts = cmd.try_complete(pos, prefix, &*env);
+                        return Ok((line.len(), opts));
+                    } else {
+                        return Ok((0, v));
+                    }
+                } else if linecmd == "help" {
+                    let cmd_part = split.next().unwrap_or("");
+                    if split.next().is_none() {
+                        // only complete on the first arg to help
+                        self.get_command_completions(cmd_part, &mut v);
+                        self.get_help_completions(cmd_part, &mut v);
+                        return Ok((5, v)); // help plus space is 5 chars
+                    }
                 } else {
-                    for cmd in self.commands.iter() {
-                        if cmd.get_name().starts_with(linecmd) {
-                            v.push(Pair{
-                                display: cmd.get_name().to_owned(),
-                                replacement: cmd.get_name().to_owned(),
-                            });
-                        }
+                    self.get_command_completions(linecmd, &mut v);
+                    if "help".starts_with(linecmd) {
+                        v.push(Pair {
+                            display: "help".to_string(),
+                            replacement: "help".to_string(),
+                        });
                     }
                 }
             }
@@ -169,31 +204,31 @@ pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     match env.run_on_kluster(|k| k.namespaces_for_context()) {
-        Some(v) => v.iter()
+        Some(v) => v
+            .iter()
             .filter(|ns| ns.starts_with(prefix))
             .map(|ns| Pair {
                 display: ns.clone(),
                 replacement: ns[prefix.len()..].to_string(),
-            }).collect(),
-        None => vec![]
+            })
+            .collect(),
+        None => vec![],
     }
 }
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    match env.current_object {
-        ::KObj::Pod {
-            name: _,
-            ref containers,
-        } => for cont in containers.iter() {
-            if cont.starts_with(prefix) {
-                v.push(Pair {
-                    display: cont.clone(),
-                    replacement: cont[prefix.len()..].to_string(),
-                });
+    if let ObjectSelection::Single(obj) = env.current_selection() {
+        if let ObjType::Pod { ref containers } = obj.typ {
+            for cont in containers.iter() {
+                if cont.starts_with(prefix) {
+                    v.push(Pair {
+                        display: cont.clone(),
+                        replacement: cont[prefix.len()..].to_string(),
+                    });
+                }
             }
-        },
-        _ => {}
+        }
     }
     v
 }
@@ -212,10 +247,11 @@ macro_rules! possible_values_completer {
             }
             v
         }
-    }
+    };
 }
 
+possible_values_completer!(setoptions_values_completer, ::cmd::SET_OPTS);
 possible_values_completer!(
-    setoptions_values_completer, ["completion_type", "edit_mode", "editor", "terminal"]
+    portforwardaction_values_completer,
+    ["list", "output", "stop"]
 );
-possible_values_completer!(portforwardaction_values_completer, ["list", "output", "stop"]);

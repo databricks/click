@@ -15,21 +15,23 @@
 //! Dealing with various kubernetes api calls
 
 use ansi_term::Colour::{Green, Red, Yellow};
-use chrono::DateTime;
 use chrono::offset::Utc;
-use hyper::{Client, Url};
-use hyper::client::{Body, RequestBuilder};
+use chrono::DateTime;
 use hyper::client::request::Request;
 use hyper::client::response::Response;
+use hyper::client::{Body, RequestBuilder};
+use hyper::error::Error as HyperError;
 use hyper::header::{Authorization, Basic, Bearer};
 use hyper::method::Method;
 use hyper::status::StatusCode;
+use hyper::{Client, Url};
 use hyper_sync_rustls::TlsClient;
+use rustls::{self, Certificate, PrivateKey};
 use serde::Deserialize;
 use serde_json;
 use serde_json::{Map, Value};
-use rustls::{self, Certificate, PrivateKey};
 
+use std::cell::RefCell;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
@@ -37,7 +39,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use config::AuthProvider;
+use config::{AuthProvider, ExecAuth, ExecProvider};
 use connector::ClickSslConnector;
 use error::{KubeErrNo, KubeError};
 
@@ -57,11 +59,30 @@ pub struct OwnerReference {
 pub struct Metadata {
     pub name: String,
     pub namespace: Option<String>,
-    #[serde(rename = "creationTimestamp")] pub creation_timestamp: Option<DateTime<Utc>>,
-    #[serde(rename = "deletionTimestamp")] pub deletion_timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "creationTimestamp")]
+    pub creation_timestamp: Option<DateTime<Utc>>,
+    #[serde(rename = "deletionTimestamp")]
+    pub deletion_timestamp: Option<DateTime<Utc>>,
     pub labels: Option<Map<String, Value>>,
     pub annotations: Option<Map<String, Value>>,
-    #[serde(rename = "ownerReferences")] pub owner_refs: Option<Vec<OwnerReference>>,
+    #[serde(rename = "ownerReferences")]
+    pub owner_refs: Option<Vec<OwnerReference>>,
+}
+
+// Code to easily create a namespace in a test
+impl Metadata {
+    #[cfg(test)]
+    pub fn with_name(name: &str) -> Metadata {
+        Metadata {
+            name: name.to_string(),
+            namespace: None,
+            creation_timestamp: None,
+            deletion_timestamp: None,
+            labels: None,
+            annotations: None,
+            owner_refs: None,
+        }
+    }
 }
 
 // pods
@@ -70,17 +91,22 @@ pub struct Metadata {
 pub enum ContainerState {
     #[serde(rename = "running")]
     Running {
-        #[serde(rename = "startedAt")] started_at: Option<DateTime<Utc>>,
+        #[serde(rename = "startedAt")]
+        started_at: Option<DateTime<Utc>>,
     },
     #[serde(rename = "terminated")]
     Terminated {
-        #[serde(rename = "containerId")] container_id: Option<String>,
-        #[serde(rename = "exitCode")] exit_code: u32,
-        #[serde(rename = "finishedAt")] finished_at: Option<DateTime<Utc>>,
+        #[serde(rename = "containerId")]
+        container_id: Option<String>,
+        #[serde(rename = "exitCode")]
+        exit_code: u32,
+        #[serde(rename = "finishedAt")]
+        finished_at: Option<DateTime<Utc>>,
         message: Option<String>,
         reason: Option<String>,
         signal: Option<u32>,
-        #[serde(rename = "startedAt")] started_at: Option<DateTime<Utc>>,
+        #[serde(rename = "startedAt")]
+        started_at: Option<DateTime<Utc>>,
     },
     #[serde(rename = "waiting")]
     Waiting {
@@ -92,37 +118,30 @@ pub enum ContainerState {
 impl fmt::Display for ContainerState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &ContainerState::Running { started_at } => match started_at {
+            ContainerState::Running { started_at } => match started_at {
                 Some(sa) => write!(f, "{} (started: {})", Green.paint("running"), sa),
                 None => write!(f, "{} (unknown start time)", Green.paint("running")),
             },
-            &ContainerState::Terminated {
-                container_id: _,
+            ContainerState::Terminated {
                 ref exit_code,
                 ref finished_at,
-                message: _,
-                reason: _,
-                signal: _,
-                started_at: _,
+                ..
             } => match finished_at {
-                &Some(fa) => write!(
+                Some(fa) => write!(
                     f,
                     "{} at {} (exit code: {})",
                     Red.paint("terminated"),
                     fa,
                     exit_code
                 ),
-                &None => write!(
+                None => write!(
                     f,
                     "{} (time unknown) (exit code: {})",
                     Red.paint("terminated"),
                     exit_code
                 ),
             },
-            &ContainerState::Waiting {
-                message: _,
-                ref reason,
-            } => write!(
+            ContainerState::Waiting { ref reason, .. } => write!(
                 f,
                 "{} ({})",
                 Yellow.paint("waiting"),
@@ -134,10 +153,12 @@ impl fmt::Display for ContainerState {
 
 #[derive(Debug, Deserialize)]
 pub struct ContainerStatus {
-    #[serde(rename = "containerID")] pub id: Option<String>,
+    #[serde(rename = "containerID")]
+    pub id: Option<String>,
     pub name: String,
     pub image: String,
-    #[serde(rename = "restartCount")] pub restart_count: u32,
+    #[serde(rename = "restartCount")]
+    pub restart_count: u32,
     pub ready: bool,
     pub state: ContainerState,
 }
@@ -145,15 +166,19 @@ pub struct ContainerStatus {
 #[derive(Debug, Deserialize)]
 pub struct PodStatus {
     pub phase: String,
-    #[serde(rename = "containerStatuses")] pub container_statuses: Option<Vec<ContainerStatus>>,
+    #[serde(rename = "containerStatuses")]
+    pub container_statuses: Option<Vec<ContainerStatus>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct VolumeMount {
-    #[serde(rename = "mountPath")] pub mount_path: String,
+    #[serde(rename = "mountPath")]
+    pub mount_path: String,
     pub name: String,
-    #[serde(rename = "readOnly")] pub read_only: Option<bool>,
-    #[serde(rename = "subPath")] pub sub_path: Option<String>,
+    #[serde(rename = "readOnly")]
+    pub read_only: Option<bool>,
+    #[serde(rename = "subPath")]
+    pub sub_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,13 +186,15 @@ pub struct ContainerSpec {
     pub name: String,
     pub args: Option<Vec<String>>,
     pub command: Option<Vec<String>>,
-    #[serde(rename = "volumeMounts")] pub volume_mounts: Option<Vec<VolumeMount>>,
+    #[serde(rename = "volumeMounts")]
+    pub volume_mounts: Option<Vec<VolumeMount>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PodSpec {
     pub hostname: Option<String>,
-    #[serde(rename = "nodeName")] pub node_name: Option<String>,
+    #[serde(rename = "nodeName")]
+    pub node_name: Option<String>,
     pub containers: Vec<ContainerSpec>,
 }
 
@@ -186,10 +213,11 @@ pub struct PodList {
 // Events
 #[derive(Debug, Deserialize)]
 pub struct Event {
-    pub count: u32,
+    pub count: Option<u32>,
     pub message: String,
     pub reason: String,
-    #[serde(rename = "lastTimestamp")] pub last_timestamp: DateTime<Utc>,
+    #[serde(rename = "lastTimestamp")]
+    pub last_timestamp: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -200,7 +228,8 @@ pub struct EventList {
 // Nodes
 #[derive(Debug, Deserialize)]
 pub struct NodeCondition {
-    #[serde(rename = "type")] pub typ: String,
+    #[serde(rename = "type")]
+    pub typ: String,
     pub status: String,
 }
 
@@ -237,14 +266,18 @@ fn replicas_one() -> u32 {
 
 #[derive(Debug, Deserialize)]
 pub struct DeploymentSpec {
-    #[serde(default = "replicas_one")] pub replicas: u32,
+    #[serde(default = "replicas_one")]
+    pub replicas: u32,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct DeploymentStatus {
-    #[serde(default = "replicas_none")] pub replicas: u32,
-    #[serde(default = "replicas_none", rename = "availableReplicas")] pub available: u32,
-    #[serde(default = "replicas_none", rename = "updatedReplicas")] pub updated: u32,
+    #[serde(default = "replicas_none")]
+    pub replicas: u32,
+    #[serde(default = "replicas_none", rename = "availableReplicas")]
+    pub available: u32,
+    #[serde(default = "replicas_none", rename = "updatedReplicas")]
+    pub updated: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -267,16 +300,21 @@ fn tcp_str() -> String {
 #[derive(Debug, Deserialize)]
 pub struct ServicePort {
     pub name: Option<String>,
-    #[serde(rename = "nodePort")] pub node_port: Option<u32>,
+    #[serde(rename = "nodePort")]
+    pub node_port: Option<u32>,
     pub port: u32,
-    #[serde(default = "tcp_str")] pub protocol: String,
-    #[serde(rename = "targetPort")] pub target_pod: Option<Value>,
+    #[serde(default = "tcp_str")]
+    pub protocol: String,
+    #[serde(rename = "targetPort")]
+    pub target_pod: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ServiceSpec {
-    #[serde(rename = "clusterIP")] pub cluster_ip: Option<String>,
-    #[serde(rename = "externalIPs")] pub external_ips: Option<Vec<String>>,
+    #[serde(rename = "clusterIP")]
+    pub cluster_ip: Option<String>,
+    #[serde(rename = "externalIPs")]
+    pub external_ips: Option<Vec<String>>,
     pub ports: Option<Vec<ServicePort>>,
 }
 
@@ -345,7 +383,8 @@ pub struct JobList {
 pub enum KlusterAuth {
     Token(String),
     UserPass(String, String),
-    AuthProvider(AuthProvider),
+    AuthProvider(Box<AuthProvider>),
+    ExecProvider(ExecProvider),
 }
 
 impl KlusterAuth {
@@ -358,7 +397,11 @@ impl KlusterAuth {
     }
 
     pub fn with_auth_provider(auth_provider: AuthProvider) -> KlusterAuth {
-        KlusterAuth::AuthProvider(auth_provider)
+        KlusterAuth::AuthProvider(Box::new(auth_provider))
+    }
+
+    pub fn with_exec_provider(exec_provider: ExecProvider) -> KlusterAuth {
+        KlusterAuth::ExecProvider(exec_provider)
     }
 }
 
@@ -372,17 +415,26 @@ impl ClientCertKey {
     pub fn with_cert_and_key(cert: Certificate, private_key: PrivateKey) -> ClientCertKey {
         ClientCertKey {
             certs: vec![cert],
-            key: private_key
+            key: private_key,
         }
     }
+}
+
+// Hold either a Bearer or Basic auth header
+enum AuthHeader {
+    Basic(Basic),
+    Bearer(Bearer),
 }
 
 pub struct Kluster {
     pub name: String,
     endpoint: Url,
     auth: Option<KlusterAuth>,
-    client: Client,
-    connector: ClickSslConnector<TlsClient>,
+    root_cert: Option<String>,
+    client_cert_key: Option<ClientCertKey>,
+    insecure: bool,
+    client: RefCell<Client>,
+    connector: RefCell<ClickSslConnector<TlsClient>>,
 }
 
 // NoCertificateVerification struct/impl taken from the rustls example code
@@ -400,12 +452,14 @@ impl rustls::ServerCertVerifier for NoCertificateVerification {
 }
 
 impl Kluster {
-    fn make_tlsclient(cert_opt: &Option<String>,
-                      client_cert_key: &Option<ClientCertKey>,
-                      insecure: bool) -> TlsClient {
+    fn make_tlsclient(
+        cert_opt: &Option<String>,
+        client_cert_key: &Option<ClientCertKey>,
+        insecure: bool,
+    ) -> TlsClient {
         let mut tlsclient = TlsClient::new();
         if let Some(cfg) = Arc::get_mut(&mut tlsclient.cfg) {
-            if let &Some(ref cert_data) = cert_opt {
+            if let Some(ref cert_data) = *cert_opt {
                 // add the cert to the root store
                 let mut br = BufReader::new(cert_data.as_bytes());
                 match cfg.root_store.add_pem_file(&mut br) {
@@ -426,8 +480,10 @@ impl Kluster {
             }
 
             if let Some(client_cert_key) = client_cert_key {
-                cfg.set_single_client_cert(client_cert_key.certs.clone(),
-                                           client_cert_key.key.clone());
+                cfg.set_single_client_cert(
+                    client_cert_key.certs.clone(),
+                    client_cert_key.key.clone(),
+                );
             }
 
             if insecure {
@@ -465,36 +521,78 @@ impl Kluster {
         tlsclient: TlsClient,
         dns_host: Option<String>,
         ip: Option<String>,
+        connect_timeout: Duration,
     ) -> ClickSslConnector<TlsClient> {
         if let (Some(host), Some(ip_addr)) = (dns_host, ip) {
-            ClickSslConnector::new(tlsclient, Some((host, ip_addr)))
+            ClickSslConnector::new(tlsclient, Some((host, ip_addr)), connect_timeout)
         } else {
-            ClickSslConnector::new(tlsclient, None)
+            ClickSslConnector::new(tlsclient, None, connect_timeout)
         }
     }
 
-    fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
+    fn create_new_client(&self, client_cert_key: &Option<ClientCertKey>) {
+        // need a new cert/key, so make a new client
+        let tlsclient = Kluster::make_tlsclient(&self.root_cert, client_cert_key, self.insecure);
+        let mut new_client =
+            Client::with_connector(self.connector.borrow().copy(tlsclient.clone()));
+        let new_connector = self.connector.borrow().copy(tlsclient);
+        new_client.set_read_timeout(Some(Duration::new(20, 0)));
+        new_client.set_write_timeout(Some(Duration::new(20, 0)));
+        *self.client.borrow_mut() = new_client;
+        *self.connector.borrow_mut() = new_connector;
+    }
+
+    fn handle_exec_provider(&self, exec_provider: &ExecProvider) {
+        let (auth, was_expired) = exec_provider.get_auth();
+        match auth {
+            ExecAuth::Token(_) => {} // handled below
+            ExecAuth::ClientCertKey { cert, key } => {
+                if was_expired {
+                    let client_cert_key = Some(ClientCertKey::with_cert_and_key(cert, key));
+                    self.create_new_client(&client_cert_key);
+                }
+            }
+        }
+    }
+
+    fn get_auth_header(&self) -> Option<AuthHeader> {
         match self.auth {
-            Some(KlusterAuth::Token(ref token)) => req.header(Authorization(Bearer {
+            Some(KlusterAuth::Token(ref token)) => Some(AuthHeader::Bearer(Bearer {
                 token: token.clone(),
             })),
             Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
                 match auth_provider.ensure_token() {
-                    Some(token) => req.header(Authorization(Bearer { token: token })),
+                    Some(token) => Some(AuthHeader::Bearer(Bearer { token })),
                     None => {
                         print_token_err();
-                        req
+                        None
                     }
                 }
             }
-            Some(KlusterAuth::UserPass(ref user, ref pass)) => req.header(Authorization(Basic {
+            Some(KlusterAuth::UserPass(ref user, ref pass)) => Some(AuthHeader::Basic(Basic {
                 username: user.clone(),
                 password: Some(pass.clone()),
             })),
+            Some(KlusterAuth::ExecProvider(ref exec_provider)) => {
+                let (auth, _) = exec_provider.get_auth();
+                match auth {
+                    ExecAuth::Token(token) => Some(AuthHeader::Bearer(Bearer { token })),
+                    ExecAuth::ClientCertKey { .. } => None, // handled above
+                }
+            }
+            None => None,
+        }
+    }
+
+    fn add_auth_header<'a>(&self, req: RequestBuilder<'a>) -> RequestBuilder<'a> {
+        match self.get_auth_header() {
+            Some(AuthHeader::Basic(header)) => req.header(Authorization(header)),
+            Some(AuthHeader::Bearer(header)) => req.header(Authorization(header)),
             None => req,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: &str,
         cert_opt: Option<String>,
@@ -502,32 +600,63 @@ impl Kluster {
         auth: Option<KlusterAuth>,
         client_cert_key: Option<ClientCertKey>,
         insecure: bool,
+        connect_timeout_secs: u32,
+        read_timeout_secs: u32,
     ) -> Result<Kluster, KubeError> {
         let tlsclient = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
-        let tlsclient2 = Kluster::make_tlsclient(&cert_opt, &client_cert_key, insecure);
-        let mut endpoint = try!(Url::parse(server));
+        let mut endpoint = Url::parse(server)?;
         let (dns_host, ip) = Kluster::get_host_ip(&mut endpoint);
         let mut client = Client::with_connector(Kluster::make_connector(
-            tlsclient,
+            tlsclient.clone(),
             dns_host.clone(),
             ip.clone(),
+            Duration::new(connect_timeout_secs.into(), 0),
         ));
-        client.set_read_timeout(Some(Duration::new(20, 0)));
-        client.set_write_timeout(Some(Duration::new(20, 0)));
+        client.set_read_timeout(Some(Duration::new(read_timeout_secs.into(), 0)));
+        client.set_write_timeout(Some(Duration::new(read_timeout_secs.into(), 0)));
         Ok(Kluster {
             name: name.to_owned(),
-            endpoint: endpoint,
-            auth: auth,
-            client: client,
-            connector: Kluster::make_connector(tlsclient2, dns_host, ip),
+            endpoint,
+            auth,
+            root_cert: cert_opt,
+            client_cert_key,
+            insecure,
+            client: RefCell::new(client),
+            connector: RefCell::new(Kluster::make_connector(
+                tlsclient,
+                dns_host,
+                ip,
+                Duration::new(connect_timeout_secs.into(), 0),
+            )),
         })
     }
 
-    fn send_req(&self, path: &str) -> Result<Response, KubeError> {
-        let url = try!(self.endpoint.join(path));
-        let req = self.client.get(url);
+    fn send_req(&self, path: &str) -> Result<Response, HyperError> {
+        let url = self.endpoint.join(path)?;
+        if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
+            self.handle_exec_provider(exec_provider);
+        }
+        let client = self.client.borrow();
+        let req = client.get(url);
         let req = self.add_auth_header(req);
-        req.send().map_err(|he| KubeError::from(he))
+        req.send()
+    }
+
+    fn send(&self, path: &str) -> Result<Response, KubeError> {
+        match self.send_req(path) {
+            Ok(resp) => Ok(resp),
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.send_req(path).map_err(KubeError::from)
+                    } else {
+                        Err(KubeError::from(e))
+                    }
+                }
+                _ => Err(KubeError::from(e)),
+            },
+        }
     }
 
     fn check_resp(&self, resp: Response) -> Result<Response, KubeError> {
@@ -537,7 +666,7 @@ impl Kluster {
             Err(KubeError::Kube(KubeErrNo::Unauthorized))
         } else {
             // try and read an error message out
-            let val: Value = try!(serde_json::from_reader(resp));
+            let val: Value = serde_json::from_reader(resp)?;
             match ::values::val_str_opt("/message", &val) {
                 Some(msg) => Err(KubeError::KubeServerError(msg)),
                 None => Err(KubeError::Kube(KubeErrNo::Unknown)),
@@ -550,64 +679,87 @@ impl Kluster {
     where
         for<'de> T: Deserialize<'de>,
     {
-        let resp = try!(self.send_req(path));
-        let resp = try!(self.check_resp(resp));
-        serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
+        let resp = self.send(path)?;
+        let resp = self.check_resp(resp)?;
+        serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Get a Response.  Response implements Read, so this allows for a streaming read (for things
     /// like printing logs)
-    pub fn get_read(&self, path: &str, timeout: Option<Duration>) -> Result<Response, KubeError> {
-        if timeout.is_some() {
-            let url = try!(self.endpoint.join(path));
-            let mut req = try!(Request::with_connector(Method::Get, url, &self.connector,));
-            {
-                // scope for mutable borrow of req
-                let headers = req.headers_mut();
-                // we should clean this up to use add_auth_header
-                match self.auth {
-                    Some(KlusterAuth::Token(ref token)) => {
-                        headers.set(Authorization(Bearer {
-                            token: token.clone(),
-                        }));
+    pub fn get_read(
+        &self,
+        path: &str,
+        timeout: Option<Duration>,
+        retry: bool,
+    ) -> Result<Response, KubeError> {
+        // this has to be implemented in this gross way since we can't set timeouts on invidual
+        // requests on the client
+        let url = self.endpoint.join(path)?;
+        let mut req = Request::with_connector(Method::Get, url, &*self.connector.borrow())?;
+        {
+            // scope for mutable borrow of req
+            let headers = req.headers_mut();
+            match self.get_auth_header() {
+                Some(AuthHeader::Basic(header)) => headers.set(Authorization(header)),
+                Some(AuthHeader::Bearer(header)) => headers.set(Authorization(header)),
+                None => {}
+            };
+        }
+        // None here means don't timeout, which we set for logs follow
+        req.set_read_timeout(timeout)?;
+        match req.start()?.send() {
+            Ok(resp) => self.check_resp(resp),
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.get_read(path, timeout, false)
+                    } else {
+                        Err(KubeError::from(e))
                     }
-                    Some(KlusterAuth::AuthProvider(ref auth_provider)) => {
-                        match auth_provider.ensure_token() {
-                            Some(token) => headers.set(
-                                Authorization(Bearer { token: token })),
-                            None => print_token_err(),
-                        }
-                    }
-                    Some(KlusterAuth::UserPass(ref user, ref pass)) => {
-                        headers.set(Authorization(Basic {
-                            username: user.clone(),
-                            password: Some(pass.clone()),
-                        }));
-                    }
-                    None => {},
                 }
-            }
-            try!(req.set_read_timeout(timeout));
-            let next = try!(req.start());
-            let resp = try!(next.send().map_err(|he| KubeError::from(he)));
-            self.check_resp(resp)
-        } else {
-            let resp = try!(self.send_req(path));
-            self.check_resp(resp)
+                _ => Err(KubeError::from(e)),
+            },
         }
     }
 
     /// Get a serde_json::Value
     pub fn get_value(&self, path: &str) -> Result<Value, KubeError> {
-        let resp = try!(self.send_req(path));
-        let resp = try!(self.check_resp(resp));
-        serde_json::from_reader(resp).map_err(|sje| KubeError::from(sje))
+        let resp = self.send(path)?;
+        let resp = self.check_resp(resp)?;
+        serde_json::from_reader(resp).map_err(KubeError::from)
     }
 
     /// Issue an HTTP DELETE request to the specified path
-    pub fn delete(&self, path: &str, body: Option<String>) -> Result<Response, KubeError> {
-        let url = try!(self.endpoint.join(path));
-        let req = self.client.delete(url);
+    pub fn delete(
+        &self,
+        path: &str,
+        body: Option<&str>,
+        retry: bool,
+    ) -> Result<Response, KubeError> {
+        match self.inner_delete(path, body) {
+            Ok(resp) => Ok(resp),
+            Err(e) => match &e {
+                HyperError::Io(ref io_err) => {
+                    if retry && io_err.kind() == std::io::ErrorKind::ConnectionReset {
+                        self.create_new_client(&self.client_cert_key);
+                        self.inner_delete(path, body).map_err(KubeError::from)
+                    } else {
+                        Err(KubeError::from(e))
+                    }
+                }
+                _ => Err(KubeError::from(e)),
+            },
+        }
+    }
+
+    fn inner_delete(&self, path: &str, body: Option<&str>) -> Result<Response, HyperError> {
+        let url = self.endpoint.join(path)?;
+        if let Some(KlusterAuth::ExecProvider(ref exec_provider)) = self.auth {
+            self.handle_exec_provider(exec_provider);
+        }
+        let client = self.client.borrow();
+        let req = client.delete(url);
         let req = match body {
             Some(ref b) => {
                 let hyper_body = Body::BufBody(b.as_bytes(), b.len());
@@ -616,13 +768,13 @@ impl Kluster {
             None => req,
         };
         let req = self.add_auth_header(req);
-        req.send().map_err(|he| KubeError::from(he))
+        req.send()
     }
 
     /// Get all namespaces in this cluster
     pub fn namespaces_for_context(&self) -> Result<Vec<String>, KubeError> {
         let mut vec = Vec::new();
-        let res = try!(self.get::<NamespaceList>("/api/v1/namespaces"));
+        let res = self.get::<NamespaceList>("/api/v1/namespaces")?;
         for ns in res.items.iter() {
             vec.push(ns.metadata.name.clone());
         }
@@ -636,4 +788,56 @@ fn print_token_err() {
          running a kubectl command against the cluster to refresh it. \
          Also please report this error on the Click github page."
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn null_last_timestamp() {
+        let event_list_json = r#"
+{
+  "kind": "EventList",
+  "apiVersion": "v1",
+  "metadata": {
+    "selfLink": "/api/v1/namespaces/default/events",
+    "resourceVersion": "123"
+  },
+  "items": [
+    {
+      "metadata": {
+        "name": "test_pod.160c9d9f5b3dca2b",
+        "namespace": "default",
+        "selfLink": "/api/v1/namespaces/default/events/test_pod.160c9d9f5b3dca2b",
+        "uid": "7b20eb20",
+        "resourceVersion": "123",
+        "creationTimestamp": "2020-05-07T02:21:16Z"
+      },
+      "involvedObject": {
+        "kind": "Pod",
+        "namespace": "default",
+        "name": "test_pod",
+        "uid": "951eab98",
+        "apiVersion": "v1",
+        "resourceVersion": "123"
+      },
+      "count": 3,
+      "reason": "Scheduled",
+      "message": "message about a pod",
+      "source": {
+        "component": "default-scheduler"
+      },
+      "firstTimestamp": null,
+      "lastTimestamp": null,
+      "type": "Normal",
+      "eventTime": "2020-05-07T02:21:16.311067Z",
+      "action": "Binding",
+      "reportingInstance": "default-scheduler"
+    }
+  ]
+}"#;
+        let el: EventList = serde_json::from_str(event_list_json).unwrap();
+        assert!(el.items.get(0).unwrap().last_timestamp.is_none());
+    }
 }

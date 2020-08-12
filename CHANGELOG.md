@@ -1,3 +1,49 @@
+0.5.3
+======
+* Fix hyper-rust-tls version issue (thanks @schuermannator)
+* `events` now deals with fields that can be missing
+
+0.5.2
+======
+* Fix issues #140 (invalid default timeouts) and #141 (Poor experience when kubectl isn't in path)
+* Switch to call kubectl exec with `--` before the command since the old way is deprecated
+
+0.5.1
+======
+Small bugfix release, fixing issue with `delete`
+
+0.5.0
+======
+This release includes two major new features, ranges and an --exec command. It also has lots of
+small fixes and cleanup.
+
+Features:
+* Ranges: Type `help ranges` at the prompt for details. In a nutshell, you can now select multiple
+  objects at once and operate on all of them.
+* `--exec` can now be passed to run a one off command (useful for using click in scripts)
+* The kubernetes "exec-provider" style config is now fully supported, which should fix a number of
+  authentication issues.
+
+Bug fixes:
+* Set timeouts properly for all requests (especially for logs)
+
+0.4.3
+=====
+
+Cleanup:
+* cargo fmt
+* lots of small changes for new compiler+clippy lints
+* Adding unit tests
+* Update lots of dependent crates
+
+Bug Fixes:
+* Update to compile with new duct
+* The update of rustyline fixes a problem where Click would exit if you typed anything while a
+  network request was processing
+
+Changes:
+* Exit when typing Ctrl-D
+
 0.4.2
 =====
 

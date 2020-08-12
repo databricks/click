@@ -12,40 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 /// Click config
-
-use atomicwrites::{AtomicFile, AllowOverwrite};
+use atomicwrites::{AllowOverwrite, AtomicFile};
 use rustyline::config as rustyconfig;
 
-use std::error::Error;
 use std::fmt;
 use std::fs::File;
+use std::io::Read;
 
 use error::KubeError;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Alias {
     pub alias: String,
     pub expanded: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum EditMode {
     Emacs,
     Vi,
 }
 
 impl Default for EditMode {
-    fn default() -> Self { EditMode::Emacs }
+    fn default() -> Self {
+        EditMode::Emacs
+    }
 }
 
 impl fmt::Display for EditMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            EditMode::Emacs => "Emacs",
-            EditMode::Vi => "Vi",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                EditMode::Emacs => "Emacs",
+                EditMode::Vi => "Vi",
+            }
+        )
     }
 }
 
@@ -55,22 +59,28 @@ impl Into<String> for &EditMode {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub enum CompletionType {
     Circular,
     List,
 }
 
 impl Default for CompletionType {
-    fn default() -> Self { CompletionType::Circular }
+    fn default() -> Self {
+        CompletionType::Circular
+    }
 }
 
 impl fmt::Display for CompletionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            CompletionType::Circular => "Circular",
-            CompletionType::List => "List",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                CompletionType::Circular => "Circular",
+                CompletionType::List => "List",
+            }
+        )
     }
 }
 
@@ -80,7 +90,19 @@ impl Into<String> for &CompletionType {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+fn default_range_sep() -> String {
+    "--- {name} ---".to_string()
+}
+
+fn default_connect_timeout() -> u32 {
+    10
+}
+
+fn default_read_timeout() -> u32 {
+    20
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
     pub context: Option<String>,
@@ -92,26 +114,43 @@ pub struct ClickConfig {
     pub completiontype: CompletionType,
     #[serde(default = "Vec::new")]
     pub aliases: Vec<Alias>,
+    #[serde(default = "default_range_sep")]
+    pub range_separator: String,
+
+    #[serde(default = "default_connect_timeout")]
+    pub connect_timeout_secs: u32,
+    #[serde(default = "default_read_timeout")]
+    pub read_timeout_secs: u32,
+}
+
+impl Default for ClickConfig {
+    fn default() -> ClickConfig {
+        ClickConfig {
+            namespace: None,
+            context: None,
+            editor: None,
+            terminal: None,
+            editmode: EditMode::default(),
+            completiontype: CompletionType::default(),
+            aliases: vec![],
+            range_separator: default_range_sep(),
+            connect_timeout_secs: default_connect_timeout(),
+            read_timeout_secs: default_read_timeout(),
+        }
+    }
 }
 
 impl ClickConfig {
-    pub fn from_file(path: &str) -> ClickConfig {
-        match File::open(path) {
-            Ok(f) => match serde_yaml::from_reader(f) {
-                Ok(c) => c,
-                Err(e) => {
-                    println!("Could not read config file {:?}, using default values", e);
-                    ClickConfig::default()
-                }
-            },
-            Err(e) => {
-                println!(
-                    "Could not open config file at '{}': {}. Using default values",
-                    path, e
-                );
-                ClickConfig::default()
-            }
-        }
+    pub fn from_reader<R>(r: R) -> Result<ClickConfig, KubeError>
+    where
+        R: Read,
+    {
+        serde_yaml::from_reader(r).map_err(KubeError::from)
+    }
+
+    pub fn from_file(path: &str) -> Result<ClickConfig, KubeError> {
+        let f = File::open(path)?;
+        ClickConfig::from_reader(f)
     }
 
     pub fn get_rustyline_conf(&self) -> rustyconfig::Config {
@@ -121,10 +160,10 @@ impl ClickConfig {
             EditMode::Vi => config.edit_mode(rustyconfig::EditMode::Vi),
         };
         config = match self.completiontype {
-            CompletionType::Circular =>
-                config.completion_type(rustyconfig::CompletionType::Circular),
-            CompletionType::List =>
-                config.completion_type(rustyconfig::CompletionType::List),
+            CompletionType::Circular => {
+                config.completion_type(rustyconfig::CompletionType::Circular)
+            }
+            CompletionType::List => config.completion_type(rustyconfig::CompletionType::List),
         };
         config.build()
     }
@@ -133,11 +172,81 @@ impl ClickConfig {
     /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
         let af = AtomicFile::new(path, AllowOverwrite);
-        try!(af.write(|mut f| {
-            serde_yaml::to_writer(&mut f, &self)
-        }).map_err(|e| KubeError::ConfigFileError(
-            format!("Failed to write config file: {}", e.description())
-        )));
+        af.write(|mut f| serde_yaml::to_writer(&mut f, &self))
+            .map_err(|e| {
+                KubeError::ConfigFileError(format!("Failed to write config file: {}", e))
+            })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static TEST_CONFIG: &str = r"---
+namespace: ns
+context: ctx
+editor: emacs
+terminal: alacritty -e
+editmode: Vi
+completiontype: List
+aliases:
+  - alias: pn
+    expanded: pods --sort node";
+
+    #[test]
+    fn test_parse_config() {
+        let config = ClickConfig::from_reader(TEST_CONFIG.as_bytes());
+        assert!(config.is_ok());
+        let config = config.unwrap();
+        assert_eq!(config.namespace, Some("ns".to_owned()));
+        assert_eq!(config.context, Some("ctx".to_owned()));
+        assert_eq!(config.editor, Some("emacs".to_owned()));
+        assert_eq!(config.terminal, Some("alacritty -e".to_owned()));
+        assert_eq!(config.editmode, EditMode::Vi);
+        assert_eq!(config.completiontype, CompletionType::List);
+        assert_eq!(config.aliases.len(), 1);
+        assert_eq!(config.range_separator, default_range_sep());
+        let a = config.aliases.get(0).unwrap();
+        assert_eq!(a.alias, "pn");
+        assert_eq!(a.expanded, "pods --sort node");
+        assert_eq!(config.connect_timeout_secs, default_connect_timeout());
+        assert_eq!(config.read_timeout_secs, default_read_timeout());
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = ClickConfig::default();
+        assert_eq!(config.namespace, None);
+        assert_eq!(config.editmode, EditMode::Emacs);
+        assert_eq!(config.completiontype, CompletionType::Circular);
+        assert_eq!(config.read_timeout_secs, default_read_timeout());
+        assert_eq!(config.connect_timeout_secs, default_connect_timeout());
+        assert_eq!(config.range_separator, default_range_sep());
+    }
+
+    #[test]
+    fn test_invalid_conf() {
+        let config = ClickConfig::from_reader("not valid".as_bytes());
+        assert!(config.is_err());
+    }
+
+    #[test]
+    fn test_rustline_conf() {
+        let config = ClickConfig::from_reader(TEST_CONFIG.as_bytes());
+        assert!(config.is_ok());
+        let rlconf = config.unwrap().get_rustyline_conf();
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::List
+        );
+        assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Vi);
+        let rlconf = ClickConfig::default().get_rustyline_conf();
+        assert_eq!(
+            rlconf.completion_type(),
+            rustyline::config::CompletionType::Circular
+        );
+        assert_eq!(rlconf.edit_mode(), rustyline::config::EditMode::Emacs);
     }
 }

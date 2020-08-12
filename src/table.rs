@@ -14,25 +14,24 @@
 
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
-
 use output::ClickWriter;
 
 use clap::ArgMatches;
-use prettytable::cell::Cell;
-use prettytable::row::Row;
+use prettytable::Cell;
+use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
-use term::terminfo::TerminfoTerminal;
 
 use std::cmp::Ordering;
+use std::io::Write;
 
 lazy_static! {
     static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
-                        format::LineSeparator::new('-', '+', '+', '+')
-                )
-        .padding(1,1)
+            format::LineSeparator::new('-', '+', '+', '+')
+        )
+        .padding(1, 1)
         .build();
 }
 
@@ -147,24 +146,22 @@ where
     I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
 {
     things
-        .filter_map(|thing| {
+        .filter(|thing| {
             let mut has_match = false;
             for cell_spec in thing.1.iter() {
                 if !has_match {
                     has_match = cell_spec.matches(&regex);
                 }
             }
-            if has_match {
-                Some(thing)
-            } else {
-                None
-            }
+            has_match
         })
         .collect()
 }
 
 pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
-    where F: Fn(&T, &T) -> Ordering {
+where
+    F: Fn(&T, &T) -> Ordering,
+{
     match (o1, o2) {
         (Some(ref v1), Some(ref v2)) => f(v1, v2),
         (None, Some(_)) => Ordering::Less,
@@ -173,16 +170,24 @@ pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
     }
 }
 
-fn term_print_table(table: &Table, writer: &mut ClickWriter) -> bool {
-    match TerminfoTerminal::new(writer) {
+fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
+    match term::TerminfoTerminal::new(writer) {
         Some(ref mut term) => {
-            table.print_term(term).unwrap_or(());
+            table.print_term(term).unwrap_or(0);
             true
         }
         None => false,
     }
 }
 
+pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
+    table.set_format(*TBLFMT);
+    if !term_print_table(&table, writer) {
+        table.print(writer).unwrap_or(0);
+    }
+}
+
+#[allow(clippy::ptr_arg)]
 pub fn print_table<'a, T>(
     table: &mut Table,
     specs: &Vec<(T, Vec<CellSpec<'a>>)>,
@@ -192,8 +197,8 @@ pub fn print_table<'a, T>(
         let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
         table.add_row(Row::new(row_vec));
     }
-    table.set_format(TBLFMT.clone());
+    table.set_format(*TBLFMT);
     if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(());
+        table.print(writer).unwrap_or(0);
     }
 }

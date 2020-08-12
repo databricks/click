@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ring::der;
+use ring::io::der;
 use untrusted::{Input, Reader};
 use webpki;
 
@@ -35,12 +35,9 @@ pub struct DNSNameRef<'a>(Input<'a>);
 impl<'a> DNSNameRef<'a> {
     pub fn get_webpki_ref(input: Input<'a>) -> webpki::DNSNameRef<'a> {
         let internal = DNSNameRef(input);
-        unsafe {
-            mem::transmute(internal)
-        }
+        unsafe { mem::transmute(internal) }
     }
 }
-
 
 // This enum and the general_name function are taken and modified from the webpki crate:
 // https://github.com/briansmith/webpki (see names.rs)
@@ -51,14 +48,13 @@ enum GeneralName<'a> {
 }
 
 fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
-    use ring::der::CONTEXT_SPECIFIC;
+    use self::der::CONTEXT_SPECIFIC;
     const DNS_NAME_TAG: u8 = CONTEXT_SPECIFIC | 2;
     const IP_ADDRESS_TAG: u8 = CONTEXT_SPECIFIC | 7;
 
-
     let tv = der::read_tag_and_get_value(input);
     if tv.is_err() {
-         return Err(());
+        return Err(());
     }
     let (tag, value) = tv.unwrap();
     let name = match tag {
@@ -69,7 +65,7 @@ fn general_name<'a>(input: &mut Reader<'a>) -> Result<GeneralName<'a>, ()> {
     Ok(name)
 }
 
-fn obj_to_obj<'a>(object: Input<'a>) -> Option<Object> {
+fn obj_to_obj(object: Input<'_>) -> Option<Object> {
     let slice = object.as_slice_less_safe();
     if slice[0] != 85 || slice[1] != 29 {
         None
@@ -109,62 +105,56 @@ fn tag_to_tag(tag: u8) -> der::Tag {
 
 fn recurse_reader<'a>(reader: &mut Reader<'a>, vec: &mut Vec<SubjAltName<'a>>) {
     let mut is_subj_alt = false;
-    loop {
-        match der::read_tag_and_get_value(reader) {
-            Ok((tag, rest)) => match tag_to_tag(tag) {
-                der::Tag::Sequence | der::Tag::ContextSpecificConstructed3 => {
-                    let mut inner_reader = Reader::new(rest);
-                    recurse_reader(&mut inner_reader, vec);
-                }
-                der::Tag::OID => {
-                    let obj = obj_to_obj(rest);
-                    is_subj_alt = obj.is_some() && obj.unwrap() == Object::SubjAltNames;
-                }
-                der::Tag::OctetString => {
-                    if is_subj_alt {
-                        let mut name_seq = Reader::new(rest);
-                        match der::read_tag_and_get_value(&mut name_seq) {
-                            Ok((_, rest)) => {
-                                let mut snr = Reader::new(rest);
-                                while !snr.at_end() {
-                                    let gn = general_name(&mut snr);
-                                    match gn {
-                                        Ok(n) => match n {
-                                            GeneralName::DNSName(input) => {
-                                                let name =
-                                                    String::from_utf8_lossy(
-                                                        input.as_slice_less_safe());
-                                                vec.push(SubjAltName::DNSName(name));
-                                            }
-                                            GeneralName::IPAddress(input) => {
-                                                if input.len() >= 4 {
-                                                    let mut a = [0; 4];
-                                                    let mut i = input.iter();
-                                                    a[0] = *i.next().unwrap();
-                                                    a[1] = *i.next().unwrap();
-                                                    a[2] = *i.next().unwrap();
-                                                    a[3] = *i.next().unwrap();
-                                                    vec.push(SubjAltName::IPAddress(a));
-                                                }
-                                            }
-                                        },
-                                        Err(_) => {
-                                            break;
+    while let Ok((tag, rest)) = der::read_tag_and_get_value(reader) {
+        match tag_to_tag(tag) {
+            der::Tag::Sequence | der::Tag::ContextSpecificConstructed3 => {
+                let mut inner_reader = Reader::new(rest);
+                recurse_reader(&mut inner_reader, vec);
+            }
+            der::Tag::OID => {
+                let obj = obj_to_obj(rest);
+                is_subj_alt = obj.is_some() && obj.unwrap() == Object::SubjAltNames;
+            }
+            der::Tag::OctetString => {
+                if is_subj_alt {
+                    let mut name_seq = Reader::new(rest);
+                    match der::read_tag_and_get_value(&mut name_seq) {
+                        Ok((_, rest)) => {
+                            let mut snr = Reader::new(rest);
+                            while !snr.at_end() {
+                                let gn = general_name(&mut snr);
+                                match gn {
+                                    Ok(n) => match n {
+                                        GeneralName::DNSName(input) => {
+                                            let name =
+                                                String::from_utf8_lossy(input.as_slice_less_safe());
+                                            vec.push(SubjAltName::DNSName(name));
                                         }
+                                        GeneralName::IPAddress(input) => {
+                                            if input.len() >= 4 {
+                                                let mut a = [0; 4];
+                                                let mut r = Reader::new(input);
+                                                a[0] = r.read_byte().unwrap();
+                                                a[1] = r.read_byte().unwrap();
+                                                a[2] = r.read_byte().unwrap();
+                                                a[3] = r.read_byte().unwrap();
+                                                vec.push(SubjAltName::IPAddress(a));
+                                            }
+                                        }
+                                    },
+                                    Err(_) => {
+                                        break;
                                     }
                                 }
                             }
-                            Err(_) => {
-                                break;
-                            }
+                        }
+                        Err(_) => {
+                            break;
                         }
                     }
                 }
-                _ => {}
-            },
-            Err(_) => {
-                break;
             }
+            _ => {}
         }
     }
 }

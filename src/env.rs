@@ -155,14 +155,15 @@ impl Env {
     }
 
     pub fn set_context(&mut self, ctx: Option<&str>) {
+        let mut namespace: Option<String> = None;
         if let Some(cname) = ctx {
             self.kluster = match self.config.cluster_for_context(cname, &self.click_config) {
                 Ok(k) => {
                     // We know that this is safe because cluster for context has already come back as OK
                     // which means the cname is valid
-                    self.namespace = self.config.namespace_for_context(cname).unwrap();
+                    namespace = self.config.namespace_for_context(cname).unwrap();
                     Some(k)
-                }
+                },
                 Err(e) => {
                     println!(
                         "[WARN] Couldn't find/load context {}, now no current context. \
@@ -172,6 +173,7 @@ impl Env {
                     None
                 }
             };
+            self.set_namespace(namespace.as_deref());
             self.save_click_config();
             self.set_prompt();
         }

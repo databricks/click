@@ -163,7 +163,7 @@ impl Env {
                     // which means the cname is valid
                     namespace = self.config.namespace_for_context(cname).unwrap();
                     Some(k)
-                },
+                }
                 Err(e) => {
                     println!(
                         "[WARN] Couldn't find/load context {}, now no current context. \

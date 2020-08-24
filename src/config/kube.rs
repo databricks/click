@@ -16,6 +16,7 @@
 //! so on.  Data in here is what gets passed around to the rest of Click.
 
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::From;
 use std::env;
 use std::fs::File;
@@ -106,7 +107,7 @@ impl From<super::kubefile::UserConf> for UserConf {
 pub struct Config {
     pub source_file: String,
     pub clusters: HashMap<String, ClusterConf>,
-    pub contexts: HashMap<String, super::kubefile::ContextConf>,
+    pub contexts: BTreeMap<String, super::kubefile::ContextConf>,
     pub users: HashMap<String, UserConf>,
 }
 
@@ -278,7 +279,7 @@ impl Config {
         }
 
         // copy over contexts
-        let mut context_map = HashMap::new();
+        let mut context_map = BTreeMap::new();
         for iconf in iconfs.iter() {
             for context in iconf.contexts.iter() {
                 context_map.insert(context.name.clone(), context.conf.clone());
@@ -381,13 +382,13 @@ impl Config {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     pub fn get_test_config() -> Config {
         Config {
             source_file: "/tmp/test.conf".to_string(),
             clusters: HashMap::new(),
-            contexts: HashMap::new(),
+            contexts: BTreeMap::new(),
             users: HashMap::new(),
         }
     }

@@ -10,7 +10,7 @@ use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
 use tempdir::TempDir;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::process::Child;
@@ -150,7 +150,7 @@ impl Env {
         self.click_config.get_rustyline_conf()
     }
 
-    pub fn get_contexts(&self) -> &HashMap<String, ::config::ContextConf> {
+    pub fn get_contexts(&self) -> &BTreeMap<String, ::config::ContextConf> {
         &self.config.contexts
     }
 

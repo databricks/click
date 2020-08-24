@@ -15,8 +15,8 @@
 //! Code to represent the data found in .kube/config files after it's deserialized, validated, and
 //! so on.  Data in here is what gets passed around to the rest of Click.
 
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::convert::From;
 use std::env;
 use std::fs::File;

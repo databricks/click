@@ -104,7 +104,7 @@ fn exec_match<F>(
     func: F,
 ) -> bool
 where
-    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> (),
+    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter),
 {
     // TODO: Should be able to not clone and use get_matches_from_safe_borrow, but
     // that causes weird errors involving conflicting arguments being used
@@ -3095,10 +3095,10 @@ Examples:
                 clickwriteln!(writer, "Forwarding port(s): {}", pvec.join(", "));
 
                 env.add_port_forward(env::PortForward {
-                    child: child,
-                    pod: pod,
+                    child,
+                    pod,
                     ports: pvec,
-                    output: output,
+                    output,
                 });
             }
             Err(e) => match e.kind() {

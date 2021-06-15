@@ -308,11 +308,7 @@ fn valid_bool(s: String) -> Result<(), String> {
 fn has_waiting(pod: &Pod) -> bool {
     if let Some(ref stats) = pod.status.container_statuses {
         stats.iter().any(|cs| {
-            if let ContainerState::Waiting { .. } = cs.state {
-                true
-            } else {
-                false
-            }
+            matches!(cs.state, ContainerState::Waiting { .. })
         })
     } else {
         false
@@ -534,7 +530,7 @@ fn print_podlist(
             }),
             "Phase" | "phase" => podlist
                 .items
-                .sort_by(|p1, p2| phase_str(p1).cmp(&phase_str(p2))),
+                .sort_by_key(|phase| phase_str(phase)),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
                     .status

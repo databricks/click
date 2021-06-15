@@ -109,11 +109,7 @@ impl KObj {
 
     // TODO: Move containers elsewhere so this isn't needed
     pub fn is_pod(&self) -> bool {
-        if let ObjType::Pod { .. } = self.typ {
-            true
-        } else {
-            false
-        }
+        matches!(self.typ, ObjType::Pod { .. })
     }
 
     pub fn url(&self, namespace: &str) -> String {

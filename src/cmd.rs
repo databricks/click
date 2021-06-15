@@ -307,9 +307,9 @@ fn valid_bool(s: String) -> Result<(), String> {
 /// Check if a pod has a waiting container
 fn has_waiting(pod: &Pod) -> bool {
     if let Some(ref stats) = pod.status.container_statuses {
-        stats.iter().any(|cs| {
-            matches!(cs.state, ContainerState::Waiting { .. })
-        })
+        stats
+            .iter()
+            .any(|cs| matches!(cs.state, ContainerState::Waiting { .. }))
     } else {
         false
     }
@@ -528,9 +528,7 @@ fn print_podlist(
                     |a1, a2| a1.partial_cmp(a2).unwrap(),
                 )
             }),
-            "Phase" | "phase" => podlist
-                .items
-                .sort_by_key(|phase| phase_str(phase)),
+            "Phase" | "phase" => podlist.items.sort_by_key(|phase| phase_str(phase)),
             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
                 let p1r = p1
                     .status

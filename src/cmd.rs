@@ -2191,9 +2191,7 @@ fn event_cmp(e1: &Event, e2: &Event) -> cmp::Ordering {
         (None, None) => cmp::Ordering::Equal,
         (None, Some(_)) => cmp::Ordering::Less,
         (Some(_), None) => cmp::Ordering::Greater,
-        (Some(e1ts), Some(e2ts)) => {
-            e1ts.partial_cmp(&e2ts).unwrap()
-        }
+        (Some(e1ts), Some(e2ts)) => e1ts.partial_cmp(&e2ts).unwrap(),
     }
 }
 

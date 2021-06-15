@@ -2186,6 +2186,17 @@ fn format_event(event: &Event) -> String {
     )
 }
 
+fn event_cmp(e1: &Event, e2: &Event) -> cmp::Ordering {
+    match (e1.last_timestamp, e2.last_timestamp) {
+        (None, None) => cmp::Ordering::Equal,
+        (None, Some(_)) => cmp::Ordering::Less,
+        (Some(_), None) => cmp::Ordering::Greater,
+        (Some(e1ts), Some(e2ts)) => {
+            e1ts.partial_cmp(&e2ts).unwrap()
+        }
+    }
+}
+
 fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
     let ns = obj.namespace.as_ref().unwrap();
     let url = format!(
@@ -2193,8 +2204,9 @@ fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
         ns, obj.name(), ns
     );
     let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
-    if let Some(el) = oel {
+    if let Some(mut el) = oel {
         if !el.items.is_empty() {
+            el.items.sort_by(event_cmp);
             for e in el.items.iter() {
                 clickwriteln!(writer, "{}", format_event(e));
             }

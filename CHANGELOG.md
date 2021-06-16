@@ -1,3 +1,9 @@
+0.5.4
+======
+* Contexts complete in alphabetical order (thanks @markj-db)
+* `events` command returns events in order (based on time)
+* Switch to github actions instead of travis CI
+
 0.5.3
 ======
 * Fix hyper-rust-tls version issue (thanks @schuermannator)

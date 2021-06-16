@@ -53,9 +53,9 @@ impl fmt::Display for EditMode {
     }
 }
 
-impl Into<String> for &EditMode {
-    fn into(self) -> String {
-        format!("{}", self)
+impl From<&EditMode> for String {
+    fn from(e: &EditMode) -> String {
+        format!("{}", e)
     }
 }
 
@@ -84,9 +84,9 @@ impl fmt::Display for CompletionType {
     }
 }
 
-impl Into<String> for &CompletionType {
-    fn into(self) -> String {
-        format!("{}", self)
+impl From<&CompletionType> for String {
+    fn from(ct: &CompletionType) -> String {
+        format!("{}", ct)
     }
 }
 

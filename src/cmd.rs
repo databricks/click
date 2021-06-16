@@ -401,9 +401,10 @@ fn create_podlist_specs<'a>(
     show_node: bool,
     show_namespace: bool,
 ) -> (Pod, Vec<CellSpec<'a>>) {
-    let mut specs = Vec::new();
-    specs.push(CellSpec::new_index());
-    specs.push(CellSpec::new_owned(pod.metadata.name.clone()));
+    let mut specs = vec![
+        CellSpec::new_index(),
+        CellSpec::new_owned(pod.metadata.name.clone()),
+    ];
 
     let ready_str = match ready_counts(&pod) {
         Some((ready, count)) => format!("{}/{}", ready, count),
@@ -998,26 +999,23 @@ fn print_servicelist(
     };
 
     let service_specs = to_map.map(|(service, eipp)| {
-        let mut specs = Vec::new();
-
-        specs.push(CellSpec::new_index());
-
-        specs.push(CellSpec::new_owned(service.metadata.name.clone()));
-        specs.push(CellSpec::new_owned(
-            service
-                .spec
-                .cluster_ip
-                .as_ref()
-                .unwrap_or(&"<none>".to_owned())
-                .to_string(),
-        ));
-
-        specs.push(CellSpec::new_owned(eipp.0));
-        specs.push(CellSpec::new_owned(eipp.1));
-
-        specs.push(CellSpec::new_owned(time_since(
-            service.metadata.creation_timestamp.unwrap(),
-        )));
+        let mut specs = vec![
+            CellSpec::new_index(),
+            CellSpec::new_owned(service.metadata.name.clone()),
+            CellSpec::new_owned(
+                service
+                    .spec
+                    .cluster_ip
+                    .as_ref()
+                    .unwrap_or(&"<none>".to_owned())
+                    .to_string(),
+            ),
+            CellSpec::new_owned(eipp.0),
+            CellSpec::new_owned(eipp.1),
+            CellSpec::new_owned(time_since(
+                service.metadata.creation_timestamp.unwrap(),
+            ))
+        ];
 
         if show_labels {
             specs.push(CellSpec::new_owned(keyval_string(&service.metadata.labels)));
@@ -1055,8 +1053,9 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     table.set_titles(row!["Name", "Status", "Age"]);
 
     let ns_specs = nslist.items.iter().map(|ns| {
-        let mut specs = Vec::new();
-        specs.push(CellSpec::new(ns.metadata.name.as_str()));
+        let mut specs = vec![
+            CellSpec::new(ns.metadata.name.as_str())
+        ];
         let ps = ns.status.phase.as_str();
         specs.push(CellSpec::with_style(ps, phase_style_str(ps)));
         specs.push(CellSpec::new_owned(time_since(
@@ -1366,6 +1365,7 @@ fn pick_container<'a>(obj: &'a KObj, writer: &mut ClickWriter) -> &'a str {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 fn write_logs_to_file(
     env: &Env,
     path: &PathBuf,
@@ -2175,7 +2175,7 @@ fn format_event(event: &Event) -> String {
             .map(|x| x as &dyn std::fmt::Display)
             .unwrap_or_else(|| &"unknown" as &dyn std::fmt::Display),
         event.message,
-        event.count.unwrap_or_else(|| 1),
+        event.count.unwrap_or(1),
         event.reason
     )
 }
@@ -3005,7 +3005,7 @@ command!(
                         ))
                     } else {
                         for part in parts {
-                            if part != "" {
+                            if !part.is_empty() {
                                 if let Err(e) = part.parse::<u32>() {
                                     return Err(e.to_string());
                                 }

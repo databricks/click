@@ -138,7 +138,7 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                             (Some(alg), Some(bits)) => match alg.ref_iter().next() {
                                 Some(oid) => {
                                     if let der_parser::DerObjectContent::OID(ref v) = oid.content {
-                                        if v == &RSAOID {
+                                        if *v == RSAOID {
                                             if let der_parser::DerObjectContent::OctetString(
                                                 ref v,
                                             ) = bits.content

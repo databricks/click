@@ -13,7 +13,7 @@ use env::Env;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 /// Things the can come after a | or > char in input
@@ -28,10 +28,7 @@ enum RightExpr<'a> {
     Append(&'a str),
 }
 
-fn build_parser_expr<'a>(
-    line: &'a str,
-    range: Range<usize>,
-) -> Result<(&'a str, RightExpr<'a>), KubeError> {
+fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), KubeError> {
     let (click_cmd, rest) = line.split_at(range.start);
 
     let rbytes = rest.as_bytes();
@@ -105,7 +102,7 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
 }
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
-fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickHelper> {
+fn get_editor(config: rustyconfig::Config, hist_path: &Path) -> Editor<ClickHelper> {
     let mut rl = Editor::<ClickHelper>::with_config(config);
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
@@ -118,7 +115,7 @@ fn get_editor(config: rustyconfig::Config, hist_path: &PathBuf) -> Editor<ClickH
             "ranges",
         ],
     )));
-    rl.load_history(hist_path.as_path()).unwrap_or_default();
+    rl.load_history(hist_path).unwrap_or_default();
     rl
 }
 
@@ -159,36 +156,37 @@ impl CommandProcessor {
     }
 
     fn get_command_vec() -> Vec<Box<dyn Cmd>> {
-        let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
-        commands.push(Box::new(::cmd::Quit::new()));
-        commands.push(Box::new(::cmd::Context::new()));
-        commands.push(Box::new(::cmd::Contexts::new()));
-        commands.push(Box::new(::cmd::Range::new()));
-        commands.push(Box::new(::cmd::Pods::new()));
-        commands.push(Box::new(::cmd::Nodes::new()));
-        commands.push(Box::new(::cmd::Deployments::new()));
-        commands.push(Box::new(::cmd::Services::new()));
-        commands.push(Box::new(::cmd::ReplicaSets::new()));
-        commands.push(Box::new(::cmd::StatefulSets::new()));
-        commands.push(Box::new(::cmd::ConfigMaps::new()));
-        commands.push(Box::new(::cmd::Namespace::new()));
-        commands.push(Box::new(::cmd::Logs::new()));
-        commands.push(Box::new(::cmd::Describe::new()));
-        commands.push(Box::new(::cmd::Exec::new()));
-        commands.push(Box::new(::cmd::Containers::new()));
-        commands.push(Box::new(::cmd::Events::new()));
-        commands.push(Box::new(::cmd::Clear::new()));
-        commands.push(Box::new(::cmd::EnvCmd::new()));
-        commands.push(Box::new(::cmd::SetCmd::new()));
-        commands.push(Box::new(::cmd::Delete::new()));
-        commands.push(Box::new(::cmd::UtcCmd::new()));
-        commands.push(Box::new(::cmd::Namespaces::new()));
-        commands.push(Box::new(::cmd::Secrets::new()));
-        commands.push(Box::new(::cmd::PortForward::new()));
-        commands.push(Box::new(::cmd::PortForwards::new()));
-        commands.push(Box::new(::cmd::Jobs::new()));
-        commands.push(Box::new(::cmd::Alias::new()));
-        commands.push(Box::new(::cmd::Unalias::new()));
+        let commands: Vec<Box<dyn Cmd>> = vec![
+            Box::new(::cmd::Quit::new()),
+            Box::new(::cmd::Context::new()),
+            Box::new(::cmd::Contexts::new()),
+            Box::new(::cmd::Range::new()),
+            Box::new(::cmd::Pods::new()),
+            Box::new(::cmd::Nodes::new()),
+            Box::new(::cmd::Deployments::new()),
+            Box::new(::cmd::Services::new()),
+            Box::new(::cmd::ReplicaSets::new()),
+            Box::new(::cmd::StatefulSets::new()),
+            Box::new(::cmd::ConfigMaps::new()),
+            Box::new(::cmd::Namespace::new()),
+            Box::new(::cmd::Logs::new()),
+            Box::new(::cmd::Describe::new()),
+            Box::new(::cmd::Exec::new()),
+            Box::new(::cmd::Containers::new()),
+            Box::new(::cmd::Events::new()),
+            Box::new(::cmd::Clear::new()),
+            Box::new(::cmd::EnvCmd::new()),
+            Box::new(::cmd::SetCmd::new()),
+            Box::new(::cmd::Delete::new()),
+            Box::new(::cmd::UtcCmd::new()),
+            Box::new(::cmd::Namespaces::new()),
+            Box::new(::cmd::Secrets::new()),
+            Box::new(::cmd::PortForward::new()),
+            Box::new(::cmd::PortForwards::new()),
+            Box::new(::cmd::Jobs::new()),
+            Box::new(::cmd::Alias::new()),
+            Box::new(::cmd::Unalias::new()),
+        ];
         commands
     }
 

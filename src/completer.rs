@@ -139,9 +139,9 @@ impl Completer for ClickHelper {
                                         replacement: "-".to_owned(),
                                     }],
                                 ));
-                            } else if back.starts_with("--") {
+                            } else if let Some(opt_str) = back.strip_prefix("--") {
                                 // last thing is a long option, complete on available options
-                                let mut opts = cmd.complete_option(&back[2..]);
+                                let mut opts = cmd.complete_option(opt_str);
                                 if "--help".starts_with(back) {
                                     // add in help completion
                                     opts.push(Pair {
@@ -192,10 +192,10 @@ impl Completer for ClickHelper {
 pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = Vec::new();
     for context in env.config.contexts.keys() {
-        if context.starts_with(prefix) {
+        if let Some(rest) = context.strip_prefix(prefix) {
             v.push(Pair {
                 display: context.to_string(),
-                replacement: context[prefix.len()..].to_string(),
+                replacement: rest.to_string(),
             })
         }
     }
@@ -221,10 +221,10 @@ pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     if let ObjectSelection::Single(obj) = env.current_selection() {
         if let ObjType::Pod { ref containers } = obj.typ {
             for cont in containers.iter() {
-                if cont.starts_with(prefix) {
+                if let Some(rest) = cont.strip_prefix(prefix) {
                     v.push(Pair {
                         display: cont.clone(),
-                        replacement: cont[prefix.len()..].to_string(),
+                        replacement: rest.to_string(),
                     });
                 }
             }
@@ -238,10 +238,10 @@ macro_rules! possible_values_completer {
         pub fn $name(prefix: &str, _env: &Env) -> Vec<Pair> {
             let mut v = vec![];
             for val in $values.iter() {
-                if val.starts_with(prefix) {
+                if let Some(rest) = val.strip_prefix(prefix) {
                     v.push(Pair {
                         display: val.to_string(),
-                        replacement: val[prefix.len()..].to_string(),
+                        replacement: rest.to_string(),
                     });
                 }
             }

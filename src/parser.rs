@@ -116,8 +116,8 @@ pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
     if let Some(idx) = line.find("..") {
         // we have a string with a .., so keep processing
         let (start_str, end_str) = line.split_at(idx);
-        let (inclusive, end_str) = if end_str.starts_with("..=") {
-            (true, &end_str[3..])
+        let (inclusive, end_str) = if let Some(rest) = end_str.strip_prefix("..=") {
+            (true, rest)
         } else {
             (false, &end_str[2..])
         };

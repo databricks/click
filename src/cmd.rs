@@ -1012,9 +1012,7 @@ fn print_servicelist(
             ),
             CellSpec::new_owned(eipp.0),
             CellSpec::new_owned(eipp.1),
-            CellSpec::new_owned(time_since(
-                service.metadata.creation_timestamp.unwrap(),
-            ))
+            CellSpec::new_owned(time_since(service.metadata.creation_timestamp.unwrap())),
         ];
 
         if show_labels {
@@ -1053,9 +1051,7 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     table.set_titles(row!["Name", "Status", "Age"]);
 
     let ns_specs = nslist.items.iter().map(|ns| {
-        let mut specs = vec![
-            CellSpec::new(ns.metadata.name.as_str())
-        ];
+        let mut specs = vec![CellSpec::new(ns.metadata.name.as_str())];
         let ps = ns.status.phase.as_str();
         specs.push(CellSpec::with_style(ps, phase_style_str(ps)));
         specs.push(CellSpec::new_owned(time_since(

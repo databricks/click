@@ -13,7 +13,7 @@ use env::Env;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Range;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 /// Things the can come after a | or > char in input
@@ -28,10 +28,7 @@ enum RightExpr<'a> {
     Append(&'a str),
 }
 
-fn build_parser_expr(
-    line: &str,
-    range: Range<usize>,
-) -> Result<(&str, RightExpr<'_>), KubeError> {
+fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), KubeError> {
     let (click_cmd, rest) = line.split_at(range.start);
 
     let rbytes = rest.as_bytes();
@@ -188,7 +185,7 @@ impl CommandProcessor {
             Box::new(::cmd::PortForwards::new()),
             Box::new(::cmd::Jobs::new()),
             Box::new(::cmd::Alias::new()),
-            Box::new(::cmd::Unalias::new())
+            Box::new(::cmd::Unalias::new()),
         ];
         commands
     }

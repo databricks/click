@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use cmd::Cmd;
+//use config::Alias;
 use env::{Env, ObjectSelection};
 use kobj::ObjType;
 
@@ -27,6 +28,7 @@ pub struct ClickHelper {
     commands: Vec<Box<dyn Cmd>>,
     help_topics: Vec<&'static str>,
     env: Option<Rc<Env>>,
+    command_completions: Vec<String>,
 }
 
 impl Helper for ClickHelper {}
@@ -39,23 +41,46 @@ impl Hinter for ClickHelper {
     }
 }
 
+// get a vec with strings that could complete command names. each has a space appended since that's
+// what we want to really complete with
+fn get_command_completion_strings(
+    commands: &Vec<Box<dyn Cmd>>,
+    env: Option<&Rc<Env>>) -> Vec<String> {
+    let mut v = vec!("help ".to_string());
+    for cmd in commands.iter() {
+        v.push(format!("{} ", cmd.get_name()));
+    }
+    if let Some(env) = env.as_ref() {
+        for alias in env.click_config.aliases.iter() {
+            v.push(format!("{} ", alias.alias));
+        }
+    }
+    v.sort_unstable();
+    v
+}
+
 impl ClickHelper {
     /// Create a new completer. help_topics are any extra things you can type after 'help' that
     /// aren't commands
     pub fn new(commands: Vec<Box<dyn Cmd>>, help_topics: Vec<&'static str>) -> ClickHelper {
+        let command_completions = get_command_completion_strings(&commands, None);
         ClickHelper {
             commands,
             help_topics,
             env: None,
+            command_completions,
         }
     }
 
     pub fn set_env(&mut self, env: Option<Rc<Env>>) {
         self.env = env;
+        let command_completions = get_command_completion_strings(
+            &self.commands,
+            self.env.as_ref(),
+        );
+        self.command_completions = command_completions;
     }
-}
 
-impl ClickHelper {
     #[allow(clippy::borrowed_box)]
     fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
         for cmd in self.commands.iter() {
@@ -66,12 +91,83 @@ impl ClickHelper {
         None
     }
 
+    fn complete_exact_command(&self, line: &str) -> (usize, Vec<Pair>) {
+        let mut split = line.split_whitespace();
+        let linecmd = split.next().unwrap(); // safe, only ever call this if we know there's a space
+        // gather up any none switch type args
+        if let Some(cmd) = self.get_exact_command(linecmd) {
+            // first thing is a full command, do complete on it
+            // check what we're trying to complete
+            let (pos, prefix) = match split.next_back() {
+                Some(back) => {
+                    // there was a command typed and also something after it
+                    if line.ends_with(' ') {
+                        // ending with a space means complete a positional
+                        let mut count = split.filter(|s| !s.starts_with('-')).count();
+                        if !back.starts_with('-') {
+                            // if the last thing didn't have a -, it's a positional arg
+                            // that we need to count
+                            count += 1;
+                        }
+                        (count, "")
+                    } else if back == "-" {
+                        // a lone - completes with another -
+                        return (
+                            line.len(),
+                            vec![Pair {
+                                display: "-".to_owned(),
+                                replacement: "-".to_owned(),
+                            }],
+                        );
+                    } else if let Some(opt_str) = back.strip_prefix("--") {
+                        // last thing is a long option, complete on available options
+                        let mut opts = cmd.complete_option(opt_str);
+                        if "--help".starts_with(back) {
+                            // add in help completion
+                            opts.push(Pair {
+                                display: "--help".to_owned(),
+                                replacement: "help"[(back.len() - 2)..].to_owned(),
+                            });
+                        }
+                        return (line.len(), opts);
+                    } else {
+                        // last thing isn't an option, figure out which positional we're at
+                        (split.filter(|s| !s.starts_with('-')).count(), back)
+                    }
+                }
+                None => (0, ""),
+            };
+            // here the last thing typed wasn't a '-' option, so we ask the command to
+            // do completion
+            if let Some(ref env) = self.env {
+                let opts = cmd.try_complete(pos, prefix, &*env);
+                (line.len(), opts)
+            } else {
+                (0, vec!())
+            }
+        } else if linecmd == "help" {
+            let cmd_part = split.next().unwrap_or("");
+            if split.next().is_none() {
+                let mut v = vec!();
+                // only complete on the first arg to help
+                self.get_command_completions(cmd_part, &mut v);
+                self.get_help_completions(cmd_part, &mut v);
+                (5, v) // help plus space is 5 chars
+            } else {
+                (0, vec!())
+            }
+        } else {
+            (0, vec!())
+        }
+    }
+
+    /// Find all commands or aliases that start with `line`
     fn get_command_completions(&self, line: &str, candidates: &mut Vec<Pair>) {
-        for cmd in self.commands.iter() {
-            if cmd.get_name().starts_with(line) {
+        for opt in self.command_completions.iter() {
+            if opt.starts_with(line) {
                 candidates.push(Pair {
-                    display: cmd.get_name().to_owned(),
-                    replacement: cmd.get_name().to_owned(),
+                    display: opt.clone(),
+                    replacement: opt.clone(),
                 });
             }
         }
@@ -87,6 +183,17 @@ impl ClickHelper {
             }
         }
     }
+
+    // fn get_aliases(&self) -> Option<&Vec<Alias>> {
+    //     self.env.as_ref().map(|e| &e.click_config.aliases)
+    // }
+
+    fn completion_vec(&self) -> Vec<Pair> {
+        self.command_completions.iter().map(|s| Pair {
+            display: s.clone(),
+            replacement: s.clone(),
+        }).collect()
+    }
 }
 
 /// Does the short option (an Option<char>) from clap match
@@ -100,89 +207,23 @@ pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
 impl Completer for ClickHelper {
     type Candidate = Pair;
     fn complete(&self, line: &str, pos: usize, _ctx: &Context) -> Result<(usize, Vec<Pair>)> {
-        let mut v = Vec::new();
         if pos == 0 {
-            for cmd in self.commands.iter() {
-                v.push(Pair {
-                    display: cmd.get_name().to_owned(),
-                    replacement: cmd.get_name().to_owned(),
-                });
-            }
-            Ok((0, v))
-        } else {
-            let mut split = line.split_whitespace();
-            if let Some(linecmd) = split.next() {
-                // gather up any none switch type args
-                //let rest: Vec<&str> = split.filter(|s| !s.starts_with("-")).collect();
-                if let Some(cmd) = self.get_exact_command(linecmd) {
-                    // first thing is a full command, do complete on it
+            Ok((0, self.completion_vec()))
+        } else if line.contains(char::is_whitespace) {
+            // we do have a space, so now see if the first thing typed is a command, and
+            // complete on it
 
-                    // check what we're trying to complete
-                    let (pos, prefix) = match split.next_back() {
-                        Some(back) => {
-                            // there was a command typed and also something after it
-                            if line.ends_with(' ') {
-                                // ending with a space means complete a positional
-                                let mut count = split.filter(|s| !s.starts_with('-')).count();
-                                if !back.starts_with('-') {
-                                    // if the last thing didn't have a -, it's a positional arg
-                                    // that we need to count
-                                    count += 1;
-                                }
-                                (count, "")
-                            } else if back == "-" {
-                                // a lone - completes with another -
-                                return Ok((
-                                    line.len(),
-                                    vec![Pair {
-                                        display: "-".to_owned(),
-                                        replacement: "-".to_owned(),
-                                    }],
-                                ));
-                            } else if let Some(opt_str) = back.strip_prefix("--") {
-                                // last thing is a long option, complete on available options
-                                let mut opts = cmd.complete_option(opt_str);
-                                if "--help".starts_with(back) {
-                                    // add in help completion
-                                    opts.push(Pair {
-                                        display: "--help".to_owned(),
-                                        replacement: "help"[(back.len() - 2)..].to_owned(),
-                                    });
-                                }
-                                return Ok((line.len(), opts));
-                            } else {
-                                // last thing isn't an option, figure out which positional we're at
-                                (split.filter(|s| !s.starts_with('-')).count(), back)
-                            }
-                        }
-                        None => (0, ""),
-                    };
-                    // here the last thing typed wasn't a '-' option, so we ask the command to
-                    // do completion
-                    if let Some(ref env) = self.env {
-                        let opts = cmd.try_complete(pos, prefix, &*env);
-                        return Ok((line.len(), opts));
-                    } else {
-                        return Ok((0, v));
-                    }
-                } else if linecmd == "help" {
-                    let cmd_part = split.next().unwrap_or("");
-                    if split.next().is_none() {
-                        // only complete on the first arg to help
-                        self.get_command_completions(cmd_part, &mut v);
-                        self.get_help_completions(cmd_part, &mut v);
-                        return Ok((5, v)); // help plus space is 5 chars
-                    }
-                } else {
-                    self.get_command_completions(linecmd, &mut v);
-                    if "help".starts_with(linecmd) {
-                        v.push(Pair {
-                            display: "help".to_string(),
-                            replacement: "help".to_string(),
-                        });
-                    }
-                }
-            }
+            // if possible, turn an alias into a real command
+            let expanded = self.env.as_ref().map(
+                |e| ::command_processor::alias_expand_line(e, line)
+            );
+            Ok(self.complete_exact_command(
+                expanded.as_ref().map(|s| s.as_str()).unwrap_or_else(|| line))
+            )
+        } else {
+            // no command with space, so just complete commands
+            let mut v = Vec::new();
+            self.get_command_completions(line, &mut v);
             Ok((0, v))
         }
     }

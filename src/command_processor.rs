@@ -70,7 +70,7 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
     }
 }
 
-fn alias_expand_line(env: &Env, line: &str) -> String {
+pub fn alias_expand_line(env: &Env, line: &str) -> String {
     let expa = env.try_expand_alias(line, None);
     let mut alias_stack = vec![expa];
     #[allow(clippy::while_let_loop)] // needed due to borrow restrictions

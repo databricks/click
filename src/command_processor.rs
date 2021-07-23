@@ -356,7 +356,11 @@ impl CommandProcessor {
                         clickwriteln!(writer, "{}", RANGEHELP);
                     }
                     _ => {
-                        clickwriteln!(writer, "I don't know anything about {}, sorry", hcmd);
+                        if let Some(alias) = self.env.get_alias(hcmd) {
+                            clickwriteln!(writer, "{} is an alias for '{}'", hcmd, alias.expanded);
+                        } else {
+                            clickwriteln!(writer, "I don't know anything about {}, sorry", hcmd);
+                        }
                     }
                 }
             }

@@ -46,13 +46,13 @@ impl Hinter for ClickHelper {
 fn get_command_completion_strings(
     commands: &Vec<Box<dyn Cmd>>,
     env: Option<&Rc<Env>>) -> Vec<String> {
-    let mut v = vec!("help ".to_string());
+    let mut v = vec!("help".to_string());
     for cmd in commands.iter() {
-        v.push(format!("{} ", cmd.get_name()));
+        v.push(format!("{}", cmd.get_name()));
     }
     if let Some(env) = env.as_ref() {
         for alias in env.click_config.aliases.iter() {
-            v.push(format!("{} ", alias.alias));
+            v.push(format!("{}", alias.alias));
         }
     }
     v.sort_unstable();
@@ -91,7 +91,10 @@ impl ClickHelper {
         None
     }
 
-    fn complete_exact_command(&self, line: &str) -> (usize, Vec<Pair>) {
+    /// complete a line that starts with a full command. This should only be called when we know
+    /// that the string contains a space. cmd_len is the length of the string the user has typed,
+    /// which can be different than `line.len()` due to alias expansion.
+    fn complete_exact_command(&self, line: &str, cmd_len: usize) -> (usize, Vec<Pair>) {
         let mut split = line.split_whitespace();
         let linecmd = split.next().unwrap(); // safe, only ever call this if we know there's a space
         // gather up any none switch type args
@@ -113,7 +116,7 @@ impl ClickHelper {
                     } else if back == "-" {
                         // a lone - completes with another -
                         return (
-                            line.len(),
+                            cmd_len,
                             vec![Pair {
                                 display: "-".to_owned(),
                                 replacement: "-".to_owned(),
@@ -129,7 +132,7 @@ impl ClickHelper {
                                 replacement: "help"[(back.len() - 2)..].to_owned(),
                             });
                         }
-                        return (line.len(), opts);
+                        return (cmd_len, opts);
                     } else {
                         // last thing isn't an option, figure out which positional we're at
                         (split.filter(|s| !s.starts_with('-')).count(), back)
@@ -137,11 +140,12 @@ impl ClickHelper {
                 }
                 None => (0, ""),
             };
+            println!("here: {} {}", pos, prefix);
             // here the last thing typed wasn't a '-' option, so we ask the command to
             // do completion
             if let Some(ref env) = self.env {
                 let opts = cmd.try_complete(pos, prefix, &*env);
-                (line.len(), opts)
+                (cmd_len, opts)
             } else {
                 (0, vec!())
             }
@@ -167,7 +171,7 @@ impl ClickHelper {
             if opt.starts_with(line) {
                 candidates.push(Pair {
                     display: opt.clone(),
-                    replacement: opt.clone(),
+                    replacement: format!("{} ", opt),
                 });
             }
         }
@@ -191,7 +195,7 @@ impl ClickHelper {
     fn completion_vec(&self) -> Vec<Pair> {
         self.command_completions.iter().map(|s| Pair {
             display: s.clone(),
-            replacement: s.clone(),
+            replacement: format!("{} ", s),
         }).collect()
     }
 }
@@ -218,8 +222,9 @@ impl Completer for ClickHelper {
                 |e| ::command_processor::alias_expand_line(e, line)
             );
             Ok(self.complete_exact_command(
-                expanded.as_ref().map(|s| s.as_str()).unwrap_or_else(|| line))
-            )
+                expanded.as_ref().map(|s| s.as_str()).unwrap_or_else(|| line),
+                line.len(),
+            ))
         } else {
             // no command with space, so just complete commands
             let mut v = Vec::new();

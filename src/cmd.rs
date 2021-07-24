@@ -256,7 +256,7 @@ macro_rules! command {
                     .filter(|fb| completer::long_matches(&fb.s.long, prefix))
                     .map(|fb| RustlinePair {
                         display: format!("--{}", fb.s.long.unwrap()),
-                        replacement: fb.s.long.unwrap()[repoff..].to_string(),
+                        replacement: format!("{} ", fb.s.long.unwrap()[repoff..].to_string()),
                     });
 
                 let opts = parser
@@ -265,7 +265,7 @@ macro_rules! command {
                     .filter(|ob| completer::long_matches(&ob.s.long, prefix))
                     .map(|ob| RustlinePair {
                         display: format!("--{}", ob.s.long.unwrap()),
-                        replacement: ob.s.long.unwrap()[repoff..].to_string(),
+                        replacement: format!("{} ", ob.s.long.unwrap()[repoff..].to_string()),
                     });
 
                 flags.chain(opts).collect()

@@ -101,20 +101,22 @@ impl ClickHelper {
         if let Some(cmd) = self.get_exact_command(linecmd) {
             // first thing is a full command, do complete on it
             // check what we're trying to complete
-            let (pos, prefix) = match split.next_back() {
+            let (pos, prefix, last_opt) = match split.next_back() {
                 Some(back) => {
                     // there was a command typed and also something after it
                     if line.ends_with(' ') {
-                        // ending with a space means complete a positional
+                        // ending with a space means complete a positional or a opt arg
                         let mut count = split.filter(|s| !s.starts_with('-')).count();
-                        if !back.starts_with('-') {
-                            // if the last thing didn't have a -, it's a positional arg
-                            // that we need to count
+                        let last_opt = if back.starts_with('-') {
+                            Some(back)
+                        } else {
+                            // if the last thing didn't have a -, it's a positional arg that we need
+                            // to count
                             count += 1;
-                        }
-                        (count, "")
-                    } else if back == "-" {
-                        // a lone - completes with another -
+                            None
+                        };
+                        (count, "", last_opt)
+                    } else if back == "-" { // a lone - completes with another -
                         return (
                             cmd_len,
                             vec![Pair {
@@ -135,17 +137,34 @@ impl ClickHelper {
                         return (cmd_len, opts);
                     } else {
                         // last thing isn't an option, figure out which positional we're at
-                        (split.filter(|s| !s.starts_with('-')).count(), back)
+                        let mut prev_arg = split.next_back();
+                        let mut count = split.filter(|s| !s.starts_with('-')).count();
+                        if let Some(pa) = prev_arg {
+                            if !pa.starts_with('-') {
+                                // need to count prev_arg as positional as it doesn't start with -
+                                // also make prev_arg None as it's not a -- arg
+                                count+=1;
+                                prev_arg = None;
+                            }
+                        }
+                        (count, back, prev_arg)
                     }
                 }
-                None => (0, ""),
+                None => (0, "", None),
             };
-            println!("here: {} {}", pos, prefix);
             // here the last thing typed wasn't a '-' option, so we ask the command to
             // do completion
             if let Some(ref env) = self.env {
-                let opts = cmd.try_complete(pos, prefix, &*env);
-                (cmd_len, opts)
+                match last_opt {
+                    Some(opt) => {
+                        let opts = cmd.try_completed_named(opt, prefix, &*env);
+                        (cmd_len, opts)
+                    }
+                    None => {
+                        let opts = cmd.try_complete(pos, prefix, &*env);
+                        (cmd_len, opts)
+                    }
+                }
             } else {
                 (0, vec!())
             }

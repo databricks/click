@@ -76,7 +76,13 @@ pub trait Cmd {
     fn is(&self, &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
-    fn try_completed_named(&self, opt: &str, prefix: &str, env: &Env) -> Vec<RustlinePair>;
+    fn try_completed_named(
+        &self,
+        index: usize,
+        opt: &str,
+        prefix: &str,
+        env: &Env,
+    ) -> Vec<RustlinePair>;
     fn complete_option(&self, prefix: &str) -> Vec<RustlinePair>;
     fn write_help(&self, writer: &mut ClickWriter);
     fn about(&self) -> &'static str;
@@ -252,10 +258,32 @@ macro_rules! command {
                 }
             }
 
-            fn try_completed_named(&self, opt: &str, prefix: &str, env: &Env) -> Vec<RustlinePair> {
-                match self.named_completers.get(opt) {
-                    Some(completer) => completer(prefix, env),
-                    None => vec![],
+            fn try_completed_named(
+                &self,
+                index: usize,
+                opt: &str,
+                prefix: &str,
+                env: &Env,
+            ) -> Vec<RustlinePair> {
+                let parser = &self.clap.borrow().p;
+                let opt_builder = parser.opts.iter().find(|opt_builder| {
+                    let long_matched = match opt_builder.s.long {
+                        Some(lstr) => lstr == &opt[2..], // strip off -- prefix we get passed
+                        None => false,
+                    };
+                    long_matched
+                        || (opt.len() == 2
+                            && match opt_builder.s.short {
+                                Some(schr) => schr == opt.chars().nth(1).unwrap(), // strip off - prefix we get passed
+                                None => false,
+                            })
+                });
+                match opt_builder {
+                    Some(ob) => match self.named_completers.get(ob.s.long.unwrap_or_else(|| "")) {
+                        Some(completer) => completer(prefix, env),
+                        None => vec![],
+                    },
+                    None => self.try_complete(index, prefix, env),
                 }
             }
 
@@ -272,19 +300,25 @@ macro_rules! command {
                 let flags = parser
                     .flags
                     .iter()
-                    .filter(|fb| completer::long_matches(&fb.s.long, prefix))
-                    .map(|fb| RustlinePair {
-                        display: format!("--{}", fb.s.long.unwrap()),
-                        replacement: format!("{} ", fb.s.long.unwrap()[repoff..].to_string()),
+                    .filter(|flag_builder| completer::long_matches(&flag_builder.s.long, prefix))
+                    .map(|flag_builder| RustlinePair {
+                        display: format!("--{}", flag_builder.s.long.unwrap()),
+                        replacement: format!(
+                            "{} ",
+                            flag_builder.s.long.unwrap()[repoff..].to_string()
+                        ),
                     });
 
                 let opts = parser
                     .opts
                     .iter()
-                    .filter(|ob| completer::long_matches(&ob.s.long, prefix))
-                    .map(|ob| RustlinePair {
-                        display: format!("--{}", ob.s.long.unwrap()),
-                        replacement: format!("{} ", ob.s.long.unwrap()[repoff..].to_string()),
+                    .filter(|opt_builder| completer::long_matches(&opt_builder.s.long, prefix))
+                    .map(|opt_builder| RustlinePair {
+                        display: format!("--{}", opt_builder.s.long.unwrap()),
+                        replacement: format!(
+                            "{} ",
+                            opt_builder.s.long.unwrap()[repoff..].to_string()
+                        ),
                     });
 
                 flags.chain(opts).collect()
@@ -1878,9 +1912,10 @@ command!(
         ),
     vec!["exec"],
     noop_complete!(),
-    HashMap::<String, fn(&str, &Env) -> Vec<RustlinePair>>::from_iter(
-        IntoIter::new([("--container".to_string(), completer::container_completer as fn(&str, &Env) -> Vec<RustlinePair>)])
-    ),
+    HashMap::<String, fn(&str, &Env) -> Vec<RustlinePair>>::from_iter(IntoIter::new([(
+        "container".to_string(),
+        completer::container_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
         if let Some(ref kluster) = env.kluster.as_ref() {

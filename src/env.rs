@@ -214,9 +214,8 @@ impl Env {
 
     // return the alias struct for the specified alias
     pub fn get_alias(&self, alias: &str) -> Option<&Alias> {
-        self.alias_position(alias).and_then(
-            |p| self.click_config.aliases.get(p)
-        )
+        self.alias_position(alias)
+            .and_then(|p| self.click_config.aliases.get(p))
     }
 
     pub fn add_alias(&mut self, alias: Alias) {

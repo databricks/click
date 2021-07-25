@@ -45,8 +45,9 @@ impl Hinter for ClickHelper {
 // what we want to really complete with
 fn get_command_completion_strings(
     commands: &Vec<Box<dyn Cmd>>,
-    env: Option<&Rc<Env>>) -> Vec<String> {
-    let mut v = vec!("help".to_string());
+    env: Option<&Rc<Env>>,
+) -> Vec<String> {
+    let mut v = vec!["help".to_string()];
     for cmd in commands.iter() {
         v.push(format!("{}", cmd.get_name()));
     }
@@ -74,10 +75,7 @@ impl ClickHelper {
 
     pub fn set_env(&mut self, env: Option<Rc<Env>>) {
         self.env = env;
-        let command_completions = get_command_completion_strings(
-            &self.commands,
-            self.env.as_ref(),
-        );
+        let command_completions = get_command_completion_strings(&self.commands, self.env.as_ref());
         self.command_completions = command_completions;
     }
 
@@ -97,7 +95,7 @@ impl ClickHelper {
     fn complete_exact_command(&self, line: &str, cmd_len: usize) -> (usize, Vec<Pair>) {
         let mut split = line.split_whitespace();
         let linecmd = split.next().unwrap(); // safe, only ever call this if we know there's a space
-        // gather up any none switch type args
+                                             // gather up any none switch type args
         if let Some(cmd) = self.get_exact_command(linecmd) {
             // first thing is a full command, do complete on it
             // check what we're trying to complete
@@ -116,7 +114,8 @@ impl ClickHelper {
                             None
                         };
                         (count, "", last_opt)
-                    } else if back == "-" { // a lone - completes with another -
+                    } else if back == "-" {
+                        // a lone - completes with another -
                         return (
                             cmd_len,
                             vec![Pair {
@@ -143,7 +142,7 @@ impl ClickHelper {
                             if !pa.starts_with('-') {
                                 // need to count prev_arg as positional as it doesn't start with -
                                 // also make prev_arg None as it's not a -- arg
-                                count+=1;
+                                count += 1;
                                 prev_arg = None;
                             }
                         }
@@ -157,7 +156,7 @@ impl ClickHelper {
             if let Some(ref env) = self.env {
                 match last_opt {
                     Some(opt) => {
-                        let opts = cmd.try_completed_named(opt, prefix, &*env);
+                        let opts = cmd.try_completed_named(pos, opt, prefix, &*env);
                         (cmd_len, opts)
                     }
                     None => {
@@ -166,21 +165,21 @@ impl ClickHelper {
                     }
                 }
             } else {
-                (0, vec!())
+                (0, vec![])
             }
         } else if linecmd == "help" {
             let cmd_part = split.next().unwrap_or("");
             if split.next().is_none() {
-                let mut v = vec!();
+                let mut v = vec![];
                 // only complete on the first arg to help
                 self.get_command_completions(cmd_part, &mut v);
                 self.get_help_completions(cmd_part, &mut v);
                 (5, v) // help plus space is 5 chars
             } else {
-                (0, vec!())
+                (0, vec![])
             }
         } else {
-            (0, vec!())
+            (0, vec![])
         }
     }
 
@@ -212,10 +211,13 @@ impl ClickHelper {
     // }
 
     fn completion_vec(&self) -> Vec<Pair> {
-        self.command_completions.iter().map(|s| Pair {
-            display: s.clone(),
-            replacement: format!("{} ", s),
-        }).collect()
+        self.command_completions
+            .iter()
+            .map(|s| Pair {
+                display: s.clone(),
+                replacement: format!("{} ", s),
+            })
+            .collect()
     }
 }
 
@@ -237,11 +239,15 @@ impl Completer for ClickHelper {
             // complete on it
 
             // if possible, turn an alias into a real command
-            let expanded = self.env.as_ref().map(
-                |e| ::command_processor::alias_expand_line(e, line)
-            );
+            let expanded = self
+                .env
+                .as_ref()
+                .map(|e| ::command_processor::alias_expand_line(e, line));
             Ok(self.complete_exact_command(
-                expanded.as_ref().map(|s| s.as_str()).unwrap_or_else(|| line),
+                expanded
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or_else(|| line),
                 line.len(),
             ))
         } else {

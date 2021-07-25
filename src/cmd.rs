@@ -51,7 +51,7 @@ use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
 use std::io::{self, stderr, BufRead, BufReader, Read, Write};
-use std::iter::{FromIterator, Iterator};
+use std::iter::Iterator;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
@@ -1912,10 +1912,11 @@ command!(
         ),
     vec!["exec"],
     noop_complete!(),
-    HashMap::<String, fn(&str, &Env) -> Vec<RustlinePair>>::from_iter(IntoIter::new([(
+    IntoIter::new([(
         "container".to_string(),
         completer::container_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])),
+    )])
+    .collect(),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
         if let Some(ref kluster) = env.kluster.as_ref() {

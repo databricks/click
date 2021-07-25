@@ -43,17 +43,14 @@ impl Hinter for ClickHelper {
 
 // get a vec with strings that could complete command names. each has a space appended since that's
 // what we want to really complete with
-fn get_command_completion_strings(
-    commands: &Vec<Box<dyn Cmd>>,
-    env: Option<&Rc<Env>>,
-) -> Vec<String> {
+fn get_command_completion_strings(commands: &[Box<dyn Cmd>], env: Option<&Rc<Env>>) -> Vec<String> {
     let mut v = vec!["help".to_string()];
     for cmd in commands.iter() {
-        v.push(format!("{}", cmd.get_name()));
+        v.push(cmd.get_name().to_string());
     }
     if let Some(env) = env.as_ref() {
         for alias in env.click_config.aliases.iter() {
-            v.push(format!("{}", alias.alias));
+            v.push(alias.alias.to_string());
         }
     }
     v.sort_unstable();
@@ -243,13 +240,7 @@ impl Completer for ClickHelper {
                 .env
                 .as_ref()
                 .map(|e| ::command_processor::alias_expand_line(e, line));
-            Ok(self.complete_exact_command(
-                expanded
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or_else(|| line),
-                line.len(),
-            ))
+            Ok(self.complete_exact_command(expanded.as_deref().unwrap_or(line), line.len()))
         } else {
             // no command with space, so just complete commands
             let mut v = Vec::new();

@@ -313,7 +313,77 @@ macro_rules! possible_values_completer {
 }
 
 possible_values_completer!(setoptions_values_completer, ::cmd::SET_OPTS);
+
 possible_values_completer!(
     portforwardaction_values_completer,
     ["list", "output", "stop"]
+);
+
+possible_values_completer!(
+    deployment_sort_values_completer,
+    [
+        "Name",
+        "name",
+        "Desired",
+        "desired",
+        "Current",
+        "current",
+        "UpToDate",
+        "uptodate",
+        "Available",
+        "available",
+        "Age",
+        "age",
+        "Labels",
+        "labels"
+    ]
+);
+
+possible_values_completer!(
+    node_sort_values_completer,
+    ["Name", "name", "State", "state", "Age", "age", "Labels", "labels"]
+);
+
+possible_values_completer!(
+    pod_sort_values_completer,
+    [
+        "Name",
+        "name",
+        "Ready",
+        "ready",
+        "Phase",
+        "phase",
+        "Age",
+        "age",
+        "Restarts",
+        "restarts",
+        "Labels",
+        "labels",
+        "Annotations",
+        "annotations",
+        "Node",
+        "node",
+        "Namespace",
+        "namespace"
+    ]
+);
+
+possible_values_completer!(
+    service_sort_values_completer,
+    [
+        "Name",
+        "name",
+        "ClusterIP",
+        "clusterip",
+        "ExternalIP",
+        "externalip",
+        "Age",
+        "age",
+        "Ports",
+        "ports",
+        "Labels",
+        "labels",
+        "Namespace",
+        "namespace"
+    ]
 );

@@ -1351,7 +1351,11 @@ command!(
         ),
     vec!["pods"],
     noop_complete!(),
-    no_named_complete!(),
+    IntoIter::new([(
+        "sort".to_string(),
+        completer::pod_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])
+    .collect(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2346,7 +2350,11 @@ command!(
         ),
     vec!["nodes"],
     noop_complete!(),
-    no_named_complete!(),
+    IntoIter::new([(
+        "sort".to_string(),
+        completer::node_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])
+    .collect(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2429,7 +2437,11 @@ command!(
         ),
     vec!["services"],
     noop_complete!(),
-    no_named_complete!(),
+    IntoIter::new([(
+        "sort".to_string(),
+        completer::service_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])
+    .collect(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,
@@ -2628,7 +2640,11 @@ command!(
         ),
     vec!["deps", "deployments"],
     noop_complete!(),
-    no_named_complete!(),
+    IntoIter::new([(
+        "sort".to_string(),
+        completer::deployment_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])
+    .collect(),
     |matches, env, writer| {
         let regex = match ::table::get_regex(&matches) {
             Ok(r) => r,

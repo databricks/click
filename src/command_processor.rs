@@ -542,6 +542,16 @@ mod tests {
             Vec::new()
         }
 
+        fn try_completed_named(
+            &self,
+            _index: usize,
+            _opt: &str,
+            _prefix: &str,
+            _env: &Env,
+        ) -> Vec<RustlinePair> {
+            Vec::new()
+        }
+
         fn complete_option(&self, _prefix: &str) -> Vec<RustlinePair> {
             Vec::new()
         }

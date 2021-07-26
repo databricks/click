@@ -41,8 +41,7 @@ impl Hinter for ClickHelper {
     }
 }
 
-// get a vec with strings that could complete command names. each has a space appended since that's
-// what we want to really complete with
+// get a vec with strings that could complete commands or aliases
 fn get_command_completion_strings(commands: &[Box<dyn Cmd>], env: Option<&Rc<Env>>) -> Vec<String> {
     let mut v = vec!["help".to_string()];
     for cmd in commands.iter() {

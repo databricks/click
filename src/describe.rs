@@ -116,19 +116,13 @@ where
     let metadata = v.get("metadata").unwrap();
     for (title, item) in fields {
         let val = match item {
-            DescItem::ValStr {
-                path,
-                default,
-            } => val_str(path, v, default),
+            DescItem::ValStr { path, default } => val_str(path, v, default),
             DescItem::Valu64 { path, default } => val_u64(path, v, default).to_string().into(),
             DescItem::KeyValStr {
                 parent,
                 secret_vals,
             } => keyval_str(v, parent, secret_vals),
-            DescItem::MetadataValStr {
-                path,
-                default,
-            } => val_str(path, metadata, default),
+            DescItem::MetadataValStr { path, default } => val_str(path, metadata, default),
             DescItem::ObjectCreated => {
                 let created: DateTime<Utc> = DateTime::from_str(&val_str(
                     "/creationTimestamp",

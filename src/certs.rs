@@ -138,9 +138,8 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                                 Some(oid) => {
                                     if let der_parser::DerObjectContent::OID(ref v) = oid.content {
                                         if *v == RSAOID {
-                                            if let der_parser::DerObjectContent::OctetString(
-                                                v,
-                                            ) = bits.content
+                                            if let der_parser::DerObjectContent::OctetString(v) =
+                                                bits.content
                                             {
                                                 validate_private_key(PrivateKey(v.to_vec()))
                                             } else {

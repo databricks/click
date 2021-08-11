@@ -209,8 +209,17 @@ macro_rules! iter_range {
 macro_rules! command {
     ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplters: expr,
      $named_cmplters: expr, $cmd_expr:expr) => {
-        command!($cmd_name, $name, $about, $extra_args, $aliases, $cmplters,
-                 $named_cmplters, $cmd_expr, false);
+        command!(
+            $cmd_name,
+            $name,
+            $about,
+            $extra_args,
+            $aliases,
+            $cmplters,
+            $named_cmplters,
+            $cmd_expr,
+            false
+        );
     };
 
     ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplters: expr,
@@ -1810,7 +1819,7 @@ fn do_exec(
     env: &Env,
     pod: &KObj,
     kluster_name: &str,
-    cmd: &Vec<&str>,
+    cmd: &[&str],
     it_arg: &str,
     cont_opt: &Option<&str>,
     term_opt: &Option<&str>,

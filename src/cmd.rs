@@ -486,7 +486,7 @@ fn create_podlist_specs<'a>(
         .status
         .container_statuses
         .as_ref()
-        .map(|stats| stats.iter().fold(0, |acc, ref x| acc + x.restart_count))
+        .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
         .unwrap_or(0);
     specs.push(CellSpec::new_owned(format!("{}", restarts)));
 
@@ -593,13 +593,13 @@ fn print_podlist(
                     .status
                     .container_statuses
                     .as_ref()
-                    .map(|stats| stats.iter().fold(0, |acc, ref x| acc + x.restart_count))
+                    .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
                     .unwrap_or(0);
                 let p2r = p2
                     .status
                     .container_statuses
                     .as_ref()
-                    .map(|stats| stats.iter().fold(0, |acc, ref x| acc + x.restart_count))
+                    .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
                     .unwrap_or(0);
                 p1r.partial_cmp(&p2r).unwrap()
             }),
@@ -1928,7 +1928,7 @@ command!(
     .collect(),
     |matches, env, writer| {
         let cmd = matches.value_of("command").unwrap(); // safe as required
-        if let Some(ref kluster) = env.kluster.as_ref() {
+        if let Some(kluster) = env.kluster.as_ref() {
             let tty = if matches.is_present("tty") {
                 if let Some(v) = matches.value_of("tty") {
                     // already validated

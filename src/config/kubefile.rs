@@ -213,7 +213,7 @@ impl AuthProvider {
         let v: Value = serde_json::from_str(output).unwrap();
         let mut updated_token = false;
         match self.config.token_key.as_ref() {
-            Some(ref tk) => {
+            Some(tk) => {
                 let token_pntr = AuthProvider::make_pointer(tk.as_str());
                 let extracted_token = v.pointer(token_pntr.as_str()).and_then(|tv| tv.as_str());
                 *token = extracted_token.map(|t| t.to_owned());
@@ -226,7 +226,7 @@ impl AuthProvider {
 
         if updated_token {
             match self.config.expiry_key.as_ref() {
-                Some(ref ek) => {
+                Some(ek) => {
                     let expiry_pntr = AuthProvider::make_pointer(ek.as_str());
                     let extracted_expiry =
                         v.pointer(expiry_pntr.as_str()).and_then(|ev| ev.as_str());

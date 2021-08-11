@@ -54,9 +54,9 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
             b'|' => RightExpr::Pipe(&rest[sepcnt..]),
             b'>' => {
                 if sepcnt == 1 {
-                    RightExpr::Redir(&rest[sepcnt..].trim())
+                    RightExpr::Redir(rest[sepcnt..].trim())
                 } else {
-                    RightExpr::Append(&rest[sepcnt..].trim())
+                    RightExpr::Append(rest[sepcnt..].trim())
                 }
             }
             _ => {
@@ -76,7 +76,7 @@ pub fn alias_expand_line(env: &Env, line: &str) -> String {
     #[allow(clippy::while_let_loop)] // needed due to borrow restrictions
     loop {
         let expa = match alias_stack.last().unwrap().expansion {
-            Some(ref prev) => {
+            Some(prev) => {
                 // previous thing expanded an alias, so try and expand that too
                 env.try_expand_alias(prev.expanded.as_str(), Some(prev.alias.as_str()))
             }

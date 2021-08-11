@@ -117,17 +117,17 @@ where
     for (title, item) in fields {
         let val = match item {
             DescItem::ValStr {
-                ref path,
-                ref default,
+                path,
+                default,
             } => val_str(path, v, default),
-            DescItem::Valu64 { ref path, default } => val_u64(path, v, default).to_string().into(),
+            DescItem::Valu64 { path, default } => val_u64(path, v, default).to_string().into(),
             DescItem::KeyValStr {
-                ref parent,
+                parent,
                 secret_vals,
             } => keyval_str(v, parent, secret_vals),
             DescItem::MetadataValStr {
-                ref path,
-                ref default,
+                path,
+                default,
             } => val_str(path, metadata, default),
             DescItem::ObjectCreated => {
                 let created: DateTime<Utc> = DateTime::from_str(&val_str(

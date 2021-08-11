@@ -75,11 +75,10 @@ mod duct_mock;
 
 use clap::{App, Arg};
 
-use std::path::PathBuf;
-
 use command_processor::CommandProcessor;
 use config::{ClickConfig, Config};
 use env::Env;
+use std::path::PathBuf;
 
 use output::ClickWriter;
 

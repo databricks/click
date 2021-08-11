@@ -98,13 +98,19 @@ fn start_clap(
     name: &'static str,
     about: &'static str,
     aliases: &'static str,
+    trailing_var_arg: bool,
 ) -> App<'static, 'static> {
-    App::new(name)
+    let app = App::new(name)
         .about(about)
         .before_help(aliases)
         .setting(AppSettings::NoBinaryName)
         .setting(AppSettings::DisableVersion)
-        .setting(AppSettings::ColoredHelp)
+        .setting(AppSettings::ColoredHelp);
+    if trailing_var_arg {
+        app.setting(AppSettings::TrailingVarArg)
+    } else {
+        app
+    }
 }
 
 /// Run specified closure with the given matches, or print error.  Return true if execed,
@@ -183,6 +189,7 @@ macro_rules! iter_range {
 /// * cmplt_expr: an expression to return possible completions for the command
 /// * named_cmplters: a map of argument -> completer for completing named arguments
 /// * cmd_expr: a closure taking matches, env, and writer that runs to execute the command
+/// * trailing_var_arg: set the "TrailingVarArg" setting for clap (see clap docs, default false)
 ///
 /// # Example
 /// ```
@@ -202,6 +209,21 @@ macro_rules! iter_range {
 macro_rules! command {
     ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplters: expr,
      $named_cmplters: expr, $cmd_expr:expr) => {
+        command!(
+            $cmd_name,
+            $name,
+            $about,
+            $extra_args,
+            $aliases,
+            $cmplters,
+            $named_cmplters,
+            $cmd_expr,
+            false
+        );
+    };
+
+    ($cmd_name:ident, $name:expr, $about:expr, $extra_args:expr, $aliases:expr, $cmplters: expr,
+     $named_cmplters: expr, $cmd_expr:expr, $trailing_var_arg: expr) => {
         pub struct $cmd_name {
             aliases: Vec<&'static str>,
             clap: RefCell<App<'static, 'static>>,
@@ -215,7 +237,7 @@ macro_rules! command {
                     static ref ALIASES_STR: String =
                         format!("{}:\n    {:?}", Yellow.paint("ALIASES"), $aliases);
                 }
-                let clap = start_clap($name, $about, &ALIASES_STR);
+                let clap = start_clap($name, $about, &ALIASES_STR, $trailing_var_arg);
                 let extra = $extra_args(clap);
                 $cmd_name {
                     aliases: $aliases,
@@ -1797,7 +1819,7 @@ fn do_exec(
     env: &Env,
     pod: &KObj,
     kluster_name: &str,
-    cmd: &str,
+    cmd: &[&str],
     it_arg: &str,
     cont_opt: &Option<&str>,
     term_opt: &Option<&str>,
@@ -1830,7 +1852,7 @@ fn do_exec(
             targs.push(cont);
         }
         targs.push("--");
-        targs.push(cmd);
+        targs.extend(cmd.iter());
         clickwriteln!(writer, "Starting on {} in terminal", pod.name());
         if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
             clickwriteln!(writer, "Could not launch in terminal: {}", e);
@@ -1846,9 +1868,9 @@ fn do_exec(
             .arg(it_arg)
             .arg(pod.name());
         let command = if let Some(cont) = cont_opt {
-            command.arg("-c").arg(cont).arg("--").arg(cmd)
+            command.arg("-c").arg(cont).arg("--").args(cmd)
         } else {
-            command.arg("--").arg(cmd)
+            command.arg("--").args(cmd)
         };
         match command.status() {
             Ok(s) => {
@@ -1879,6 +1901,7 @@ command!(
             Arg::with_name("command")
                 .help("The command to execute")
                 .required(true)
+                .multiple(true) // required for trailing_var_arg
                 .index(1)
         )
         .arg(
@@ -1927,7 +1950,7 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let cmd = matches.value_of("command").unwrap(); // safe as required
+        let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
         if let Some(kluster) = env.kluster.as_ref() {
             let tty = if matches.is_present("tty") {
                 if let Some(v) = matches.value_of("tty") {
@@ -1962,7 +1985,7 @@ command!(
                             env,
                             obj,
                             &kluster.name,
-                            cmd,
+                            &cmd,
                             it_arg,
                             &matches.value_of("container"),
                             &matches.value_of("terminal"),
@@ -1984,7 +2007,7 @@ command!(
                                     env,
                                     obj,
                                     &kluster.name,
-                                    cmd,
+                                    &cmd,
                                     it_arg,
                                     &matches.value_of("container"),
                                     &matches.value_of("terminal"),
@@ -2004,7 +2027,8 @@ command!(
         } else {
             writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
         }
-    }
+    },
+    true // exec wants to gather up all it's training args into one big exec call
 );
 
 fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter) {

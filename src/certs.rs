@@ -33,17 +33,16 @@ use std::time::Duration;
 pub fn get_cert(path: &str) -> Option<Certificate> {
     let inpath = Path::new(path);
     let cert_file = File::open(inpath).unwrap();
+    let mut cert_br = BufReader::new(cert_file);
     if inpath.extension().unwrap() == "der" {
         // with .der, just read and return
-        let mut cert_br = BufReader::new(cert_file);
         let mut cert_buf = Vec::new();
         cert_br.read_to_end(&mut cert_buf).unwrap();
         Some(Certificate(cert_buf))
     } else {
         // assume it's not a der and is a pem and try and convert
-        let mut pem_br = BufReader::new(cert_file);
         let mut pem_buf = String::new();
-        match pem_br.read_to_string(&mut pem_buf) {
+        match cert_br.read_to_string(&mut pem_buf) {
             Ok(_) => get_cert_from_pem(pem_buf.as_str()),
             Err(e) => {
                 println!("Error reading cert {}: {}", path, e);
@@ -139,9 +138,8 @@ pub fn get_key_from_str(s: &str) -> Option<PrivateKey> {
                                 Some(oid) => {
                                     if let der_parser::DerObjectContent::OID(ref v) = oid.content {
                                         if *v == RSAOID {
-                                            if let der_parser::DerObjectContent::OctetString(
-                                                ref v,
-                                            ) = bits.content
+                                            if let der_parser::DerObjectContent::OctetString(v) =
+                                                bits.content
                                             {
                                                 validate_private_key(PrivateKey(v.to_vec()))
                                             } else {

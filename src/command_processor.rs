@@ -54,9 +54,9 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
             b'|' => RightExpr::Pipe(&rest[sepcnt..]),
             b'>' => {
                 if sepcnt == 1 {
-                    RightExpr::Redir(&rest[sepcnt..].trim())
+                    RightExpr::Redir(rest[sepcnt..].trim())
                 } else {
-                    RightExpr::Append(&rest[sepcnt..].trim())
+                    RightExpr::Append(rest[sepcnt..].trim())
                 }
             }
             _ => {
@@ -70,13 +70,13 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
     }
 }
 
-fn alias_expand_line(env: &Env, line: &str) -> String {
+pub fn alias_expand_line(env: &Env, line: &str) -> String {
     let expa = env.try_expand_alias(line, None);
     let mut alias_stack = vec![expa];
     #[allow(clippy::while_let_loop)] // needed due to borrow restrictions
     loop {
         let expa = match alias_stack.last().unwrap().expansion {
-            Some(ref prev) => {
+            Some(prev) => {
                 // previous thing expanded an alias, so try and expand that too
                 env.try_expand_alias(prev.expanded.as_str(), Some(prev.alias.as_str()))
             }
@@ -356,7 +356,11 @@ impl CommandProcessor {
                         clickwriteln!(writer, "{}", RANGEHELP);
                     }
                     _ => {
-                        clickwriteln!(writer, "I don't know anything about {}, sorry", hcmd);
+                        if let Some(alias) = self.env.get_alias(hcmd) {
+                            clickwriteln!(writer, "{} is an alias for '{}'", hcmd, alias.expanded);
+                        } else {
+                            clickwriteln!(writer, "I don't know anything about {}, sorry", hcmd);
+                        }
                     }
                 }
             }
@@ -535,6 +539,16 @@ mod tests {
         }
 
         fn try_complete(&self, _index: usize, _prefix: &str, _env: &Env) -> Vec<RustlinePair> {
+            Vec::new()
+        }
+
+        fn try_completed_named(
+            &self,
+            _index: usize,
+            _opt: &str,
+            _prefix: &str,
+            _env: &Env,
+        ) -> Vec<RustlinePair> {
             Vec::new()
         }
 

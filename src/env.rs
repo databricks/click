@@ -212,6 +212,12 @@ impl Env {
             .position(|a| a.alias == *alias)
     }
 
+    // return the alias struct for the specified alias
+    pub fn get_alias(&self, alias: &str) -> Option<&Alias> {
+        self.alias_position(alias)
+            .and_then(|p| self.click_config.aliases.get(p))
+    }
+
     pub fn add_alias(&mut self, alias: Alias) {
         self.remove_alias(&alias.alias);
         self.click_config.aliases.push(alias);

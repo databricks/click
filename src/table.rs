@@ -98,14 +98,14 @@ impl<'a> CellSpec<'a> {
     }
 
     pub fn to_cell(&self, index: usize) -> Cell {
-        let mut cell = match self.txt {
+        let mut cell = match &self.txt {
             CellSpecTxt::Index => {
                 let mut c = Cell::new(format!("{}", index).as_str());
                 c.align(format::Alignment::RIGHT);
                 c
             }
-            CellSpecTxt::Str(ref s) => Cell::new(s),
-            CellSpecTxt::String(ref s) => Cell::new(s.as_str()),
+            CellSpecTxt::Str(s) => Cell::new(s),
+            CellSpecTxt::String(s) => Cell::new(s.as_str()),
         };
 
         if let Some(a) = self.align {
@@ -122,7 +122,7 @@ impl<'a> CellSpec<'a> {
     pub fn matches(&self, regex: &Regex) -> bool {
         match self.txt {
             CellSpecTxt::Index => false,
-            CellSpecTxt::Str(ref s) => regex.is_match(s),
+            CellSpecTxt::Str(s) => regex.is_match(s),
             CellSpecTxt::String(ref s) => regex.is_match(s),
         }
     }
@@ -182,7 +182,7 @@ fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
 
 pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
     table.set_format(*TBLFMT);
-    if !term_print_table(&table, writer) {
+    if !term_print_table(table, writer) {
         table.print(writer).unwrap_or(0);
     }
 }
@@ -198,7 +198,7 @@ pub fn print_table<'a, T>(
         table.add_row(Row::new(row_vec));
     }
     table.set_format(*TBLFMT);
-    if !term_print_table(&table, writer) {
+    if !term_print_table(table, writer) {
         table.print(writer).unwrap_or(0);
     }
 }

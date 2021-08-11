@@ -508,7 +508,7 @@ impl Kluster {
                 ip = Some(host.to_owned());
             }
         };
-        if let (Some(ref host), Some(ref _ip_addr)) = (dns_host.as_ref(), ip.as_ref()) {
+        if let (Some(host), Some(_ip_addr)) = (dns_host.as_ref(), ip.as_ref()) {
             // The cert has a matching IP and a host name, use that
             endpoint.set_host(Some(host.as_str())).unwrap();
         }
@@ -761,7 +761,7 @@ impl Kluster {
         let client = self.client.borrow();
         let req = client.delete(url);
         let req = match body {
-            Some(ref b) => {
+            Some(b) => {
                 let hyper_body = Body::BufBody(b.as_bytes(), b.len());
                 req.body(hyper_body)
             }

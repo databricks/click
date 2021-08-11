@@ -72,8 +72,13 @@ lazy_static! {
 
 pub trait Cmd {
     // break if returns true
-    fn exec(&self, &mut Env, &mut dyn Iterator<Item = &str>, &mut ClickWriter) -> bool;
-    fn is(&self, &str) -> bool;
+    fn exec(
+        &self,
+        env: &mut Env,
+        args: &mut dyn Iterator<Item = &str>,
+        writer: &mut ClickWriter,
+    ) -> bool;
+    fn is(&self, l: &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
     fn try_completed_named(

@@ -60,10 +60,14 @@ extern crate reqwest;
 extern crate url;
 extern crate yasna;
 
-mod certs;
+#[macro_use]
 mod cmd;
-mod command_processor;
+#[macro_use]
 mod completer;
+
+mod certs;
+mod command;
+mod command_processor;
 mod config;
 mod connector;
 mod describe;

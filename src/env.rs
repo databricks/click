@@ -350,6 +350,25 @@ impl Env {
         }
     }
 
+    pub fn run_on_context<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&crate::k8s::Context) -> Result<R, KubeError>,
+    {
+        match self.context {
+            Some(ref c) => match f(c) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    println!("{}", e);
+                    None
+                }
+            },
+            None => {
+                println!("Need to have an active context");
+                None
+            }
+        }
+    }
+
     /// Add a new task for the env to keep track of
     pub fn add_port_forward(&mut self, pf: PortForward) {
         self.port_forwards.push(pf);

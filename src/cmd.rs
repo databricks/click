@@ -92,7 +92,7 @@ pub trait Cmd {
 }
 
 /// Get the start of a clap object
-fn start_clap(
+pub fn start_clap(
     name: &'static str,
     about: &'static str,
     aliases: &'static str,
@@ -113,7 +113,7 @@ fn start_clap(
 
 /// Run specified closure with the given matches, or print error.  Return true if execed,
 /// false on err
-fn exec_match<F>(
+pub fn exec_match<F>(
     clap: &RefCell<App<'static, 'static>>,
     env: &mut Env,
     args: &mut dyn Iterator<Item = &str>,
@@ -2924,36 +2924,36 @@ command!(
     }
 );
 
-command!(
-    Namespaces,
-    "namespaces",
-    "Get namespaces in current context",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("regex")
-            .short("r")
-            .long("regex")
-            .help("Filter namespaces by the specified regex")
-            .takes_value(true)
-    ),
-    vec!["namespaces"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
+// command!(
+//     Namespaces,
+//     "namespaces",
+//     "Get namespaces in current context",
+//     |clap: App<'static, 'static>| clap.arg(
+//         Arg::with_name("regex")
+//             .short("r")
+//             .long("regex")
+//             .help("Filter namespaces by the specified regex")
+//             .takes_value(true)
+//     ),
+//     vec!["namespaces"],
+//     noop_complete!(),
+//     no_named_complete!(),
+//     |matches, env, writer| {
+//         let regex = match crate::table::get_regex(&matches) {
+//             Ok(r) => r,
+//             Err(s) => {
+//                 write!(stderr(), "{}\n", s).unwrap_or(());
+//                 return;
+//             }
+//         };
 
-        let nl: Option<NamespaceList> = env.run_on_kluster(|k| k.get("/api/v1/namespaces"));
+//         let nl: Option<NamespaceList> = env.run_on_kluster(|k| k.get("/api/v1/namespaces"));
 
-        if let Some(l) = nl {
-            print_namespaces(&l, regex, writer);
-        }
-    }
-);
+//         if let Some(l) = nl {
+//             print_namespaces(&l, regex, writer);
+//         }
+//     }
+// );
 
 command!(
     UtcCmd,

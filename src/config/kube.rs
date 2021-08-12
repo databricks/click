@@ -381,7 +381,7 @@ impl Config {
     pub fn get_context(
         &self,
         context_name: &str,
-        click_conf: &ClickConfig,
+        _click_conf: &ClickConfig,
     ) -> Result<crate::k8s::Context, KubeError> {
         let context = self
             .contexts
@@ -403,24 +403,24 @@ impl Config {
         //let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
-                UserAuth::Token(ref token) => {
+                UserAuth::Token(ref _token) => {
                     panic!("Can't do token yet");
                     //auth = Some(KlusterAuth::with_token(token.as_str()))
                 }
-                UserAuth::UserPass(ref username, ref password) => {
+                UserAuth::UserPass(ref _username, ref _password) => {
                     panic!("Can't do user/pass yet");
                     //auth = Some(KlusterAuth::with_userpass(username, password))
                 }
-                UserAuth::AuthProvider(ref provider) => {
+                UserAuth::AuthProvider(ref _provider) => {
                     panic!("Can't do auth provider yet");
                     //provider.copy_up();
                     //auth = Some(KlusterAuth::with_auth_provider(*provider.clone()))
                 }
-                UserAuth::ExecProvider(ref provider) => {
+                UserAuth::ExecProvider(ref _provider) => {
                     panic!("Can't do exec provider yet");
                     //auth = Some(KlusterAuth::with_exec_provider(provider.clone()))
                 }
-                UserAuth::KeyCertData(ref cert_data, ref key_data) => {
+                UserAuth::KeyCertData(ref _cert_data, ref _key_data) => {
                     panic!("Can't do keycertdata yet");
                     //client_cert_key = Some(cert_key_from_data(cert_data, key_data, context_name))
                 }

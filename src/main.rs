@@ -54,6 +54,12 @@ extern crate term;
 extern crate untrusted;
 extern crate webpki;
 
+extern crate bytes;
+extern crate k8s_openapi;
+extern crate reqwest;
+extern crate url;
+extern crate yasna;
+
 mod certs;
 mod cmd;
 mod command_processor;
@@ -63,6 +69,7 @@ mod connector;
 mod describe;
 mod env;
 mod error;
+mod k8s;
 mod kobj;
 mod kube;
 mod parser;

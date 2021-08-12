@@ -48,6 +48,7 @@ pub struct Env {
     pub quit: bool,
     pub need_new_editor: bool,
     pub kluster: Option<Kluster>,
+    pub context: Option<super::k8s::Context>,
     pub namespace: Option<String>,
     current_selection: ObjectSelection,
     last_objs: Option<Vec<KObj>>,
@@ -81,6 +82,7 @@ impl Env {
             quit: false,
             need_new_editor: false,
             kluster: None,
+            context: None,
             namespace,
             current_selection: ObjectSelection::None,
             last_objs: None,
@@ -148,6 +150,17 @@ impl Env {
                 Err(e) => {
                     println!(
                         "[WARN] Couldn't find/load context {}, now no current context. \
+                         Error: {}",
+                        cname, e
+                    );
+                    None
+                }
+            };
+            self.context = match self.config.get_context(cname, &self.click_config) {
+                Ok(context) => Some(context),
+                Err(e) => {
+                    println!(
+                        "[WARN] Couldn't find/load new style context {}, now no current context. \
                          Error: {}",
                         cname, e
                     );

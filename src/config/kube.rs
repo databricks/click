@@ -377,6 +377,91 @@ impl Config {
             click_conf.read_timeout_secs,
         )
     }
+
+    pub fn get_context(
+        &self,
+        context_name: &str,
+        click_conf: &ClickConfig,
+    ) -> Result<crate::k8s::Context, KubeError> {
+        let context = self
+            .contexts
+            .get(context_name)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
+        let cluster = self
+            .clusters
+            .get(&context.cluster)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))?;
+        let user = self
+            .users
+            .get(&context.user)
+            .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))?;
+
+        let endpoint = reqwest::Url::parse(&cluster.server).unwrap();
+        let ca_cert = cluster.cert.as_ref().map(|c| get_reqwest_cert(c));
+
+        let mut k8suser = None;
+        //let mut auth = None;
+        for user_auth in user.auths.iter().rev() {
+            match user_auth {
+                UserAuth::Token(ref token) => {
+                    panic!("Can't do token yet");
+                    //auth = Some(KlusterAuth::with_token(token.as_str()))
+                }
+                UserAuth::UserPass(ref username, ref password) => {
+                    panic!("Can't do user/pass yet");
+                    //auth = Some(KlusterAuth::with_userpass(username, password))
+                }
+                UserAuth::AuthProvider(ref provider) => {
+                    panic!("Can't do auth provider yet");
+                    //provider.copy_up();
+                    //auth = Some(KlusterAuth::with_auth_provider(*provider.clone()))
+                }
+                UserAuth::ExecProvider(ref provider) => {
+                    panic!("Can't do exec provider yet");
+                    //auth = Some(KlusterAuth::with_exec_provider(provider.clone()))
+                }
+                UserAuth::KeyCertData(ref cert_data, ref key_data) => {
+                    panic!("Can't do keycertdata yet");
+                    //client_cert_key = Some(cert_key_from_data(cert_data, key_data, context_name))
+                }
+                UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
+                    let cert_full_path = get_full_path(cert_path.clone())?;
+                    let key_full_path = get_full_path(key_path.clone())?;
+                    k8suser = Some(crate::k8s::UserAuth::from_key_cert(
+                        &cert_full_path,
+                        &key_full_path,
+                        &endpoint,
+                    ))
+                }
+            };
+        }
+
+        // // Turns the Option<Result> into a Result<Option>, then extracts the Option
+        // // or early returns if error
+        // let client_cert_key = client_cert_key.map_or(Ok(None), |r| r.map(Some))?;
+
+        if k8suser.is_none() {
+            println!(
+                "[WARN]: Context {} has no client certificate and key, nor does it specify \
+                 any auth method (user/pass, token, auth-provider).  You will likely not be \
+                 able to authenticate to this cluster.  Please check your kube config.",
+                context_name
+            )
+        }
+
+        Ok(
+            crate::k8s::Context::new(
+                context_name,
+                endpoint,
+                ca_cert,
+                k8suser
+            )
+        )
+    }
+}
+
+fn get_reqwest_cert(data: &str) -> reqwest::Certificate {
+    reqwest::Certificate::from_pem(data.as_bytes()).unwrap()
 }
 
 #[cfg(test)]

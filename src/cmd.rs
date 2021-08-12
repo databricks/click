@@ -14,19 +14,19 @@
 
 //!  The commands one can run from the repl
 
-use completer;
-use config;
-use env::{self, Env, LastList, ObjectSelection};
-use error::KubeError;
-use kobj::{KObj, ObjType};
-use kube::{
+use crate::completer;
+use crate::config;
+use crate::env::{self, Env, LastList, ObjectSelection};
+use crate::error::KubeError;
+use crate::kobj::{KObj, ObjType};
+use crate::kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
     Service, ServiceList, StatefulSetList,
 };
-use output::ClickWriter;
-use table::{opt_sort, CellSpec};
-use values::{get_val_as, val_item_count, val_str, val_u64};
+use crate::output::ClickWriter;
+use crate::table::{opt_sort, CellSpec};
+use crate::values::{get_val_as, val_item_count, val_str, val_u64};
 
 use ansi_term::Colour::Yellow;
 use chrono::offset::Local;
@@ -669,11 +669,11 @@ fn print_podlist(
         .map(|pod| create_podlist_specs(pod, show_labels, show_annot, show_node, show_namespace));
 
     let filtered = match regex {
-        Some(r) => ::table::filter(pods_specs, r),
+        Some(r) => crate::table::filter(pods_specs, r),
         None => pods_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_pods = filtered.into_iter().map(|pod_spec| pod_spec.0).collect();
     PodList { items: final_pods }
@@ -806,11 +806,11 @@ fn print_nodelist(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(nodes_specs, r),
+        Some(r) => crate::table::filter(nodes_specs, r),
         None => nodes_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_nodes = filtered.into_iter().map(|node_spec| node_spec.0).collect();
     NodeList { items: final_nodes }
@@ -922,11 +922,11 @@ fn print_deployments(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(deps_specs, r),
+        Some(r) => crate::table::filter(deps_specs, r),
         None => deps_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_deps = filtered.into_iter().map(|dep_spec| dep_spec.0).collect();
     DeploymentList { items: final_deps }
@@ -1110,11 +1110,11 @@ fn print_servicelist(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(service_specs, r),
+        Some(r) => crate::table::filter(service_specs, r),
         None => service_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_services = filtered
         .into_iter()
@@ -1141,11 +1141,11 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(ns_specs, r),
+        Some(r) => crate::table::filter(ns_specs, r),
         None => ns_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 }
 
 // Command defintions below.  See documentation for the command! macro for an explanation of
@@ -1208,7 +1208,7 @@ command!(
                 })
                 .collect();
             table.set_format(*TBLFMT);
-            ::table::print_table(&mut table, &ctxs, writer);
+            crate::table::print_table(&mut table, &ctxs, writer);
         }
     }
 );
@@ -1295,7 +1295,7 @@ command!(
                 clickwriteln!(writer, "No objects currently active");
             }
         };
-        ::table::print_filled_table(&mut table, writer);
+        crate::table::print_filled_table(&mut table, writer);
     }
 );
 
@@ -1384,7 +1384,7 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 writeln!(stderr(), "{}", s).unwrap_or(());
@@ -2385,7 +2385,7 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -2472,7 +2472,7 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -2675,7 +2675,7 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -2741,11 +2741,11 @@ fn print_replicasets(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(rss_specs, r),
+        Some(r) => crate::table::filter(rss_specs, r),
         None => rss_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
     ReplicaSetList { items: final_rss }
@@ -2774,7 +2774,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -2831,11 +2831,11 @@ fn print_statefulsets(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(statefulsets_specs, r),
+        Some(r) => crate::table::filter(statefulsets_specs, r),
         None => statefulsets_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_statefulsets = filtered
         .into_iter()
@@ -2870,7 +2870,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -2920,11 +2920,11 @@ fn print_configmaps(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(cm_specs, r),
+        Some(r) => crate::table::filter(cm_specs, r),
         None => cm_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_rss = filtered.into_iter().map(|cm_spec| cm_spec.0).collect();
     ConfigMapList { items: final_rss }
@@ -2953,7 +2953,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -3004,11 +3004,11 @@ fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWrite
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(rss_specs, r),
+        Some(r) => crate::table::filter(rss_specs, r),
         None => rss_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
     SecretList { items: final_rss }
@@ -3037,7 +3037,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -3080,7 +3080,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -3382,7 +3382,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match ::table::get_regex(&matches) {
+        let regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());
@@ -3444,11 +3444,11 @@ fn print_jobs(
     });
 
     let filtered = match regex {
-        Some(r) => ::table::filter(jobs_specs, r),
+        Some(r) => crate::table::filter(jobs_specs, r),
         None => jobs_specs.collect(),
     };
 
-    ::table::print_table(&mut table, &filtered, writer);
+    crate::table::print_table(&mut table, &filtered, writer);
 
     let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
     JobList { items: final_jobs }

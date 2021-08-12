@@ -28,7 +28,7 @@ use std::fs::File;
 use std::io;
 use std::io::{Stdout, Write};
 
-use error::KubeError;
+use crate::error::KubeError;
 
 /// Ignore write errors (for now) TODO: What to do with them?
 macro_rules! clickwrite {

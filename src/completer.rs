@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cmd::Cmd;
+use crate::cmd::Cmd;
 //use config::Alias;
-use env::{Env, ObjectSelection};
-use kobj::ObjType;
+use crate::env::{Env, ObjectSelection};
+use crate::kobj::ObjType;
 
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
@@ -238,7 +238,7 @@ impl Completer for ClickHelper {
             let expanded = self
                 .env
                 .as_ref()
-                .map(|e| ::command_processor::alias_expand_line(e, line));
+                .map(|e| crate::command_processor::alias_expand_line(e, line));
             Ok(self.complete_exact_command(expanded.as_deref().unwrap_or(line), line.len()))
         } else {
             // no command with space, so just complete commands
@@ -311,7 +311,7 @@ macro_rules! possible_values_completer {
     };
 }
 
-possible_values_completer!(setoptions_values_completer, ::cmd::SET_OPTS);
+possible_values_completer!(setoptions_values_completer, crate::cmd::SET_OPTS);
 
 possible_values_completer!(
     portforwardaction_values_completer,

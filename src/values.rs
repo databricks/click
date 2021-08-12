@@ -16,7 +16,7 @@
 use serde;
 use serde_json::value::Value;
 
-use error::KubeError;
+use crate::error::KubeError;
 
 use std::borrow::Cow;
 

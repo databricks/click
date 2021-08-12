@@ -20,7 +20,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 
-use error::KubeError;
+use crate::error::KubeError;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Alias {

@@ -23,13 +23,13 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 
-use error::KubeError;
+use crate::error::KubeError;
 
 // During testing we use a mock clock to be time independent.
 #[cfg(not(test))]
 use duct::cmd as ductcmd;
 #[cfg(test)]
-use duct_mock::cmd as ductcmd;
+use crate::duct_mock::cmd as ductcmd;
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]
@@ -414,13 +414,13 @@ impl ExecProvider {
                             }
                             let key = status.client_key_data.unwrap();
 
-                            let cert = ::certs::get_cert_from_pem(&cert);
+                            let cert = crate::certs::get_cert_from_pem(&cert);
                             if cert.is_none() {
                                 eprintln!("Can't decode returned certificate data.");
                                 return;
                             }
 
-                            let key = ::certs::get_key_from_str(&key);
+                            let key = crate::certs::get_key_from_str(&key);
                             if key.is_none() {
                                 eprintln!("Can't decode returned key data.");
                                 return;

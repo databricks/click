@@ -22,10 +22,10 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
-use config::ClickConfig;
-use error::{KubeErrNo, KubeError};
-use kube::{ClientCertKey, Kluster, KlusterAuth};
+use crate::certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+use crate::config::ClickConfig;
+use crate::error::{KubeErrNo, KubeError};
+use crate::kube::{ClientCertKey, Kluster, KlusterAuth};
 
 use super::kubefile::{AuthProvider, ExecProvider};
 

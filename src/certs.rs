@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use kube::NoCertificateVerification;
-use subjaltnames::{get_subj_alt_names, DNSNameRef, SubjAltName};
+use crate::kube::NoCertificateVerification;
+use crate::subjaltnames::{get_subj_alt_names, DNSNameRef, SubjAltName};
 
 use der_parser;
 use regex::Regex;

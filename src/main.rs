@@ -77,11 +77,11 @@ use clap::{App, Arg};
 
 use std::path::PathBuf;
 
-use command_processor::CommandProcessor;
-use config::{ClickConfig, Config};
-use env::Env;
+use crate::command_processor::CommandProcessor;
+use crate::config::{ClickConfig, Config};
+use crate::env::Env;
 
-use output::ClickWriter;
+use crate::output::ClickWriter;
 
 fn main() {
     env_logger::init();

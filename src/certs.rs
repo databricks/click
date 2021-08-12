@@ -15,7 +15,6 @@
 use crate::kube::NoCertificateVerification;
 use crate::subjaltnames::{get_subj_alt_names, DNSNameRef, SubjAltName};
 
-use der_parser;
 use regex::Regex;
 use rustls::sign::RSASigningKey;
 use rustls::{Certificate, PrivateKey};

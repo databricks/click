@@ -28,7 +28,6 @@ use hyper::{Client, Url};
 use hyper_sync_rustls::TlsClient;
 use rustls::{self, Certificate, PrivateKey};
 use serde::Deserialize;
-use serde_json;
 use serde_json::{Map, Value};
 
 use std::cell::RefCell;

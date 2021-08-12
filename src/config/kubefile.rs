@@ -17,7 +17,6 @@
 use chrono::{DateTime, Local, TimeZone};
 use rustls::{Certificate, PrivateKey};
 use serde_json::{self, Value};
-use serde_yaml;
 
 use std::cell::RefCell;
 use std::fs::File;
@@ -26,10 +25,10 @@ use std::io::Read;
 use crate::error::KubeError;
 
 // During testing we use a mock clock to be time independent.
-#[cfg(not(test))]
-use duct::cmd as ductcmd;
 #[cfg(test)]
 use crate::duct_mock::cmd as ductcmd;
+#[cfg(not(test))]
+use duct::cmd as ductcmd;
 
 /// Kubernetes cluster config
 #[derive(Debug, Deserialize)]

@@ -14,7 +14,6 @@
 
 use ring::io::der;
 use untrusted::{Input, Reader};
-use webpki;
 
 use std::borrow::Cow;
 use std::mem;

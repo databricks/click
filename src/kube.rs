@@ -28,7 +28,6 @@ use hyper::{Client, Url};
 use hyper_sync_rustls::TlsClient;
 use rustls::{self, Certificate, PrivateKey};
 use serde::Deserialize;
-use serde_json;
 use serde_json::{Map, Value};
 
 use std::cell::RefCell;
@@ -39,9 +38,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use config::{AuthProvider, ExecAuth, ExecProvider};
-use connector::ClickSslConnector;
-use error::{KubeErrNo, KubeError};
+use crate::config::{AuthProvider, ExecAuth, ExecProvider};
+use crate::connector::ClickSslConnector;
+use crate::error::{KubeErrNo, KubeError};
 
 // Various things we can return from the kubernetes api
 
@@ -504,7 +503,7 @@ impl Kluster {
         let mut ip: Option<String> = None;
         if let Some(host) = endpoint.host_str() {
             if let Ok(addr) = IpAddr::from_str(host) {
-                dns_host = ::certs::try_ip_to_name(&addr, endpoint.port().unwrap_or(443));
+                dns_host = crate::certs::try_ip_to_name(&addr, endpoint.port().unwrap_or(443));
                 ip = Some(host.to_owned());
             }
         };
@@ -667,7 +666,7 @@ impl Kluster {
         } else {
             // try and read an error message out
             let val: Value = serde_json::from_reader(resp)?;
-            match ::values::val_str_opt("/message", &val) {
+            match crate::values::val_str_opt("/message", &val) {
                 Some(msg) => Err(KubeError::KubeServerError(msg)),
                 None => Err(KubeError::Kube(KubeErrNo::Unknown)),
             }

@@ -14,7 +14,7 @@
 
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
-use output::ClickWriter;
+use crate::output::ClickWriter;
 
 use clap::ArgMatches;
 use prettytable::Cell;

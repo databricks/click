@@ -1,14 +1,14 @@
-use cmd::Cmd;
-use completer::ClickHelper;
-use error::KubeError;
-use output::ClickWriter;
-use parser::{try_parse_csl, try_parse_range, Parser};
+use crate::cmd::Cmd;
+use crate::completer::ClickHelper;
+use crate::error::KubeError;
+use crate::output::ClickWriter;
+use crate::parser::{try_parse_csl, try_parse_range, Parser};
 
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use env::Env;
+use crate::env::Env;
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -157,35 +157,35 @@ impl CommandProcessor {
 
     fn get_command_vec() -> Vec<Box<dyn Cmd>> {
         let commands: Vec<Box<dyn Cmd>> = vec![
-            Box::new(::cmd::Quit::new()),
-            Box::new(::cmd::Context::new()),
-            Box::new(::cmd::Contexts::new()),
-            Box::new(::cmd::Range::new()),
-            Box::new(::cmd::Pods::new()),
-            Box::new(::cmd::Nodes::new()),
-            Box::new(::cmd::Deployments::new()),
-            Box::new(::cmd::Services::new()),
-            Box::new(::cmd::ReplicaSets::new()),
-            Box::new(::cmd::StatefulSets::new()),
-            Box::new(::cmd::ConfigMaps::new()),
-            Box::new(::cmd::Namespace::new()),
-            Box::new(::cmd::Logs::new()),
-            Box::new(::cmd::Describe::new()),
-            Box::new(::cmd::Exec::new()),
-            Box::new(::cmd::Containers::new()),
-            Box::new(::cmd::Events::new()),
-            Box::new(::cmd::Clear::new()),
-            Box::new(::cmd::EnvCmd::new()),
-            Box::new(::cmd::SetCmd::new()),
-            Box::new(::cmd::Delete::new()),
-            Box::new(::cmd::UtcCmd::new()),
-            Box::new(::cmd::Namespaces::new()),
-            Box::new(::cmd::Secrets::new()),
-            Box::new(::cmd::PortForward::new()),
-            Box::new(::cmd::PortForwards::new()),
-            Box::new(::cmd::Jobs::new()),
-            Box::new(::cmd::Alias::new()),
-            Box::new(::cmd::Unalias::new()),
+            Box::new(crate::cmd::Quit::new()),
+            Box::new(crate::cmd::Context::new()),
+            Box::new(crate::cmd::Contexts::new()),
+            Box::new(crate::cmd::Range::new()),
+            Box::new(crate::cmd::Pods::new()),
+            Box::new(crate::cmd::Nodes::new()),
+            Box::new(crate::cmd::Deployments::new()),
+            Box::new(crate::cmd::Services::new()),
+            Box::new(crate::cmd::ReplicaSets::new()),
+            Box::new(crate::cmd::StatefulSets::new()),
+            Box::new(crate::cmd::ConfigMaps::new()),
+            Box::new(crate::cmd::Namespace::new()),
+            Box::new(crate::cmd::Logs::new()),
+            Box::new(crate::cmd::Describe::new()),
+            Box::new(crate::cmd::Exec::new()),
+            Box::new(crate::cmd::Containers::new()),
+            Box::new(crate::cmd::Events::new()),
+            Box::new(crate::cmd::Clear::new()),
+            Box::new(crate::cmd::EnvCmd::new()),
+            Box::new(crate::cmd::SetCmd::new()),
+            Box::new(crate::cmd::Delete::new()),
+            Box::new(crate::cmd::UtcCmd::new()),
+            Box::new(crate::cmd::Namespaces::new()),
+            Box::new(crate::cmd::Secrets::new()),
+            Box::new(crate::cmd::PortForward::new()),
+            Box::new(crate::cmd::PortForwards::new()),
+            Box::new(crate::cmd::Jobs::new()),
+            Box::new(crate::cmd::Alias::new()),
+            Box::new(crate::cmd::Unalias::new()),
         ];
         commands
     }
@@ -498,9 +498,9 @@ each pod in the range, and write it to /tmp/podname-rfc3339date.log:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::{get_test_config, Alias, ClickConfig};
-    use env::{LastList, ObjectSelection};
-    use kobj::{KObj, ObjType};
+    use crate::config::{get_test_config, Alias, ClickConfig};
+    use crate::env::{LastList, ObjectSelection};
+    use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
 
@@ -571,13 +571,13 @@ mod tests {
         )
     }
 
-    fn make_node(name: &str) -> ::kube::Node {
-        ::kube::Node {
-            metadata: ::kube::Metadata::with_name(name),
-            spec: ::kube::NodeSpec {
+    fn make_node(name: &str) -> crate::kube::Node {
+        crate::kube::Node {
+            metadata: crate::kube::Metadata::with_name(name),
+            spec: crate::kube::NodeSpec {
                 unschedulable: Some(false),
             },
-            status: ::kube::NodeStatus {
+            status: crate::kube::NodeStatus {
                 conditions: Vec::new(),
             },
         }
@@ -658,7 +658,7 @@ Other help topics (type 'help [TOPIC]' for details)
             PathBuf::from("/tmp/click.conf"),
         );
         let node = make_node("ns1");
-        let nodelist = ::kube::NodeList { items: vec![node] };
+        let nodelist = crate::kube::NodeList { items: vec![node] };
         let ll = LastList::NodeList(nodelist);
         env.set_lastlist(ll);
         let mut p = CommandProcessor::new_with_commands(
@@ -691,7 +691,7 @@ Other help topics (type 'help [TOPIC]' for details)
         let node1 = make_node("ns1");
         let node2 = make_node("ns2");
         let node3 = make_node("ns3");
-        let nodelist = ::kube::NodeList {
+        let nodelist = crate::kube::NodeList {
             items: vec![node1, node2, node3],
         };
         let ll = LastList::NodeList(nodelist);

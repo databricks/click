@@ -1,7 +1,7 @@
-use config::{self, Alias, ClickConfig, Config};
-use error::KubeError;
-use kobj::{KObj, ObjType};
-use kube::{
+use crate::config::{self, Alias, ClickConfig, Config};
+use crate::error::KubeError;
+use crate::kobj::{KObj, ObjType};
+use crate::kube::{
     ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
     ServiceList, StatefulSetList,
 };
@@ -150,7 +150,7 @@ impl Env {
         self.click_config.get_rustyline_conf()
     }
 
-    pub fn get_contexts(&self) -> &BTreeMap<String, ::config::ContextConf> {
+    pub fn get_contexts(&self) -> &BTreeMap<String, crate::config::ContextConf> {
         &self.config.contexts
     }
 
@@ -461,7 +461,7 @@ impl fmt::Display for Env {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::get_test_config;
+    use crate::config::get_test_config;
 
     #[test]
     fn try_expand_alias() {

@@ -19,16 +19,14 @@ use duct::Handle;
 use duct_sh::sh_dangerous;
 use os_pipe::{pipe, PipeWriter};
 use serde::ser::Serialize;
-use serde_json;
 use serde_json::ser::{CharEscape, Formatter, PrettyFormatter, Serializer};
 use serde_json::Error as JsonError;
-use serde_yaml;
 
 use std::fs::File;
 use std::io;
 use std::io::{Stdout, Write};
 
-use error::KubeError;
+use crate::error::KubeError;
 
 /// Ignore write errors (for now) TODO: What to do with them?
 macro_rules! clickwrite {

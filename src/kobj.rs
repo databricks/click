@@ -1,8 +1,8 @@
-use describe;
-use kube::Metadata;
-use output::ClickWriter;
-use values::val_str_opt;
-use Env;
+use crate::describe;
+use crate::kube::Metadata;
+use crate::output::ClickWriter;
+use crate::values::val_str_opt;
+use crate::Env;
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};

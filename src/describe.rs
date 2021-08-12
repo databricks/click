@@ -15,7 +15,7 @@
 //!  Utility functions for the Describe command, used to output
 //!  information for supported kubernetes object types
 
-use values::{val_str, val_str_opt, val_u64};
+use crate::values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
 use chrono::offset::Local;

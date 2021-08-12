@@ -13,10 +13,9 @@
 // limitations under the License.
 
 /// Helper functions to deal with Values
-use serde;
 use serde_json::value::Value;
 
-use error::KubeError;
+use crate::error::KubeError;
 
 use std::borrow::Cow;
 

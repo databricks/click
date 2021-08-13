@@ -1,10 +1,7 @@
 use crate::config::{self, Alias, ClickConfig, Config};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType};
-use crate::kube::{
-    ConfigMapList, DeploymentList, JobList, Kluster, NodeList, PodList, ReplicaSetList, SecretList,
-    ServiceList, StatefulSetList,
-};
+use crate::kube::Kluster;
 
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
@@ -16,19 +13,6 @@ use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-
-pub enum LastList {
-    None,
-    PodList(PodList),
-    NodeList(NodeList),
-    DeploymentList(DeploymentList),
-    ServiceList(ServiceList),
-    ReplicaSetList(ReplicaSetList),
-    StatefulSetList(StatefulSetList),
-    ConfigMapList(ConfigMapList),
-    SecretList(SecretList),
-    JobList(JobList),
-}
 
 // TODO: Maybe make less of this pub
 
@@ -63,7 +47,7 @@ pub struct Env {
     pub kluster: Option<Kluster>,
     pub namespace: Option<String>,
     current_selection: ObjectSelection,
-    last_objs: LastList,
+    last_objs: Option<Vec<KObj>>,
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
     pub prompt: String,
@@ -96,7 +80,7 @@ impl Env {
             kluster: None,
             namespace,
             current_selection: ObjectSelection::None,
-            last_objs: LastList::None,
+            last_objs: None,
             ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
             prompt: format!(
@@ -235,8 +219,12 @@ impl Env {
         }
     }
 
-    pub fn set_lastlist(&mut self, list: LastList) {
-        self.last_objs = list;
+    pub fn set_last_objs<T: Into<Vec<KObj>>>(&mut self, objs: T) {
+        self.last_objs = Some(objs.into());
+    }
+
+    pub fn clear_last_objs(&mut self) {
+        self.last_objs = None;
     }
 
     pub fn clear_current(&mut self) {
@@ -247,54 +235,7 @@ impl Env {
 
     /// get the item from the last list at the specified index
     pub fn item_at(&self, index: usize) -> Option<KObj> {
-        match self.last_objs {
-            LastList::None => {
-                println!("No active object list");
-                None
-            }
-            LastList::PodList(ref pl) => pl.items.get(index).map(|pod| {
-                let containers = pod
-                    .spec
-                    .containers
-                    .iter()
-                    .map(|cspec| cspec.name.clone())
-                    .collect();
-                KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
-            }),
-            LastList::NodeList(ref nl) => nl.items.get(index).map(|n| KObj {
-                name: n.metadata.name.clone(),
-                namespace: None,
-                typ: ObjType::Node,
-            }),
-            LastList::DeploymentList(ref dl) => dl
-                .items
-                .get(index)
-                .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment)),
-            LastList::ServiceList(ref sl) => sl
-                .items
-                .get(index)
-                .map(|service| KObj::from_metadata(&service.metadata, ObjType::Service)),
-            LastList::ReplicaSetList(ref rsl) => rsl
-                .items
-                .get(index)
-                .and_then(|replicaset| KObj::from_value(replicaset, ObjType::ReplicaSet)),
-            LastList::StatefulSetList(ref stfs) => stfs
-                .items
-                .get(index)
-                .and_then(|statefulset| KObj::from_value(statefulset, ObjType::StatefulSet)),
-            LastList::ConfigMapList(ref cml) => cml
-                .items
-                .get(index)
-                .and_then(|cm| KObj::from_value(cm, ObjType::ConfigMap)),
-            LastList::SecretList(ref sl) => sl
-                .items
-                .get(index)
-                .and_then(|secret| KObj::from_value(secret, ObjType::Secret)),
-            LastList::JobList(ref jl) => jl
-                .items
-                .get(index)
-                .and_then(|job| KObj::from_value(job, ObjType::Job)),
-        }
+        self.last_objs.as_ref().and_then(|lo| lo.get(index).map(|o| o.clone()))
     }
 
     pub fn set_current(&mut self, num: usize) {

@@ -346,35 +346,59 @@ pub struct NamespaceList {
     pub items: Vec<Namespace>,
 }
 
+pub trait ValueList {
+    fn values(&self) -> &Vec<Value>;
+    fn typ(&self) -> crate::kobj::ObjType;
+}
+
+macro_rules! value_list_imp {
+    ($struct: ident, $typ: expr) => {
+        impl ValueList for $struct {
+            fn values(&self) -> &Vec<Value> {
+                &self.items
+            }
+
+            fn typ(&self) -> crate::kobj::ObjType {
+                $typ
+            }
+        }
+    }
+}
+
 // ReplicaSets
 #[derive(Debug, Deserialize)]
 pub struct ReplicaSetList {
     pub items: Vec<Value>,
 }
+value_list_imp!(ReplicaSetList, crate::kobj::ObjType::ReplicaSet);
 
 // StatefulSets
 #[derive(Debug, Deserialize)]
 pub struct StatefulSetList {
     pub items: Vec<Value>,
 }
+value_list_imp!(StatefulSetList, crate::kobj::ObjType::StatefulSet);
 
 // ConfigMaps
 #[derive(Debug, Deserialize)]
 pub struct ConfigMapList {
     pub items: Vec<Value>,
 }
+value_list_imp!(ConfigMapList, crate::kobj::ObjType::ConfigMap);
 
 // Secrets
 #[derive(Debug, Deserialize)]
 pub struct SecretList {
     pub items: Vec<Value>,
 }
+value_list_imp!(SecretList, crate::kobj::ObjType::Secret);
 
 // Jobs
 #[derive(Debug, Deserialize)]
 pub struct JobList {
     pub items: Vec<Value>,
 }
+value_list_imp!(JobList, crate::kobj::ObjType::Job);
 
 // Kubernetes authentication data
 

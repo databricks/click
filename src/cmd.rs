@@ -16,9 +16,9 @@
 
 use crate::completer;
 use crate::config;
-use crate::env::{self, Env, LastList, ObjectSelection};
+use crate::env::{self, Env, ObjectSelection};
 use crate::error::KubeError;
-use crate::kobj::{KObj, ObjType};
+use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
     NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
@@ -1429,9 +1429,9 @@ command!(
                     matches.is_present("reverse"),
                     writer,
                 );
-                env.set_lastlist(LastList::PodList(end_list));
+                env.set_last_objs(end_list);
             }
-            None => env.set_lastlist(LastList::None),
+            None => env.clear_last_objs()
         }
     }
 );
@@ -2402,9 +2402,9 @@ command!(
                     matches.is_present("reverse"),
                     writer,
                 );
-                env.set_lastlist(LastList::NodeList(final_list));
+                env.set_last_objs(final_list);
             }
-            None => env.set_lastlist(LastList::None),
+            None => env.clear_last_objs()
         }
     }
 );
@@ -2493,10 +2493,10 @@ command!(
                 matches.is_present("reverse"),
                 writer,
             );
-            env.set_lastlist(LastList::ServiceList(filtered));
+            env.set_last_objs(filtered);
         } else {
             clickwriteln!(writer, "no services");
-            env.set_lastlist(LastList::None);
+            env.clear_last_objs();
         }
     }
 );
@@ -2702,9 +2702,9 @@ command!(
                     matches.is_present("reverse"),
                     writer,
                 );
-                env.set_lastlist(LastList::DeploymentList(final_list));
+                env.set_last_objs(final_list);
             }
-            None => env.set_lastlist(LastList::None),
+            None => env.clear_last_objs(),
         }
     }
 );
@@ -2790,10 +2790,10 @@ command!(
         match rsl {
             Some(l) => {
                 let final_list = print_replicasets(l, regex, writer);
-                env.set_lastlist(LastList::ReplicaSetList(final_list));
+                env.set_last_objs(VecWrap::from(final_list));
             }
             None => {
-                env.set_lastlist(LastList::None);
+                env.clear_last_objs()
             }
         }
     }
@@ -2887,10 +2887,10 @@ command!(
         match statefulset_list {
             Some(l) => {
                 let final_list = print_statefulsets(l, regex, writer);
-                env.set_lastlist(LastList::StatefulSetList(final_list));
+                env.set_last_objs(VecWrap::from(final_list));
             }
             None => {
-                env.set_lastlist(LastList::None);
+                env.clear_last_objs();
             }
         }
     }
@@ -2969,10 +2969,10 @@ command!(
         match cml {
             Some(l) => {
                 let final_list = print_configmaps(l, regex, writer);
-                env.set_lastlist(LastList::ConfigMapList(final_list));
+                env.set_last_objs(VecWrap::from(final_list));
             }
             None => {
-                env.set_lastlist(LastList::None);
+                env.clear_last_objs();
             }
         }
     }
@@ -3053,10 +3053,10 @@ command!(
         match sl {
             Some(l) => {
                 let final_list = print_secrets(l, regex, writer);
-                env.set_lastlist(LastList::SecretList(final_list));
+                env.set_last_objs(VecWrap::from(final_list));
             }
             None => {
-                env.set_lastlist(LastList::None);
+                env.clear_last_objs();
             }
         }
     }
@@ -3402,9 +3402,9 @@ command!(
         match jl {
             Some(j) => {
                 let final_list = print_jobs(j, matches.is_present("labels"), regex, writer);
-                env.set_lastlist(LastList::JobList(final_list));
+                env.set_last_objs(VecWrap::from(final_list));
             }
-            None => env.set_lastlist(LastList::None),
+            None => env.clear_last_objs(),
         }
     }
 );

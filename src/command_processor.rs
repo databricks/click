@@ -290,9 +290,8 @@ impl CommandProcessor {
                     if let Ok(num) = (cmdstr as &str).parse::<usize>() {
                         env.set_current(num);
                     } else if let Some(range) = try_parse_range(cmdstr) {
-                        let idxs: Vec<usize> = range
-                            .take_while(|i| env.item_at(*i).is_some())
-                            .collect();
+                        let idxs: Vec<usize> =
+                            range.take_while(|i| env.item_at(*i).is_some()).collect();
                         if idxs.is_empty() {
                             env.clear_current();
                         } else {
@@ -300,9 +299,8 @@ impl CommandProcessor {
                         }
                     } else if let Some(range) = try_parse_csl(left) {
                         // parse whole thing before sep since we might type "1, 2, 3" with spaces
-                        let idxs: Vec<usize> = range
-                            .filter(|i| env.item_at(*i).is_some())
-                            .collect();
+                        let idxs: Vec<usize> =
+                            range.filter(|i| env.item_at(*i).is_some()).collect();
                         if idxs.is_empty() {
                             env.clear_current();
                         } else {
@@ -651,10 +649,7 @@ Other help topics (type 'help [TOPIC]' for details)
             commands,
         );
         p.process_line("0", ClickWriter::new());
-        assert_eq!(
-            p.env.current_selection(),
-            &ObjectSelection::Single(0)
-        );
+        assert_eq!(p.env.current_selection(), &ObjectSelection::Single(0));
         assert_eq!(
             p.env.item_at(0).unwrap(),
             &KObj {
@@ -698,16 +693,11 @@ Other help topics (type 'help [TOPIC]' for details)
         p.process_line("0..", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![
-                0,1,2
-            ])
+            &ObjectSelection::Range(vec![0, 1, 2])
         );
 
         p.process_line("0..1", ClickWriter::new());
-        assert_eq!(
-            p.env.current_selection(),
-            &ObjectSelection::Range(vec![0])
-        );
+        assert_eq!(p.env.current_selection(), &ObjectSelection::Range(vec![0]));
 
         p.process_line("8..10", ClickWriter::new());
         assert_eq!(p.env.current_selection(), &ObjectSelection::None);
@@ -715,19 +705,19 @@ Other help topics (type 'help [TOPIC]' for details)
         p.process_line("0,2", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![0,2])
+            &ObjectSelection::Range(vec![0, 2])
         );
 
         p.process_line("2,1", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![2,1])
+            &ObjectSelection::Range(vec![2, 1])
         );
 
         p.process_line("9, 2, 1, 6", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![2,1])
+            &ObjectSelection::Range(vec![2, 1])
         );
 
         p.process_line("8,10", ClickWriter::new());

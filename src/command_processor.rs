@@ -282,7 +282,6 @@ impl CommandProcessor {
                         }
                     }
                 }
-
                 let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                 let mut parts = parts_vec.iter().map(|s| &**s);
                 let env = Rc::get_mut(&mut self.env).unwrap();
@@ -292,7 +291,6 @@ impl CommandProcessor {
                         env.set_current(num);
                     } else if let Some(range) = try_parse_range(cmdstr) {
                         let idxs: Vec<usize> = range
-                            .into_iter()
                             .take_while(|i| env.item_at(*i).is_some())
                             .collect();
                         if idxs.is_empty() {
@@ -300,10 +298,10 @@ impl CommandProcessor {
                         } else {
                             env.set_range(idxs);
                         }
-                    } else if let Some(range) = try_parse_csl(cmdstr) {
+                    } else if let Some(range) = try_parse_csl(left) {
+                        // parse whole thing before sep since we might type "1, 2, 3" with spaces
                         let idxs: Vec<usize> = range
-                            .into_iter()
-                            .take_while(|i| env.item_at(*i).is_some())
+                            .filter(|i| env.item_at(*i).is_some())
                             .collect();
                         if idxs.is_empty() {
                             env.clear_current();
@@ -726,7 +724,7 @@ Other help topics (type 'help [TOPIC]' for details)
             &ObjectSelection::Range(vec![2,1])
         );
 
-        p.process_line("2,1,6", ClickWriter::new());
+        p.process_line("9, 2, 1, 6", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
             &ObjectSelection::Range(vec![2,1])

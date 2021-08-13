@@ -149,32 +149,6 @@ macro_rules! no_named_complete {
     };
 }
 
-macro_rules! iter_range {
-    ($range: ident, $writer: ident, $sepfmt: expr, $action: expr) => {
-        let mut fmtvars = HashMap::new();
-        for obj in $range.iter() {
-            fmtvars.insert("name".to_string(), obj.name());
-            fmtvars.insert(
-                "namespace".to_string(),
-                obj.namespace
-                    .as_ref()
-                    .map(|n| n.as_str())
-                    .unwrap_or("[none]"),
-            );
-            match strfmt($sepfmt, &fmtvars) {
-                Ok(sep) => {
-                    clickwriteln!($writer, "{}", sep);
-                    $action(obj)
-                }
-                Err(e) => {
-                    clickwriteln!($writer, "Failed to format separator: {}", e);
-                    return;
-                }
-            }
-        }
-    };
-}
-
 /// Macro for defining a command
 ///
 /// # Args
@@ -1271,27 +1245,13 @@ command!(
     |_, env, writer| {
         let mut table = Table::new();
         table.set_titles(row!["Name", "Type", "Namespace"]);
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                table.add_row(row!(
-                    obj.name(),
-                    obj.type_str(),
-                    obj.namespace.as_deref().unwrap_or("")
-                ));
-            }
-            ObjectSelection::Range(range) => {
-                for obj in range.iter() {
-                    table.add_row(row!(
-                        obj.name(),
-                        obj.type_str(),
-                        obj.namespace.as_deref().unwrap_or("")
-                    ));
-                }
-            }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "No objects currently active");
-            }
-        };
+        env.apply_to_selection(writer, None, |obj, _| {
+            table.add_row(row!(
+                obj.name(),
+                obj.type_str(),
+                obj.namespace.as_deref().unwrap_or("")
+            ));
+        });
         crate::table::print_filled_table(&mut table, writer);
     }
 );
@@ -1431,7 +1391,7 @@ command!(
                 );
                 env.set_last_objs(end_list);
             }
-            None => env.clear_last_objs()
+            None => env.clear_last_objs(),
         }
     }
 );
@@ -1722,52 +1682,23 @@ command!(
             Some(Duration::new(20, 0)) // TODO what's a reasonable timeout here?
         };
 
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                if obj.is_pod() {
-                    do_logs(
-                        obj,
-                        env,
-                        &url_args,
-                        matches.value_of("container"),
-                        matches.value_of("output"),
-                        matches.is_present("editor"),
-                        matches.value_of("editor"),
-                        timeout,
-                        writer,
-                    );
-                } else {
-                    clickwriteln!(writer, "Logs only available on a pod");
-                }
-            }
-            ObjectSelection::Range(range) => {
-                iter_range!(
-                    range,
+        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+            if obj.is_pod() {
+                do_logs(
+                    obj,
+                    env,
+                    &url_args,
+                    matches.value_of("container"),
+                    matches.value_of("output"),
+                    matches.is_present("editor"),
+                    matches.value_of("editor"),
+                    timeout,
                     writer,
-                    &env.click_config.range_separator,
-                    |obj: &KObj| {
-                        if obj.is_pod() {
-                            do_logs(
-                                obj,
-                                env,
-                                &url_args,
-                                matches.value_of("container"),
-                                matches.value_of("output"),
-                                matches.is_present("editor"),
-                                matches.value_of("editor"),
-                                timeout,
-                                writer,
-                            );
-                        } else {
-                            clickwriteln!(writer, "Logs only possible on pods");
-                        }
-                    }
                 );
+            } else {
+                clickwriteln!(writer, "Logs only available on a pod");
             }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "Need an active selection for logs");
-            }
-        };
+        });
     }
 );
 
@@ -1794,20 +1725,9 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => obj.describe(&matches, env, writer),
-            ObjectSelection::Range(range) => {
-                iter_range!(
-                    range,
-                    writer,
-                    &env.click_config.range_separator,
-                    |obj: &KObj| {
-                        obj.describe(&matches, env, writer);
-                    }
-                );
-            }
-            ObjectSelection::None => clickwriteln!(writer, "No active object to describe"),
-        }
+        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+            obj.describe(&matches, env, writer)
+        });
     }
 );
 
@@ -1975,52 +1895,23 @@ command!(
                 (false, true) => "-i",
                 (false, false) => "",
             };
-            match env.current_selection() {
-                ObjectSelection::Single(obj) => {
-                    if obj.is_pod() {
-                        do_exec(
-                            env,
-                            obj,
-                            &kluster.name,
-                            &cmd,
-                            it_arg,
-                            &matches.value_of("container"),
-                            &matches.value_of("terminal"),
-                            matches.is_present("terminal"),
-                            writer,
-                        );
-                    } else {
-                        clickwriteln!(writer, "Exec only possible on pods");
-                    }
-                }
-                ObjectSelection::Range(range) => {
-                    iter_range!(
-                        range,
+            env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+                if obj.is_pod() {
+                    do_exec(
+                        env,
+                        obj,
+                        &kluster.name,
+                        &cmd,
+                        it_arg,
+                        &matches.value_of("container"),
+                        &matches.value_of("terminal"),
+                        matches.is_present("terminal"),
                         writer,
-                        &env.click_config.range_separator,
-                        |obj: &KObj| {
-                            if obj.is_pod() {
-                                do_exec(
-                                    env,
-                                    obj,
-                                    &kluster.name,
-                                    &cmd,
-                                    it_arg,
-                                    &matches.value_of("container"),
-                                    &matches.value_of("terminal"),
-                                    matches.is_present("terminal"),
-                                    writer,
-                                );
-                            } else {
-                                clickwriteln!(writer, "Exec only possible on pods");
-                            }
-                        }
                     );
+                } else {
+                    clickwriteln!(writer, "Exec only possible on pods");
                 }
-                ObjectSelection::None => {
-                    clickwriteln!(writer, "No active object to exec on");
-                }
-            }
+            });
         } else {
             writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
         }
@@ -2147,24 +2038,9 @@ command!(
         }
         let delete_body = delete_body.to_string();
 
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                delete_obj(env, obj, &delete_body, writer);
-            }
-            ObjectSelection::Range(range) => {
-                iter_range!(
-                    range,
-                    writer,
-                    &env.click_config.range_separator,
-                    |obj: &KObj| {
-                        delete_obj(env, obj, &delete_body, writer);
-                    }
-                );
-            }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "No active object to delete");
-            }
-        }
+        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+            delete_obj(env, obj, &delete_body, writer);
+        });
     }
 );
 
@@ -2231,32 +2107,13 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |_matches, env, writer| {
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                if obj.is_pod() {
-                    print_containers(obj, env, writer);
-                } else {
-                    clickwriteln!(writer, "containers only possible on a Pod");
-                }
+        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+            if obj.is_pod() {
+                print_containers(obj, env, writer);
+            } else {
+                clickwriteln!(writer, "containers only possible on a Pod");
             }
-            ObjectSelection::Range(range) => {
-                iter_range!(
-                    range,
-                    writer,
-                    &env.click_config.range_separator,
-                    |obj: &KObj| {
-                        if obj.is_pod() {
-                            print_containers(obj, env, writer);
-                        } else {
-                            clickwriteln!(writer, "containers only possible on pods");
-                        }
-                    }
-                );
-            }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "No active object");
-            }
-        }
+        });
     }
 );
 
@@ -2314,24 +2171,9 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |_matches, env, writer| {
-        match env.current_selection() {
-            ObjectSelection::Single(obj) => {
-                print_events(obj, env, writer);
-            }
-            ObjectSelection::Range(range) => {
-                iter_range!(
-                    range,
-                    writer,
-                    &env.click_config.range_separator,
-                    |obj: &KObj| {
-                        print_events(obj, env, writer);
-                    }
-                );
-            }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "Need an active selection for events");
-            }
-        }
+        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
+            print_events(obj, env, writer);
+        });
     }
 );
 
@@ -2404,7 +2246,7 @@ command!(
                 );
                 env.set_last_objs(final_list);
             }
-            None => env.clear_last_objs()
+            None => env.clear_last_objs(),
         }
     }
 );
@@ -2792,9 +2634,7 @@ command!(
                 let final_list = print_replicasets(l, regex, writer);
                 env.set_last_objs(VecWrap::from(final_list));
             }
-            None => {
-                env.clear_last_objs()
-            }
+            None => env.clear_last_objs(),
         }
     }
 );

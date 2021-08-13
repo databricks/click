@@ -362,7 +362,7 @@ macro_rules! value_list_imp {
                 $typ
             }
         }
-    }
+    };
 }
 
 // ReplicaSets

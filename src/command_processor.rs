@@ -499,7 +499,7 @@ each pod in the range, and write it to /tmp/podname-rfc3339date.log:
 mod tests {
     use super::*;
     use crate::config::{get_test_config, Alias, ClickConfig};
-    use crate::env::{LastList, ObjectSelection};
+    use crate::env::ObjectSelection;
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
@@ -659,8 +659,7 @@ Other help topics (type 'help [TOPIC]' for details)
         );
         let node = make_node("ns1");
         let nodelist = crate::kube::NodeList { items: vec![node] };
-        let ll = LastList::NodeList(nodelist);
-        env.set_lastlist(ll);
+        env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),
@@ -694,8 +693,7 @@ Other help topics (type 'help [TOPIC]' for details)
         let nodelist = crate::kube::NodeList {
             items: vec![node1, node2, node3],
         };
-        let ll = LastList::NodeList(nodelist);
-        env.set_lastlist(ll);
+        env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),

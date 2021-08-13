@@ -2,13 +2,16 @@ use crate::config::{self, Alias, ClickConfig, Config};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType};
 use crate::kube::Kluster;
+use crate::output::ClickWriter;
 
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
+use strfmt::strfmt;
 use tempdir::TempDir;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -235,7 +238,9 @@ impl Env {
 
     /// get the item from the last list at the specified index
     pub fn item_at(&self, index: usize) -> Option<KObj> {
-        self.last_objs.as_ref().and_then(|lo| lo.get(index).map(|o| o.clone()))
+        self.last_objs
+            .as_ref()
+            .and_then(|lo| lo.get(index).map(|o| o.clone()))
     }
 
     pub fn set_current(&mut self, num: usize) {
@@ -270,6 +275,60 @@ impl Env {
                 _ => None,
             },
             _ => None,
+        }
+    }
+
+    // apply a function to each selected object.
+    pub fn apply_to_selection<F>(
+        &self,
+        writer: &mut ClickWriter,
+        sepfmt: Option<&str>,
+        mut f: F,
+    )
+    where
+        F: FnMut(&KObj, &mut ClickWriter) -> (),
+    {
+        match self.current_selection() {
+            ObjectSelection::Single(obj) => {
+                f(&obj, writer);
+            }
+            ObjectSelection::Range(range) => {
+                if let Some(fmt) = sepfmt {
+                    let mut fmtvars = HashMap::new();
+                    for obj in range.iter() {
+                        fmtvars.insert("name".to_string(), obj.name());
+                        fmtvars.insert(
+                            "namespace".to_string(),
+                            obj.namespace
+                                .as_ref()
+                                .map(|n| n.as_str())
+                                .unwrap_or("[none]"),
+                        );
+                        match strfmt(fmt, &fmtvars) {
+                            Ok(sep) => {
+                                clickwriteln!(writer, "{}", sep);
+                                f(obj, writer)
+                            }
+                            Err(e) => {
+                                clickwriteln!(
+                                    writer,
+                                    "-- format of separater for {} failed: {} --",
+                                    obj.name(),
+                                    e
+                                );
+                                f(obj, writer)
+                            }
+                        }
+                    }
+                } else {
+                    for obj in range.iter() {
+                        f(&obj, writer);
+                    }
+                }
+            }
+            ObjectSelection::None => {
+                clickwriteln!(writer, "No objects currently active");
+            }
         }
     }
 

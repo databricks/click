@@ -35,44 +35,55 @@ pub struct KObj {
 
 impl From<crate::kube::PodList> for Vec<KObj> {
     fn from(podlist: crate::kube::PodList) -> Self {
-        podlist.items.iter().map(|pod| {
-            let containers = pod
-                .spec
-                .containers
-                .iter()
-                .map(|cspec| cspec.name.clone())
-                .collect();
-            KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
-        }).collect()
+        podlist
+            .items
+            .iter()
+            .map(|pod| {
+                let containers = pod
+                    .spec
+                    .containers
+                    .iter()
+                    .map(|cspec| cspec.name.clone())
+                    .collect();
+                KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
+            })
+            .collect()
     }
 }
 
 impl From<crate::kube::NodeList> for Vec<KObj> {
     fn from(nodelist: crate::kube::NodeList) -> Self {
-        nodelist.items.iter().map(|node| KObj {
-            name: node.metadata.name.clone(),
-            namespace: None,
-            typ: ObjType::Node,
-        }).collect()
+        nodelist
+            .items
+            .iter()
+            .map(|node| KObj {
+                name: node.metadata.name.clone(),
+                namespace: None,
+                typ: ObjType::Node,
+            })
+            .collect()
     }
 }
 
 impl From<crate::kube::DeploymentList> for Vec<KObj> {
     fn from(deplist: crate::kube::DeploymentList) -> Self {
-        deplist.items.iter().map(|dep| {
-            KObj::from_metadata(&dep.metadata, ObjType::Deployment)
-        }).collect()
+        deplist
+            .items
+            .iter()
+            .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment))
+            .collect()
     }
 }
 
 impl From<crate::kube::ServiceList> for Vec<KObj> {
     fn from(deplist: crate::kube::ServiceList) -> Self {
-        deplist.items.iter().map(|dep| {
-            KObj::from_metadata(&dep.metadata, ObjType::Service)
-        }).collect()
+        deplist
+            .items
+            .iter()
+            .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Service))
+            .collect()
     }
 }
-
 
 pub struct VecWrap {
     items: Vec<KObj>,
@@ -81,9 +92,11 @@ pub struct VecWrap {
 impl<T: crate::kube::ValueList> From<T> for VecWrap {
     fn from(vlist: T) -> Self {
         let typ = vlist.typ();
-        let items = vlist.values().iter().map(|val| {
-            KObj::from_value(val, typ.clone()).unwrap()
-        }).collect();
+        let items = vlist
+            .values()
+            .iter()
+            .map(|val| KObj::from_value(val, typ.clone()).unwrap())
+            .collect();
         VecWrap { items }
     }
 }
@@ -93,7 +106,6 @@ impl From<VecWrap> for Vec<KObj> {
         vw.items
     }
 }
-
 
 fn maybe_full_describe_output<T: ?Sized>(
     matches: &ArgMatches,

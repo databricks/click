@@ -35,8 +35,8 @@ pub struct ExpandedAlias<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum ObjectSelection {
-    Single(KObj),
-    Range(Vec<KObj>),
+    Single(usize),
+    Range(Vec<usize>),
     None,
 }
 
@@ -126,7 +126,11 @@ impl Env {
                 Green.paint("none")
             },
             match self.current_selection {
-                ObjectSelection::Single(ref obj) => obj.prompt_str(),
+                ObjectSelection::Single(ref objidx) => {
+                    self.item_at(*objidx)
+                        .map(|obj| obj.prompt_str())
+                        .unwrap_or(Red.paint("[invalid object selection]"))
+                }
                 ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
                 ObjectSelection::None => Yellow.paint("none"),
             }
@@ -237,26 +241,25 @@ impl Env {
     }
 
     /// get the item from the last list at the specified index
-    pub fn item_at(&self, index: usize) -> Option<KObj> {
-        self.last_objs
-            .as_ref()
-            .and_then(|lo| lo.get(index).map(|o| o.clone()))
+    pub fn item_at(&self, index: usize) -> Option<&KObj> {
+        self.last_objs.as_ref().and_then(|lo| lo.get(index))
     }
 
     pub fn set_current(&mut self, num: usize) {
         self.current_selection = match self.item_at(num) {
-            Some(obj) => ObjectSelection::Single(obj),
+            Some(_) => ObjectSelection::Single(num),
             None => ObjectSelection::None,
         };
         self.range_str = None;
         self.set_prompt();
     }
 
-    pub fn set_range(&mut self, range: Vec<KObj>) {
+    pub fn set_range(&mut self, range: Vec<usize>) {
         let range_str = if range.is_empty() {
             "Empty range".to_string()
         } else {
-            let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
+            let typ_str = self.item_at(*range.get(0).unwrap()).unwrap().type_str();
+            let mut r = format!("{} {}", range.len(), typ_str);
             if range.len() > 1 {
                 r.push('s');
             }
@@ -270,59 +273,58 @@ impl Env {
 
     pub fn current_pod(&self) -> Option<&KObj> {
         match self.current_selection {
-            ObjectSelection::Single(ref obj) => match obj.typ {
+            ObjectSelection::Single(objidx) => self.item_at(objidx).and_then(|obj| match obj.typ {
                 ObjType::Pod { .. } => Some(obj),
                 _ => None,
-            },
+            }),
             _ => None,
         }
     }
 
     // apply a function to each selected object.
-    pub fn apply_to_selection<F>(
-        &self,
-        writer: &mut ClickWriter,
-        sepfmt: Option<&str>,
-        mut f: F,
-    )
+    pub fn apply_to_selection<F>(&self, writer: &mut ClickWriter, sepfmt: Option<&str>, mut f: F)
     where
         F: FnMut(&KObj, &mut ClickWriter) -> (),
     {
         match self.current_selection() {
-            ObjectSelection::Single(obj) => {
-                f(&obj, writer);
-            }
+            ObjectSelection::Single(idx) => match self.item_at(*idx) {
+                Some(obj) => f(&obj, writer),
+                None => clickwriteln!(writer, "Invalid object selection"),
+            },
             ObjectSelection::Range(range) => {
-                if let Some(fmt) = sepfmt {
-                    let mut fmtvars = HashMap::new();
-                    for obj in range.iter() {
-                        fmtvars.insert("name".to_string(), obj.name());
-                        fmtvars.insert(
-                            "namespace".to_string(),
-                            obj.namespace
-                                .as_ref()
-                                .map(|n| n.as_str())
-                                .unwrap_or("[none]"),
-                        );
-                        match strfmt(fmt, &fmtvars) {
-                            Ok(sep) => {
-                                clickwriteln!(writer, "{}", sep);
-                                f(obj, writer)
-                            }
-                            Err(e) => {
-                                clickwriteln!(
-                                    writer,
-                                    "-- format of separater for {} failed: {} --",
-                                    obj.name(),
-                                    e
+                for idx in range.iter() {
+                    match self.item_at(*idx) {
+                        Some(obj) => {
+                            if let Some(fmt) = sepfmt {
+                                let mut fmtvars = HashMap::new();
+                                fmtvars.insert("name".to_string(), obj.name());
+                                fmtvars.insert(
+                                    "namespace".to_string(),
+                                    obj.namespace
+                                        .as_ref()
+                                        .map(|n| n.as_str())
+                                        .unwrap_or("[none]"),
                                 );
-                                f(obj, writer)
+                                match strfmt(fmt, &fmtvars) {
+                                    Ok(sep) => {
+                                        clickwriteln!(writer, "{}", sep);
+                                        f(obj, writer)
+                                    }
+                                    Err(e) => {
+                                        clickwriteln!(
+                                            writer,
+                                            "-- format of separater for {} failed: {} --",
+                                            obj.name(),
+                                            e
+                                        );
+                                        f(obj, writer)
+                                    }
+                                }
+                            } else {
+                                f(&obj, writer);
                             }
                         }
-                    }
-                } else {
-                    for obj in range.iter() {
-                        f(&obj, writer);
+                        None => clickwriteln!(writer, "Invalid object index in range"),
                     }
                 }
             }

@@ -1362,7 +1362,8 @@ command!(
             pushed_label = true;
         }
 
-        if let ObjectSelection::Single(obj) = env.current_selection() {
+        if let ObjectSelection::Single(idx) = env.current_selection() {
+            let obj = env.item_at(*idx).unwrap();
             if obj.is(ObjType::Node) {
                 if pushed_label {
                     urlstr.push('&');
@@ -1682,23 +1683,27 @@ command!(
             Some(Duration::new(20, 0)) // TODO what's a reasonable timeout here?
         };
 
-        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-            if obj.is_pod() {
-                do_logs(
-                    obj,
-                    env,
-                    &url_args,
-                    matches.value_of("container"),
-                    matches.value_of("output"),
-                    matches.is_present("editor"),
-                    matches.value_of("editor"),
-                    timeout,
-                    writer,
-                );
-            } else {
-                clickwriteln!(writer, "Logs only available on a pod");
-            }
-        });
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                if obj.is_pod() {
+                    do_logs(
+                        obj,
+                        env,
+                        &url_args,
+                        matches.value_of("container"),
+                        matches.value_of("output"),
+                        matches.is_present("editor"),
+                        matches.value_of("editor"),
+                        timeout,
+                        writer,
+                    );
+                } else {
+                    clickwriteln!(writer, "Logs only available on a pod");
+                }
+            },
+        );
     }
 );
 
@@ -1725,9 +1730,11 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-            obj.describe(&matches, env, writer)
-        });
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| obj.describe(&matches, env, writer),
+        );
     }
 );
 
@@ -1895,23 +1902,27 @@ command!(
                 (false, true) => "-i",
                 (false, false) => "",
             };
-            env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-                if obj.is_pod() {
-                    do_exec(
-                        env,
-                        obj,
-                        &kluster.name,
-                        &cmd,
-                        it_arg,
-                        &matches.value_of("container"),
-                        &matches.value_of("terminal"),
-                        matches.is_present("terminal"),
-                        writer,
-                    );
-                } else {
-                    clickwriteln!(writer, "Exec only possible on pods");
-                }
-            });
+            env.apply_to_selection(
+                writer,
+                Some(&env.click_config.range_separator),
+                |obj, writer| {
+                    if obj.is_pod() {
+                        do_exec(
+                            env,
+                            obj,
+                            &kluster.name,
+                            &cmd,
+                            it_arg,
+                            &matches.value_of("container"),
+                            &matches.value_of("terminal"),
+                            matches.is_present("terminal"),
+                            writer,
+                        );
+                    } else {
+                        clickwriteln!(writer, "Exec only possible on pods");
+                    }
+                },
+            );
         } else {
             writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
         }
@@ -2038,9 +2049,13 @@ command!(
         }
         let delete_body = delete_body.to_string();
 
-        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-            delete_obj(env, obj, &delete_body, writer);
-        });
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                delete_obj(env, obj, &delete_body, writer);
+            },
+        );
     }
 );
 
@@ -2107,13 +2122,17 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |_matches, env, writer| {
-        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-            if obj.is_pod() {
-                print_containers(obj, env, writer);
-            } else {
-                clickwriteln!(writer, "containers only possible on a Pod");
-            }
-        });
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                if obj.is_pod() {
+                    print_containers(obj, env, writer);
+                } else {
+                    clickwriteln!(writer, "containers only possible on a Pod");
+                }
+            },
+        );
     }
 );
 
@@ -2171,9 +2190,13 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |_matches, env, writer| {
-        env.apply_to_selection(writer, Some(&env.click_config.range_separator), |obj, writer| {
-            print_events(obj, env, writer);
-        });
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                print_events(obj, env, writer);
+            },
+        );
     }
 );
 

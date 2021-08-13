@@ -14,7 +14,7 @@
 
 use crate::cmd::Cmd;
 //use config::Alias;
-use crate::env::{Env, ObjectSelection};
+use crate::env::Env;
 use crate::kobj::ObjType;
 
 use rustyline::completion::{Completer, Pair};
@@ -279,16 +279,19 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
-    if let ObjectSelection::Single(obj) = env.current_selection() {
-        if let ObjType::Pod { ref containers } = obj.typ {
-            for cont in containers.iter() {
-                if let Some(rest) = cont.strip_prefix(prefix) {
-                    v.push(Pair {
-                        display: cont.clone(),
-                        replacement: rest.to_string(),
-                    });
+    if let Some(pod) = env.current_pod() {
+        match pod.typ {
+            ObjType::Pod { ref containers } => {
+                for cont in containers.iter() {
+                    if let Some(rest) = cont.strip_prefix(prefix) {
+                        v.push(Pair {
+                            display: cont.clone(),
+                            replacement: rest.to_string(),
+                        });
+                    }
                 }
             }
+            _ => {}
         }
     }
     v

@@ -181,7 +181,7 @@ impl CommandProcessor {
             Box::new(crate::cmd::Delete::new()),
             Box::new(crate::cmd::UtcCmd::new()),
             //Box::new(crate::cmd::Namespaces::new()),
-            Box::new(crate::::command::namespaces::Namespaces::new()),
+            Box::new(crate::command::namespaces::Namespaces::new()),
             Box::new(crate::cmd::Secrets::new()),
             Box::new(crate::cmd::PortForward::new()),
             Box::new(crate::cmd::PortForwards::new()),

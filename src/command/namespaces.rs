@@ -1,15 +1,15 @@
 
 
 use clap::{App, Arg};
-use env:: Env;
+use crate::env::Env;
 use std::io::{stderr, Write};
 use rustyline::completion::Pair as RustlinePair;
-use output::ClickWriter;
-use cmd::{Cmd, exec_match, start_clap};
+use crate::output::ClickWriter;
+use crate::cmd::{Cmd, exec_match, start_clap};
 use std::collections::HashMap;
 use std::cell::RefCell;
 use ansi_term::Colour::Yellow;
-use completer;
+use crate::completer;
 
 use k8s_openapi::api::core::v1 as api;
 use k8s_openapi::List;
@@ -29,7 +29,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, _writer| {
-        let _regex = match ::table::get_regex(&matches) {
+        let _regex = match crate::table::get_regex(&matches) {
             Ok(r) => r,
             Err(s) => {
                 write!(stderr(), "{}\n", s).unwrap_or(());

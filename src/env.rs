@@ -129,7 +129,7 @@ impl Env {
                 ObjectSelection::Single(ref objidx) => {
                     self.item_at(*objidx)
                         .map(|obj| obj.prompt_str())
-                        .unwrap_or(Red.paint("[invalid object selection]"))
+                        .unwrap_or_else(|| Red.paint("[invalid object selection]"))
                 }
                 ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
                 ObjectSelection::None => Yellow.paint("none"),
@@ -284,11 +284,11 @@ impl Env {
     // apply a function to each selected object.
     pub fn apply_to_selection<F>(&self, writer: &mut ClickWriter, sepfmt: Option<&str>, mut f: F)
     where
-        F: FnMut(&KObj, &mut ClickWriter) -> (),
+        F: FnMut(&KObj, &mut ClickWriter),
     {
         match self.current_selection() {
             ObjectSelection::Single(idx) => match self.item_at(*idx) {
-                Some(obj) => f(&obj, writer),
+                Some(obj) => f(obj, writer),
                 None => clickwriteln!(writer, "Invalid object selection"),
             },
             ObjectSelection::Range(range) => {
@@ -300,10 +300,7 @@ impl Env {
                                 fmtvars.insert("name".to_string(), obj.name());
                                 fmtvars.insert(
                                     "namespace".to_string(),
-                                    obj.namespace
-                                        .as_ref()
-                                        .map(|n| n.as_str())
-                                        .unwrap_or("[none]"),
+                                    obj.namespace.as_deref().unwrap_or("[none]"),
                                 );
                                 match strfmt(fmt, &fmtvars) {
                                     Ok(sep) => {
@@ -321,7 +318,7 @@ impl Env {
                                     }
                                 }
                             } else {
-                                f(&obj, writer);
+                                f(obj, writer);
                             }
                         }
                         None => clickwriteln!(writer, "Invalid object index in range"),

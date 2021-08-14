@@ -280,18 +280,15 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
 pub fn container_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let mut v = vec![];
     if let Some(pod) = env.current_pod() {
-        match pod.typ {
-            ObjType::Pod { ref containers } => {
-                for cont in containers.iter() {
-                    if let Some(rest) = cont.strip_prefix(prefix) {
-                        v.push(Pair {
-                            display: cont.clone(),
-                            replacement: rest.to_string(),
-                        });
-                    }
+        if let ObjType::Pod { ref containers } = pod.typ {
+            for cont in containers.iter() {
+                if let Some(rest) = cont.strip_prefix(prefix) {
+                    v.push(Pair {
+                        display: cont.clone(),
+                        replacement: rest.to_string(),
+                    });
                 }
             }
-            _ => {}
         }
     }
     v

@@ -156,6 +156,12 @@ impl ClickWriter {
     }
 }
 
+impl Default for ClickWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Write for ClickWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         match self.output {

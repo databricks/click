@@ -282,7 +282,6 @@ impl CommandProcessor {
                         }
                     }
                 }
-
                 let parts_vec: Vec<String> = Parser::new(left).map(|x| x.2).collect();
                 let mut parts = parts_vec.iter().map(|s| &**s);
                 let env = Rc::get_mut(&mut self.env).unwrap();
@@ -291,29 +290,21 @@ impl CommandProcessor {
                     if let Ok(num) = (cmdstr as &str).parse::<usize>() {
                         env.set_current(num);
                     } else if let Some(range) = try_parse_range(cmdstr) {
-                        let mut objs = vec![];
-                        for i in range {
-                            match env.item_at(i) {
-                                Some(obj) => objs.push(obj),
-                                None => break,
-                            }
-                        }
-                        if objs.is_empty() {
+                        let idxs: Vec<usize> =
+                            range.take_while(|i| env.item_at(*i).is_some()).collect();
+                        if idxs.is_empty() {
                             env.clear_current();
                         } else {
-                            env.set_range(objs);
+                            env.set_range(idxs);
                         }
-                    } else if let Some(range) = try_parse_csl(cmdstr) {
-                        let mut objs = vec![];
-                        for i in range {
-                            if let Some(obj) = env.item_at(i) {
-                                objs.push(obj)
-                            }
-                        }
-                        if objs.is_empty() {
+                    } else if let Some(range) = try_parse_csl(left) {
+                        // parse whole thing before sep since we might type "1, 2, 3" with spaces
+                        let idxs: Vec<usize> =
+                            range.filter(|i| env.item_at(*i).is_some()).collect();
+                        if idxs.is_empty() {
                             env.clear_current();
                         } else {
-                            env.set_range(objs);
+                            env.set_range(idxs);
                         }
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
@@ -499,7 +490,7 @@ each pod in the range, and write it to /tmp/podname-rfc3339date.log:
 mod tests {
     use super::*;
     use crate::config::{get_test_config, Alias, ClickConfig};
-    use crate::env::{LastList, ObjectSelection};
+    use crate::env::ObjectSelection;
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
@@ -583,14 +574,6 @@ mod tests {
         }
     }
 
-    fn make_node_kobj(name: &str) -> KObj {
-        KObj {
-            name: name.to_string(),
-            namespace: None,
-            typ: ObjType::Node,
-        }
-    }
-
     #[test]
     fn test_help() {
         let mut p = get_processor();
@@ -659,21 +642,21 @@ Other help topics (type 'help [TOPIC]' for details)
         );
         let node = make_node("ns1");
         let nodelist = crate::kube::NodeList { items: vec![node] };
-        let ll = LastList::NodeList(nodelist);
-        env.set_lastlist(ll);
+        env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),
             commands,
         );
         p.process_line("0", ClickWriter::new());
+        assert_eq!(p.env.current_selection(), &ObjectSelection::Single(0));
         assert_eq!(
-            p.env.current_selection(),
-            &ObjectSelection::Single(KObj {
+            p.env.item_at(0).unwrap(),
+            &KObj {
                 name: "ns1".to_string(),
                 namespace: None,
                 typ: ObjType::Node,
-            })
+            }
         );
 
         p.process_line("1", ClickWriter::new());
@@ -694,8 +677,7 @@ Other help topics (type 'help [TOPIC]' for details)
         let nodelist = crate::kube::NodeList {
             items: vec![node1, node2, node3],
         };
-        let ll = LastList::NodeList(nodelist);
-        env.set_lastlist(ll);
+        env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),
@@ -705,24 +687,17 @@ Other help topics (type 'help [TOPIC]' for details)
         p.process_line("0..=1", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![make_node_kobj("ns1"), make_node_kobj("ns2"),])
+            &ObjectSelection::Range(vec![0, 1])
         );
 
         p.process_line("0..", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![
-                make_node_kobj("ns1"),
-                make_node_kobj("ns2"),
-                make_node_kobj("ns3"),
-            ])
+            &ObjectSelection::Range(vec![0, 1, 2])
         );
 
         p.process_line("0..1", ClickWriter::new());
-        assert_eq!(
-            p.env.current_selection(),
-            &ObjectSelection::Range(vec![make_node_kobj("ns1")])
-        );
+        assert_eq!(p.env.current_selection(), &ObjectSelection::Range(vec![0]));
 
         p.process_line("8..10", ClickWriter::new());
         assert_eq!(p.env.current_selection(), &ObjectSelection::None);
@@ -730,19 +705,19 @@ Other help topics (type 'help [TOPIC]' for details)
         p.process_line("0,2", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![make_node_kobj("ns1"), make_node_kobj("ns3"),])
+            &ObjectSelection::Range(vec![0, 2])
         );
 
         p.process_line("2,1", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![make_node_kobj("ns3"), make_node_kobj("ns2"),])
+            &ObjectSelection::Range(vec![2, 1])
         );
 
-        p.process_line("2,1,6", ClickWriter::new());
+        p.process_line("9, 2, 1, 6", ClickWriter::new());
         assert_eq!(
             p.env.current_selection(),
-            &ObjectSelection::Range(vec![make_node_kobj("ns3"), make_node_kobj("ns2"),])
+            &ObjectSelection::Range(vec![2, 1])
         );
 
         p.process_line("8,10", ClickWriter::new());

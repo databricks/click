@@ -22,6 +22,7 @@ use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::io::Write;
 
@@ -37,8 +38,7 @@ lazy_static! {
 
 enum CellSpecTxt<'a> {
     Index,
-    Str(&'a str),
-    String(String),
+    Str(Cow<'a, str>),
 }
 
 /// Holds a specification for a prettytable cell
@@ -49,22 +49,6 @@ pub struct CellSpec<'a> {
 }
 
 impl<'a> CellSpec<'a> {
-    pub fn new(txt: &'a str) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::Str(txt),
-            style: None,
-            align: None,
-        }
-    }
-
-    pub fn new_owned(txt: String) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::String(txt),
-            style: None,
-            align: None,
-        }
-    }
-
     pub fn new_index() -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Index,
@@ -73,7 +57,7 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_style(txt: &'a str, style: &'a str) -> CellSpec<'a> {
+    pub fn with_style(txt: Cow<'a, str>, style: &'a str) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
             style: Some(style),
@@ -81,17 +65,9 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_style_owned(txt: String, style: &'a str) -> CellSpec<'a> {
+    pub fn with_align(txt: Cow<'a, str>, align: format::Alignment) -> CellSpec<'a> {
         CellSpec {
-            txt: CellSpecTxt::String(txt),
-            style: Some(style),
-            align: None,
-        }
-    }
-
-    pub fn with_align_owned(txt: String, align: format::Alignment) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::String(txt),
+            txt: CellSpecTxt::Str(txt),
             style: None,
             align: Some(align),
         }
@@ -105,7 +81,6 @@ impl<'a> CellSpec<'a> {
                 c
             }
             CellSpecTxt::Str(s) => Cell::new(s),
-            CellSpecTxt::String(s) => Cell::new(s.as_str()),
         };
 
         if let Some(a) = self.align {
@@ -120,10 +95,39 @@ impl<'a> CellSpec<'a> {
     }
 
     pub fn matches(&self, regex: &Regex) -> bool {
-        match self.txt {
+        match &self.txt {
             CellSpecTxt::Index => false,
-            CellSpecTxt::Str(s) => regex.is_match(s),
-            CellSpecTxt::String(ref s) => regex.is_match(s),
+            CellSpecTxt::Str(s) => regex.is_match(&s),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for CellSpec<'a> {
+    fn from(s: &'a str) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(Cow::Borrowed(s)),
+            style: None,
+            align: None,
+        }
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for CellSpec<'a> {
+    fn from(c: Cow<'a, str>) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(c),
+            style: None,
+            align: None,
+        }
+    }
+}
+
+impl<'a> From<String> for CellSpec<'a> {
+    fn from(s: String) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(Cow::Owned(s)),
+            style: None,
+            align: None,
         }
     }
 }

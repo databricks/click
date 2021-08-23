@@ -44,6 +44,7 @@ use serde_json::Value;
 use strfmt::strfmt;
 
 use std::array::IntoIter;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp;
 use std::collections::HashMap;
@@ -367,14 +368,14 @@ fn has_waiting(pod: &Pod) -> bool {
 }
 
 // Figure out the right thing to print for the phase of the given pod
-fn phase_str(pod: &Pod) -> String {
+fn phase_str<'a>(pod: &Pod) -> Cow<'a, str> {
     if pod.metadata.deletion_timestamp.is_some() {
         // Was deleted
-        "Terminating".to_owned()
+        "Terminating".into()
     } else if has_waiting(pod) {
-        "ContainerCreating".to_owned()
+        "ContainerCreating".into()
     } else {
-        pod.status.phase.clone()
+        pod.status.phase.clone().into()
     }
 }
 
@@ -454,25 +455,25 @@ fn create_podlist_specs<'a>(
 ) -> (Pod, Vec<CellSpec<'a>>) {
     let mut specs = vec![
         CellSpec::new_index(),
-        CellSpec::new_owned(pod.metadata.name.clone()),
+        pod.metadata.name.clone().into(),
     ];
 
     let ready_str = match ready_counts(&pod) {
-        Some((ready, count)) => format!("{}/{}", ready, count),
-        None => "Unknown".to_owned(),
+        Some((ready, count)) => Cow::Owned(format!("{}/{}", ready, count)),
+        None => Cow::Borrowed("Unknown"),
     };
-    specs.push(CellSpec::new_owned(ready_str));
+    specs.push(ready_str.into());
 
     {
         let ps = phase_str(&pod);
         let ss = phase_style(&ps);
-        specs.push(CellSpec::with_style_owned(ps, ss));
+        specs.push(CellSpec::with_style(ps.into(), ss));
     }
 
     if let Some(ts) = pod.metadata.creation_timestamp {
-        specs.push(CellSpec::new_owned(time_since(ts)));
+        specs.push(time_since(ts).into());
     } else {
-        specs.push(CellSpec::new("unknown"));
+        specs.push("unknown".into());
     }
 
     let restarts = pod
@@ -481,30 +482,30 @@ fn create_podlist_specs<'a>(
         .as_ref()
         .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
         .unwrap_or(0);
-    specs.push(CellSpec::new_owned(format!("{}", restarts)));
+    specs.push(restarts.to_string().into());
 
     if show_labels {
-        specs.push(CellSpec::new_owned(keyval_string(&pod.metadata.labels)));
+        specs.push(keyval_string(&pod.metadata.labels).into());
     }
 
     if show_annot {
-        specs.push(CellSpec::new_owned(keyval_string(
+        specs.push(keyval_string(
             &pod.metadata.annotations,
-        )));
+        ).into());
     }
 
     if show_node {
-        specs.push(CellSpec::new_owned(match pod.spec.node_name {
-            Some(ref nn) => nn.clone(),
-            None => "[Unknown]".to_owned(),
-        }));
+        specs.push(match pod.spec.node_name {
+            Some(ref nn) => nn.clone().into(),
+            None => "[Unknown]".into(),
+        });
     }
 
     if show_namespace {
-        specs.push(CellSpec::new_owned(match pod.metadata.namespace {
-            Some(ref ns) => ns.clone(),
-            None => "[Unknown]".to_owned(),
-        }));
+        specs.push(match pod.metadata.namespace {
+            Some(ref ns) => ns.clone().into(),
+            None => "[Unknown]".into(),
+        });
     }
     (pod, specs)
 }
@@ -764,13 +765,13 @@ fn print_nodelist(
             };
 
             specs.push(CellSpec::new_index());
-            specs.push(CellSpec::new_owned(node.metadata.name.clone()));
-            specs.push(CellSpec::with_style_owned(state, state_style));
-            specs.push(CellSpec::new_owned(time_since(
+            specs.push(node.metadata.name.clone().into());
+            specs.push(CellSpec::with_style(state.into(), state_style));
+            specs.push(time_since(
                 node.metadata.creation_timestamp.unwrap(),
-            )));
+            ).into());
             if show_labels {
-                specs.push(CellSpec::new_owned(keyval_string(&node.metadata.labels)));
+                specs.push(keyval_string(&node.metadata.labels).into());
             }
         }
         (node, specs)
@@ -866,28 +867,28 @@ fn print_deployments(
     let deps_specs = to_map.map(|dep| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(dep.metadata.name.clone()));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", dep.spec.replicas),
+        specs.push(dep.metadata.name.clone().into());
+        specs.push(CellSpec::with_align(
+            format!("{}", dep.spec.replicas).into(),
             format::Alignment::CENTER,
         ));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", dep.status.replicas),
+        specs.push(CellSpec::with_align(
+            format!("{}", dep.status.replicas).into(),
             format::Alignment::CENTER,
         ));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", dep.status.updated),
+        specs.push(CellSpec::with_align(
+            format!("{}", dep.status.updated).into(),
             format::Alignment::CENTER,
         ));
-        specs.push(CellSpec::with_align_owned(
-            format!("{}", dep.status.available),
+        specs.push(CellSpec::with_align(
+            format!("{}", dep.status.available).into(),
             format::Alignment::CENTER,
         ));
-        specs.push(CellSpec::new_owned(time_since(
+        specs.push(time_since(
             dep.metadata.creation_timestamp.unwrap(),
-        )));
+        ).into());
         if show_labels {
-            specs.push(CellSpec::new_owned(keyval_string(&dep.metadata.labels)));
+            specs.push(keyval_string(&dep.metadata.labels).into());
         }
         (dep, specs)
     });
@@ -904,9 +905,9 @@ fn print_deployments(
 }
 
 // service utility functions
-fn get_external_ip(service: &Service) -> String {
+fn get_external_ip<'a>(service: &Service) -> Cow<'a, str> {
     if let Some(ref eips) = service.spec.external_ips {
-        shorten_to(eips.join(", "), 18)
+        shorten_to(eips.join(", "), 18).into()
     } else {
         // look in the status for the elb name
         if let Some(ing_val) = service.status.pointer("/loadBalancer/ingress") {
@@ -924,17 +925,17 @@ fn get_external_ip(service: &Service) -> String {
                     })
                     .collect();
                 let s = strs.join(", ");
-                shorten_to(s, 18)
+                shorten_to(s, 18).into()
             } else {
-                "<none>".to_owned()
+                "<none>".into()
             }
         } else {
-            "<none>".to_owned()
+            "<none>".into()
         }
     }
 }
 
-fn get_ports(service: &Service) -> String {
+fn get_ports<'a>(service: &Service) -> Cow<'a, str> {
     let port_strs: Vec<String> = if let Some(ref ports) = service.spec.ports {
         ports
             .iter()
@@ -949,7 +950,7 @@ fn get_ports(service: &Service) -> String {
     } else {
         vec!["<none>".to_owned()]
     };
-    port_strs.join(",")
+    port_strs.join(",").into()
 }
 
 /// Print out the specified list of services in a pretty format
@@ -989,12 +990,12 @@ fn print_servicelist(
     }
     table.set_titles(title_row);
 
-    let extipsandports: Vec<(String, String)> = servlist
+    let extipsandports: Vec<(Cow<'_, str>, Cow<'_, str>)> = servlist
         .items
         .iter()
         .map(|s| (get_external_ip(s), get_ports(s)))
         .collect();
-    let mut servswithipportss: Vec<(Service, (String, String))> =
+    let mut servswithipportss: Vec<(Service, (Cow<'_, str>, Cow<'_, str>))> =
         servlist.items.into_iter().zip(extipsandports).collect();
 
     if let Some(sortcol) = sort {
@@ -1043,7 +1044,7 @@ fn print_servicelist(
         }
     }
 
-    let to_map: Box<dyn Iterator<Item = (Service, (String, String))>> = if reverse {
+    let to_map: Box<dyn Iterator<Item = (Service, (Cow<'_, str>, Cow<'_, str>))>> = if reverse {
         Box::new(servswithipportss.into_iter().rev())
     } else {
         Box::new(servswithipportss.into_iter())
@@ -1052,29 +1053,28 @@ fn print_servicelist(
     let service_specs = to_map.map(|(service, eipp)| {
         let mut specs = vec![
             CellSpec::new_index(),
-            CellSpec::new_owned(service.metadata.name.clone()),
-            CellSpec::new_owned(
-                service
-                    .spec
-                    .cluster_ip
-                    .as_ref()
-                    .unwrap_or(&"<none>".to_owned())
-                    .to_string(),
-            ),
-            CellSpec::new_owned(eipp.0),
-            CellSpec::new_owned(eipp.1),
-            CellSpec::new_owned(time_since(service.metadata.creation_timestamp.unwrap())),
+            service.metadata.name.clone().into(),
+            service
+                .spec
+                .cluster_ip
+                .as_ref()
+                .unwrap_or(&"<none>".to_owned())
+                .to_string()
+                .into(),
+            eipp.0.into(),
+            eipp.1.into(),
+            time_since(service.metadata.creation_timestamp.unwrap()).into(),
         ];
 
         if show_labels {
-            specs.push(CellSpec::new_owned(keyval_string(&service.metadata.labels)));
+            specs.push(keyval_string(&service.metadata.labels).into());
         }
 
         if show_namespace {
-            specs.push(CellSpec::new_owned(match service.metadata.namespace {
-                Some(ref ns) => ns.clone(),
-                None => "[Unknown]".to_owned(),
-            }));
+            specs.push(match service.metadata.namespace {
+                Some(ref ns) => ns.clone().into(),
+                None => "[Unknown]".into(),
+            });
         }
 
         (service, specs)
@@ -1102,12 +1102,12 @@ fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut C
     table.set_titles(row!["Name", "Status", "Age"]);
 
     let ns_specs = nslist.items.iter().map(|ns| {
-        let mut specs = vec![CellSpec::new(ns.metadata.name.as_str())];
+        let mut specs = vec![ns.metadata.name.as_str().into()];
         let ps = ns.status.phase.as_str();
-        specs.push(CellSpec::with_style(ps, phase_style_str(ps)));
-        specs.push(CellSpec::new_owned(time_since(
+        specs.push(CellSpec::with_style(ps.into(), phase_style_str(ps)));
+        specs.push(time_since(
             ns.metadata.creation_timestamp.unwrap(),
-        )));
+        ).into());
         (ns, specs)
     });
 
@@ -1168,13 +1168,13 @@ command!(
             let ctxs = contexts
                 .iter()
                 .map(|context| {
-                    let mut row = Vec::new();
+                    let mut row: Vec<CellSpec> = Vec::new();
                     let cluster = match env.config.clusters.get(*context) {
                         Some(c) => c.server.as_str(),
                         None => "[no cluster for context]",
                     };
-                    row.push(CellSpec::with_style(context, "FR"));
-                    row.push(CellSpec::new(cluster));
+                    row.push(CellSpec::with_style(context.clone().into(), "FR"));
+                    row.push(cluster.into());
                     (context, row)
                 })
                 .collect();
@@ -2583,21 +2583,21 @@ fn print_replicasets(
     let rss_specs = list.items.into_iter().map(|rs| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(
-            val_str("/metadata/name", &rs, "<none>").into_owned(),
-        ));
-        specs.push(CellSpec::new_owned(format!(
+        specs.push(
+            val_str("/metadata/name", &rs, "<none>").into_owned().into()
+        );
+        specs.push(format!(
             "{}",
             val_u64("/spec/replicas", &rs, 0)
-        )));
-        specs.push(CellSpec::new_owned(format!(
+        ).into());
+        specs.push(format!(
             "{}",
             val_u64("/status/replicas", &rs, 0)
-        )));
-        specs.push(CellSpec::new_owned(format!(
+        ).into());
+        specs.push(format!(
             "{}",
             val_u64("/status/readyReplicas", &rs, 0)
-        )));
+        ).into());
         (rs, specs)
     });
 
@@ -2671,21 +2671,21 @@ fn print_statefulsets(
     let statefulsets_specs = list.items.into_iter().map(|statefulset| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(
-            val_str("/metadata/name", &statefulset, "<none>").into_owned(),
-        ));
-        specs.push(CellSpec::new_owned(format!(
+        specs.push(
+            val_str("/metadata/name", &statefulset, "<none>").into_owned().into()
+        );
+        specs.push(format!(
             "{}",
             val_u64("/spec/replicas", &statefulset, 0)
-        )));
-        specs.push(CellSpec::new_owned(format!(
+        ).into());
+        specs.push(format!(
             "{}",
             val_u64("/status/currentReplicas", &statefulset, 0)
-        )));
-        specs.push(CellSpec::new_owned(format!(
+        ).into());
+        specs.push(format!(
             "{}",
             val_u64("/status/readyReplicas", &statefulset, 0)
-        )));
+        ).into());
         (statefulset, specs)
     });
 
@@ -2769,12 +2769,12 @@ fn print_configmaps(
         let mut specs = Vec::new();
         let metadata: Metadata = get_val_as("/metadata", &cm).unwrap();
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(metadata.name));
+        specs.push(metadata.name.into());
         let data_count = val_item_count("/data", &cm);
-        specs.push(CellSpec::new_owned(format!("{}", data_count)));
-        specs.push(CellSpec::new_owned(time_since(
+        specs.push(format!("{}", data_count).into());
+        specs.push(time_since(
             metadata.creation_timestamp.unwrap(),
-        )));
+        ).into());
         (cm, specs)
     });
 
@@ -2849,16 +2849,16 @@ fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWrite
         let metadata: Metadata = get_val_as("/metadata", &rs).unwrap();
 
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(metadata.name));
-        specs.push(CellSpec::new_owned(
-            val_str("/type", &rs, "<none>").into_owned(),
-        ));
-        specs.push(CellSpec::new_owned(
-            val_item_count("/data", &rs).to_string(),
-        ));
-        specs.push(CellSpec::new_owned(time_since(
+        specs.push(metadata.name.into());
+        specs.push(
+            val_str("/type", &rs, "<none>").into_owned().into()
+        );
+        specs.push(
+            val_item_count("/data", &rs).to_string().into()
+        );
+        specs.push(time_since(
             metadata.creation_timestamp.unwrap(),
-        )));
+        ).into());
         (rs, specs)
     });
 
@@ -3284,20 +3284,22 @@ fn print_jobs(
         let metadata: Metadata = get_val_as("/metadata", &job).unwrap();
 
         specs.push(CellSpec::new_index());
-        specs.push(CellSpec::new_owned(metadata.name.clone()));
-        specs.push(CellSpec::new_owned(
+        specs.push(metadata.name.clone().into());
+        specs.push(
             get_val_as::<u32>("/spec/parallelism", &job)
                 .unwrap()
-                .to_string(),
-        ));
-        specs.push(CellSpec::new_owned(
+                .to_string()
+                .into()
+        );
+        specs.push(
             get_val_as::<u32>("/spec/completions", &job)
                 .unwrap()
-                .to_string(),
-        ));
-        specs.push(CellSpec::new_owned(time_since(
+                .to_string()
+                .into()
+        );
+        specs.push(time_since(
             metadata.creation_timestamp.unwrap(),
-        )));
+        ).into());
 
         (job, specs)
     });

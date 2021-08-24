@@ -132,6 +132,18 @@ impl<'a> From<String> for CellSpec<'a> {
     }
 }
 
+impl<'a, T> From<Option<T>> for CellSpec<'a>
+where
+    T: Into<CellSpec<'a>>,
+{
+    fn from(opt: Option<T>) -> Self {
+        match opt {
+            Some(v) => v.into(),
+            None => "Unknown".into(),
+        }
+    }
+}
+
 pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
     match matches.value_of("regex") {
         Some(pattern) => {
@@ -203,6 +215,20 @@ pub fn print_table<'a, T>(
     }
     table.set_format(*TBLFMT);
     if !term_print_table(table, writer) {
+        table.print(writer).unwrap_or(0);
+    }
+}
+
+#[allow(clippy::ptr_arg)]
+pub fn print_table_kapi<'a>(titles: Row, specs: Vec<Vec<CellSpec<'a>>>, writer: &mut ClickWriter) {
+    let mut table = Table::new();
+    table.set_titles(titles);
+    for (index, t_spec) in specs.iter().enumerate() {
+        let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index)).collect();
+        table.add_row(Row::new(row_vec));
+    }
+    table.set_format(*TBLFMT);
+    if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(0);
     }
 }

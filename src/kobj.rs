@@ -23,6 +23,7 @@ pub enum ObjType {
     ConfigMap,
     Secret,
     Job,
+    Namespace,
 }
 
 /// An object we can have as a "current" thing
@@ -160,6 +161,7 @@ impl KObj {
             ObjType::ConfigMap => "ConfigMap",
             ObjType::Secret => "Secret",
             ObjType::Job => "Job",
+            ObjType::Namespace => "Namespace",
         }
     }
 
@@ -174,6 +176,7 @@ impl KObj {
             ObjType::ConfigMap => Purple.bold().paint(self.name.as_str()),
             ObjType::Secret => Red.bold().paint(self.name.as_str()),
             ObjType::Job => Purple.bold().paint(self.name.as_str()),
+            ObjType::Namespace => Green.bold().paint(self.name.as_str()),
         }
     }
 
@@ -208,6 +211,7 @@ impl KObj {
             }
             ObjType::Secret => format!("/api/v1/namespaces/{}/secrets/{}", namespace, self.name),
             ObjType::Job => format!("/apis/batch/v1/namespaces/{}/jobs/{}", namespace, self.name),
+            ObjType::Namespace => format!("/apis/v1/namespaces/{}", self.name),
         }
     }
 

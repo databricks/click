@@ -453,10 +453,7 @@ fn create_podlist_specs<'a>(
     show_node: bool,
     show_namespace: bool,
 ) -> (Pod, Vec<CellSpec<'a>>) {
-    let mut specs = vec![
-        CellSpec::new_index(),
-        pod.metadata.name.clone().into(),
-    ];
+    let mut specs = vec![CellSpec::new_index(), pod.metadata.name.clone().into()];
 
     let ready_str = match ready_counts(&pod) {
         Some((ready, count)) => Cow::Owned(format!("{}/{}", ready, count)),
@@ -489,9 +486,7 @@ fn create_podlist_specs<'a>(
     }
 
     if show_annot {
-        specs.push(keyval_string(
-            &pod.metadata.annotations,
-        ).into());
+        specs.push(keyval_string(&pod.metadata.annotations).into());
     }
 
     if show_node {
@@ -767,9 +762,7 @@ fn print_nodelist(
             specs.push(CellSpec::new_index());
             specs.push(node.metadata.name.clone().into());
             specs.push(CellSpec::with_style(state.into(), state_style));
-            specs.push(time_since(
-                node.metadata.creation_timestamp.unwrap(),
-            ).into());
+            specs.push(time_since(node.metadata.creation_timestamp.unwrap()).into());
             if show_labels {
                 specs.push(keyval_string(&node.metadata.labels).into());
             }
@@ -884,9 +877,7 @@ fn print_deployments(
             format!("{}", dep.status.available).into(),
             format::Alignment::CENTER,
         ));
-        specs.push(time_since(
-            dep.metadata.creation_timestamp.unwrap(),
-        ).into());
+        specs.push(time_since(dep.metadata.creation_timestamp.unwrap()).into());
         if show_labels {
             specs.push(keyval_string(&dep.metadata.labels).into());
         }
@@ -1096,28 +1087,26 @@ fn print_servicelist(
     }
 }
 
-/// Print out the specified list of deployments in a pretty format
-fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut ClickWriter) {
-    let mut table = Table::new();
-    table.set_titles(row!["Name", "Status", "Age"]);
+// /// Print out the specified list of deployments in a pretty format
+// fn print_namespaces(nslist: &NamespaceList, regex: Option<Regex>, writer: &mut ClickWriter) {
+//     let mut table = Table::new();
+//     table.set_titles(row!["Name", "Status", "Age"]);
 
-    let ns_specs = nslist.items.iter().map(|ns| {
-        let mut specs = vec![ns.metadata.name.as_str().into()];
-        let ps = ns.status.phase.as_str();
-        specs.push(CellSpec::with_style(ps.into(), phase_style_str(ps)));
-        specs.push(time_since(
-            ns.metadata.creation_timestamp.unwrap(),
-        ).into());
-        (ns, specs)
-    });
+//     let ns_specs = nslist.items.iter().map(|ns| {
+//         let mut specs = vec![ns.metadata.name.as_str().into()];
+//         let ps = ns.status.phase.as_str();
+//         specs.push(CellSpec::with_style(ps.into(), phase_style_str(ps)));
+//         specs.push(time_since(ns.metadata.creation_timestamp.unwrap()).into());
+//         (ns, specs)
+//     });
 
-    let filtered = match regex {
-        Some(r) => crate::table::filter(ns_specs, r),
-        None => ns_specs.collect(),
-    };
+//     let filtered = match regex {
+//         Some(r) => crate::table::filter(ns_specs, r),
+//         None => ns_specs.collect(),
+//     };
 
-    crate::table::print_table(&mut table, &filtered, writer);
-}
+//     crate::table::print_table(&mut table, &filtered, writer);
+// }
 
 // Command defintions below.  See documentation for the command! macro for an explanation of
 // arguments passed here
@@ -2583,21 +2572,10 @@ fn print_replicasets(
     let rss_specs = list.items.into_iter().map(|rs| {
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
-        specs.push(
-            val_str("/metadata/name", &rs, "<none>").into_owned().into()
-        );
-        specs.push(format!(
-            "{}",
-            val_u64("/spec/replicas", &rs, 0)
-        ).into());
-        specs.push(format!(
-            "{}",
-            val_u64("/status/replicas", &rs, 0)
-        ).into());
-        specs.push(format!(
-            "{}",
-            val_u64("/status/readyReplicas", &rs, 0)
-        ).into());
+        specs.push(val_str("/metadata/name", &rs, "<none>").into_owned().into());
+        specs.push(format!("{}", val_u64("/spec/replicas", &rs, 0)).into());
+        specs.push(format!("{}", val_u64("/status/replicas", &rs, 0)).into());
+        specs.push(format!("{}", val_u64("/status/readyReplicas", &rs, 0)).into());
         (rs, specs)
     });
 
@@ -2672,20 +2650,13 @@ fn print_statefulsets(
         let mut specs = Vec::new();
         specs.push(CellSpec::new_index());
         specs.push(
-            val_str("/metadata/name", &statefulset, "<none>").into_owned().into()
+            val_str("/metadata/name", &statefulset, "<none>")
+                .into_owned()
+                .into(),
         );
-        specs.push(format!(
-            "{}",
-            val_u64("/spec/replicas", &statefulset, 0)
-        ).into());
-        specs.push(format!(
-            "{}",
-            val_u64("/status/currentReplicas", &statefulset, 0)
-        ).into());
-        specs.push(format!(
-            "{}",
-            val_u64("/status/readyReplicas", &statefulset, 0)
-        ).into());
+        specs.push(format!("{}", val_u64("/spec/replicas", &statefulset, 0)).into());
+        specs.push(format!("{}", val_u64("/status/currentReplicas", &statefulset, 0)).into());
+        specs.push(format!("{}", val_u64("/status/readyReplicas", &statefulset, 0)).into());
         (statefulset, specs)
     });
 
@@ -2772,9 +2743,7 @@ fn print_configmaps(
         specs.push(metadata.name.into());
         let data_count = val_item_count("/data", &cm);
         specs.push(format!("{}", data_count).into());
-        specs.push(time_since(
-            metadata.creation_timestamp.unwrap(),
-        ).into());
+        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
         (cm, specs)
     });
 
@@ -2850,15 +2819,9 @@ fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWrite
 
         specs.push(CellSpec::new_index());
         specs.push(metadata.name.into());
-        specs.push(
-            val_str("/type", &rs, "<none>").into_owned().into()
-        );
-        specs.push(
-            val_item_count("/data", &rs).to_string().into()
-        );
-        specs.push(time_since(
-            metadata.creation_timestamp.unwrap(),
-        ).into());
+        specs.push(val_str("/type", &rs, "<none>").into_owned().into());
+        specs.push(val_item_count("/data", &rs).to_string().into());
+        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
         (rs, specs)
     });
 
@@ -3289,17 +3252,15 @@ fn print_jobs(
             get_val_as::<u32>("/spec/parallelism", &job)
                 .unwrap()
                 .to_string()
-                .into()
+                .into(),
         );
         specs.push(
             get_val_as::<u32>("/spec/completions", &job)
                 .unwrap()
                 .to_string()
-                .into()
+                .into(),
         );
-        specs.push(time_since(
-            metadata.creation_timestamp.unwrap(),
-        ).into());
+        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
 
         (job, specs)
     });

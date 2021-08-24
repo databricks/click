@@ -449,14 +449,12 @@ impl Config {
             )
         }
 
-        Ok(
-            crate::k8s::Context::new(
-                context_name,
-                endpoint,
-                ca_cert,
-                k8suser
-            )
-        )
+        Ok(crate::k8s::Context::new(
+            context_name,
+            endpoint,
+            ca_cert,
+            k8suser,
+        ))
     }
 }
 

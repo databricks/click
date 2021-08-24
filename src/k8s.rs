@@ -26,7 +26,10 @@ impl UserAuth {
     // construct an identity from a key and cert. need the endpoint to deceide which kind of
     // identity to use since rustls wants something different from nativetls, and we use rustls for
     // dns name hosts and native for ip hosts
-    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> UserAuth where PathBuf: From<P> {
+    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> UserAuth
+    where
+        PathBuf: From<P>,
+    {
         let key_buf = PathBuf::from(key);
         let cert_buf = PathBuf::from(cert);
         let host = endpoint.host().unwrap();
@@ -83,7 +86,10 @@ fn get_id(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Identity {
         };
 
         let mut cert_buf = Vec::new();
-        File::open(cert).unwrap().read_to_end(&mut cert_buf).unwrap();
+        File::open(cert)
+            .unwrap()
+            .read_to_end(&mut cert_buf)
+            .unwrap();
         let cert_pem = pem::parse(&cert_buf).unwrap();
 
         let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "").unwrap();
@@ -121,7 +127,7 @@ impl Context {
         let client = match auth {
             Some(auth) => match auth {
                 UserAuth::Ident(id) => client.identity(id),
-            }
+            },
             None => client,
         };
         Context {

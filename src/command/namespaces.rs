@@ -42,11 +42,7 @@ fn namespace_status<'a>(namespace: &'a api::Namespace) -> Option<Cow<'a, str>> {
     namespace
         .status
         .as_ref()
-        .and_then(|stat| {
-            stat.phase.as_ref().map(|p| {
-                p.into()
-            })
-        })
+        .and_then(|stat| stat.phase.as_ref().map(|p| p.into()))
 }
 
 command!(
@@ -81,16 +77,12 @@ command!(
             vec!["Name", "Age", "Status"],
             &ns_list,
             true,
-            &NS_EXTRACTORS,
+            Some(&NS_EXTRACTORS),
+            regex,
             namespace_to_kobj,
         );
 
-        let filtered = match regex {
-            Some(r) => crate::command::filter(rows.into_iter(), r),
-            None => rows,
-        };
-
-        print_table(row!["####", "Name", "Age", "Status"], filtered, writer);
+        print_table(row!["####", "Name", "Age", "Status"], rows, writer);
         env.set_last_objs(kobjs);
     }
 );

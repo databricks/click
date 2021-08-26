@@ -158,6 +158,23 @@ impl Context {
             .unwrap()
     }
 
+    pub fn read<T: k8s_openapi::Response + Debug>(
+        &self,
+        k8sreq: http::Request<Vec<u8>>,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        let response = self.execute(k8sreq);
+        let status_code: http::StatusCode = response.status();
+        match k8s_openapi::Response::try_from_parts(status_code, response.body()) {
+            Ok((res, _)) => Ok(res),
+            // Need more response data. We're blocking, so this is a hard error
+            Err(k8s_openapi::ResponseError::NeedMoreData) => {
+                return Err("failed to read enough data".into())
+            }
+            // Some other error, like the response body being malformed JSON or invalid UTF-8.
+            Err(err) => return Err(format!("error: {} {:?}", status_code, err).into()),
+        }
+    }
+
     pub fn execute_list<T: ListableResource + for<'de> Deserialize<'de> + Debug>(
         &self,
         k8sreq: http::Request<Vec<u8>>,

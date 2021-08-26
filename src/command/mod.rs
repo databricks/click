@@ -1,4 +1,5 @@
 pub mod namespaces;
+pub mod volumes;
 
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -28,7 +29,8 @@ pub fn build_specs<'a, T, F>(
     cols: Vec<&'static str>,
     list: &'a List<T>,
     include_index: bool,
-    extractors: &HashMap<String, Extractor<T>>,
+    extractors: Option<&HashMap<String, Extractor<T>>>,
+    regex: Option<Regex>,
     get_kobj: F,
 ) -> (Vec<KObj>, RowSpecs<'a>)
 where
@@ -36,29 +38,39 @@ where
     F: Fn(&T) -> KObj,
 {
     let mut rows = vec![];
-    let kobjs = list
-        .items
-        .iter()
-        .map(|item| {
-            let mut row: Vec<CellSpec> = if include_index {
-                vec![CellSpec::new_index()]
-            } else {
-                vec![]
-            };
-            for col in cols.iter() {
-                match *col {
-                    "Name" => row.push(extract_name(item).into()),
-                    "Age" => row.push(extract_age(item).into()),
-                    _ => match extractors.get(*col) {
+    let mut kobjs = vec![];
+    for item in list.items.iter() {
+        let mut row: Vec<CellSpec> = if include_index {
+            vec![CellSpec::new_index()]
+        } else {
+            vec![]
+        };
+        for col in cols.iter() {
+            match *col {
+                "Name" => row.push(extract_name(item).into()),
+                "Age" => row.push(extract_age(item).into()),
+                _ => match extractors {
+                    Some(extractors) => match extractors.get(*col) {
                         Some(extractor) => row.push(extractor(item).into()),
                         None => panic!("Can't extract"),
                     },
+                    None => panic!("Can't extract"),
+                },
+            }
+        }
+        match regex {
+            Some(ref regex) => {
+                if row_matches(&row, regex) {
+                    rows.push(row);
+                    kobjs.push(get_kobj(item));
                 }
             }
-            rows.push(row);
-            get_kobj(item)
-        })
-        .collect();
+            None => {
+                rows.push(row);
+                kobjs.push(get_kobj(item));
+            }
+        }
+    }
     (kobjs, rows)
 }
 
@@ -79,21 +91,14 @@ pub fn extract_age<'a, T: Metadata<Ty = ObjectMeta>>(obj: &'a T) -> Option<Cow<'
 }
 
 // utility functions
-pub fn filter<'a, I>(things: I, regex: Regex) -> Vec<Vec<CellSpec<'a>>>
-where
-    I: Iterator<Item = Vec<CellSpec<'a>>>,
-{
-    things
-        .filter(|thing| {
-            let mut has_match = false;
-            for cell_spec in thing.iter() {
-                if !has_match {
-                    has_match = cell_spec.matches(&regex);
-                }
-            }
-            has_match
-        })
-        .collect()
+fn row_matches<'a>(row: &Vec<CellSpec<'a>>, regex: &Regex) -> bool {
+    let mut has_match = false;
+    for cell_spec in row.iter() {
+        if !has_match {
+            has_match = cell_spec.matches(&regex);
+        }
+    }
+    has_match
 }
 
 fn time_since(date: DateTime<Utc>) -> String {

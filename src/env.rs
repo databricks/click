@@ -35,8 +35,8 @@ pub struct ExpandedAlias<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum ObjectSelection {
-    Single(usize),
-    Range(Vec<usize>),
+    Single(KObj),
+    Range(Vec<KObj>),
     None,
 }
 
@@ -126,11 +126,7 @@ impl Env {
                 Green.paint("none")
             },
             match self.current_selection {
-                ObjectSelection::Single(ref objidx) => {
-                    self.item_at(*objidx)
-                        .map(|obj| obj.prompt_str())
-                        .unwrap_or_else(|| Red.paint("[invalid object selection]"))
-                }
+                ObjectSelection::Single(ref obj) => obj.prompt_str(),
                 ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
                 ObjectSelection::None => Yellow.paint("none"),
             }
@@ -247,19 +243,18 @@ impl Env {
 
     pub fn set_current(&mut self, num: usize) {
         self.current_selection = match self.item_at(num) {
-            Some(_) => ObjectSelection::Single(num),
+            Some(obj) => ObjectSelection::Single(obj.clone()),
             None => ObjectSelection::None,
         };
         self.range_str = None;
         self.set_prompt();
     }
 
-    pub fn set_range(&mut self, range: Vec<usize>) {
+    pub fn set_range(&mut self, range: Vec<KObj>) {
         let range_str = if range.is_empty() {
             "Empty range".to_string()
         } else {
-            let typ_str = self.item_at(*range.get(0).unwrap()).unwrap().type_str();
-            let mut r = format!("{} {}", range.len(), typ_str);
+            let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
             if range.len() > 1 {
                 r.push('s');
             }
@@ -273,10 +268,10 @@ impl Env {
 
     pub fn current_pod(&self) -> Option<&KObj> {
         match self.current_selection {
-            ObjectSelection::Single(objidx) => self.item_at(objidx).and_then(|obj| match obj.typ {
+            ObjectSelection::Single(ref obj) => match obj.typ {
                 ObjType::Pod { .. } => Some(obj),
                 _ => None,
-            }),
+            },
             _ => None,
         }
     }
@@ -287,41 +282,33 @@ impl Env {
         F: FnMut(&KObj, &mut ClickWriter),
     {
         match self.current_selection() {
-            ObjectSelection::Single(idx) => match self.item_at(*idx) {
-                Some(obj) => f(obj, writer),
-                None => clickwriteln!(writer, "Invalid object selection"),
-            },
+            ObjectSelection::Single(obj) => f(obj, writer),
             ObjectSelection::Range(range) => {
-                for idx in range.iter() {
-                    match self.item_at(*idx) {
-                        Some(obj) => {
-                            if let Some(fmt) = sepfmt {
-                                let mut fmtvars = HashMap::new();
-                                fmtvars.insert("name".to_string(), obj.name());
-                                fmtvars.insert(
-                                    "namespace".to_string(),
-                                    obj.namespace.as_deref().unwrap_or("[none]"),
+                for obj in range.iter() {
+                    if let Some(fmt) = sepfmt {
+                        let mut fmtvars = HashMap::new();
+                        fmtvars.insert("name".to_string(), obj.name());
+                        fmtvars.insert(
+                            "namespace".to_string(),
+                            obj.namespace.as_deref().unwrap_or("[none]"),
+                        );
+                        match strfmt(fmt, &fmtvars) {
+                            Ok(sep) => {
+                                clickwriteln!(writer, "{}", sep);
+                                f(obj, writer)
+                            }
+                            Err(e) => {
+                                clickwriteln!(
+                                    writer,
+                                    "-- format of separater for {} failed: {} --",
+                                    obj.name(),
+                                    e
                                 );
-                                match strfmt(fmt, &fmtvars) {
-                                    Ok(sep) => {
-                                        clickwriteln!(writer, "{}", sep);
-                                        f(obj, writer)
-                                    }
-                                    Err(e) => {
-                                        clickwriteln!(
-                                            writer,
-                                            "-- format of separater for {} failed: {} --",
-                                            obj.name(),
-                                            e
-                                        );
-                                        f(obj, writer)
-                                    }
-                                }
-                            } else {
-                                f(obj, writer);
+                                f(obj, writer)
                             }
                         }
-                        None => clickwriteln!(writer, "Invalid object index in range"),
+                    } else {
+                        f(obj, writer);
                     }
                 }
             }

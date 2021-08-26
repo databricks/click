@@ -1362,8 +1362,7 @@ command!(
             pushed_label = true;
         }
 
-        if let ObjectSelection::Single(idx) = env.current_selection() {
-            let obj = env.item_at(*idx).unwrap();
+        if let ObjectSelection::Single(obj) = env.current_selection() {
             if obj.is(ObjType::Node) {
                 if pushed_label {
                     urlstr.push('&');

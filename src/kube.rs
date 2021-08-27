@@ -569,7 +569,7 @@ impl Kluster {
         let (auth, was_expired) = exec_provider.get_auth();
         match auth {
             ExecAuth::Token(_) => {} // handled below
-            ExecAuth::ClientCertKey { cert, key } => {
+            ExecAuth::ClientCertKey { cert, key, .. } => {
                 if was_expired {
                     let client_cert_key = Some(ClientCertKey::with_cert_and_key(cert, key));
                     self.create_new_client(&client_cert_key);
@@ -805,7 +805,7 @@ impl Kluster {
     }
 }
 
-fn print_token_err() {
+pub fn print_token_err() {
     println!(
         "Couldn't get an authentication token. You can try exiting Click and \
          running a kubectl command against the cluster to refresh it. \

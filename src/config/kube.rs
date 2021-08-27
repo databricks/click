@@ -403,22 +403,21 @@ impl Config {
         //let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
-                UserAuth::Token(ref _token) => {
-                    panic!("Can't do token yet");
-                    //auth = Some(KlusterAuth::with_token(token.as_str()))
+                UserAuth::Token(token) => {
+                    k8suser = Some(crate::k8s::UserAuth::with_token(token.to_string()));
                 }
-                UserAuth::UserPass(ref _username, ref _password) => {
-                    panic!("Can't do user/pass yet");
-                    //auth = Some(KlusterAuth::with_userpass(username, password))
+                UserAuth::UserPass(username, password) => {
+                    k8suser = Some(crate::k8s::UserAuth::with_user_pass(
+                        username.to_string(),
+                        password.to_string(),
+                    ));
                 }
-                UserAuth::AuthProvider(ref _provider) => {
-                    panic!("Can't do auth provider yet");
-                    //provider.copy_up();
-                    //auth = Some(KlusterAuth::with_auth_provider(*provider.clone()))
+                UserAuth::AuthProvider(ref provider) => {
+                    provider.copy_up();
+                    k8suser = Some(crate::k8s::UserAuth::with_auth_provider(*provider.clone()))
                 }
-                UserAuth::ExecProvider(ref _provider) => {
-                    panic!("Can't do exec provider yet");
-                    //auth = Some(KlusterAuth::with_exec_provider(provider.clone()))
+                UserAuth::ExecProvider(ref provider) => {
+                    k8suser = Some(crate::k8s::UserAuth::with_exec_provider(provider.clone()))
                 }
                 UserAuth::KeyCertData(ref _cert_data, ref _key_data) => {
                     panic!("Can't do keycertdata yet");

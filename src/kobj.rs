@@ -228,7 +228,7 @@ impl KObj {
         env: &Env,
         writer: &mut ClickWriter,
     ) -> bool {
-         macro_rules! do_describe {
+        macro_rules! do_describe {
             ($read_func:expr, $resp_typ:ty, $resp_ok:path) => {{
                 let (request, _) =
                     $read_func(&self.name, Default::default()).unwrap();

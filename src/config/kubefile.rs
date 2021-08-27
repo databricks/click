@@ -358,7 +358,12 @@ impl ExecConfig {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExecAuth {
     Token(String),
-    ClientCertKey { cert: Certificate, key: PrivateKey },
+    ClientCertKey {
+        cert: Certificate,
+        key: PrivateKey,
+        cert_data: String,
+        key_data: String,
+    },
 }
 
 impl ExecAuth {
@@ -406,20 +411,20 @@ impl ExecProvider {
                         }
                         if let Some(token) = status.token {
                             *self.auth.borrow_mut() = Some(ExecAuth::Token(token));
-                        } else if let Some(cert) = status.client_certificate_data {
+                        } else if let Some(cert_data) = status.client_certificate_data {
                             if status.client_key_data.is_none() {
                                 eprintln!("exec returned certificate but no key, can't auth.");
                                 return;
                             }
-                            let key = status.client_key_data.unwrap();
+                            let key_data = status.client_key_data.unwrap();
 
-                            let cert = crate::certs::get_cert_from_pem(&cert);
+                            let cert = crate::certs::get_cert_from_pem(&cert_data);
                             if cert.is_none() {
                                 eprintln!("Can't decode returned certificate data.");
                                 return;
                             }
 
-                            let key = crate::certs::get_key_from_str(&key);
+                            let key = crate::certs::get_key_from_str(&key_data);
                             if key.is_none() {
                                 eprintln!("Can't decode returned key data.");
                                 return;
@@ -427,6 +432,8 @@ impl ExecProvider {
                             *self.auth.borrow_mut() = Some(ExecAuth::ClientCertKey {
                                 cert: cert.unwrap(), // checked above
                                 key: key.unwrap(),   // checked above
+                                cert_data,
+                                key_data,
                             });
                         }
                         *self.expiry.borrow_mut() = status.expiration;

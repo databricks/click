@@ -51,7 +51,7 @@ where
 {
     match list_opt {
         Some(list) => {
-            let (kobjs, rows) = build_specs(&cols, &list, true, extractors, regex, get_kobj);
+            let (kobjs, rows) = build_specs(&cols, &list, extractors, true, regex, get_kobj);
 
             let mut titles: Vec<Cell> = vec![Cell::new("####")];
             titles.reserve(cols.len());
@@ -66,11 +66,27 @@ where
 }
 
 // row building
+
+/* Build row specs and a kobj vec from data returned from k8s.
+ *
+ * cols is a list of names of columns to build. "Name" * and "Age" are handled, other names need to
+ * be in 'extractors', and the extractor for the specified name will be used.
+ *
+ * include_index = true will put an index (numbered) column as the first item in the row
+ *
+ * regex: if this is Some(regex) then only rows that have some cell that matches the regex will be
+ * included in the output
+ *
+ * get_kobj: this needs to be a function that maps the list items to crate::kobj::KObjs
+ *
+ * This returns the vector of built kobjs that can be then passed to the env to set the last list of
+ * things returned, and the row specs that can be used to print out that list.
+ */
 pub fn build_specs<'a, T, F>(
     cols: &Vec<&str>,
     list: &'a List<T>,
-    include_index: bool,
     extractors: Option<&HashMap<String, Extractor<T>>>,
+    include_index: bool,
     regex: Option<Regex>,
     get_kobj: F,
 ) -> (Vec<KObj>, RowSpecs<'a>)

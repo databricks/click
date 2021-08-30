@@ -6,9 +6,10 @@ use chrono::DateTime;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, List, ListableResource, Metadata,
 };
-use prettytable::Row;
+use prettytable::{Cell, Row};
 use regex::Regex;
 
+use crate::env::Env;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::table::CellSpec;
@@ -16,17 +17,57 @@ use crate::table::CellSpec;
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-// table printing
+// utility types
+type RowSpecs<'a> = Vec<Vec<CellSpec<'a>>>;
+type Extractor<T> = fn(&T) -> Option<Cow<'_, str>>;
+
+// table printing / building
 pub fn print_table<'a>(titles: Row, rows: Vec<Vec<CellSpec<'a>>>, writer: &mut ClickWriter) {
     crate::table::print_table_kapi(titles, rows, writer);
 }
 
-// row building
-type RowSpecs<'a> = Vec<Vec<CellSpec<'a>>>;
-type Extractor<T> = fn(&T) -> Option<Cow<'_, str>>;
+/* this function abstracts the standard handling code for when a k8s call returns a list of objects.
+ * it does the following thins:
+ * - builds the row specs based on the passed extractors/regex
+ * - gets the kobks from each listable object
+ * -- sets the env to have the built list as its current list
+ * -- clears the env list if the built list was empty
+ *
+ * NB: This function assumes you want the printed list to be numbered. It further assumes the cols
+ * will NOT include a colume named ####, and inserts it for you at the start.
+ */
+pub fn handle_list_result<'a, T, F>(
+    env: &mut Env,
+    writer: &mut ClickWriter,
+    cols: Vec<&str>,
+    list_opt: Option<List<T>>,
+    extractors: Option<&HashMap<String, Extractor<T>>>,
+    regex: Option<Regex>,
+    get_kobj: F,
+) -> ()
+where
+    T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
+    F: Fn(&T) -> KObj,
+{
+    match list_opt {
+        Some(list) => {
+            let (kobjs, rows) = build_specs(&cols, &list, true, extractors, regex, get_kobj);
 
+            let mut titles: Vec<Cell> = vec![Cell::new("####")];
+            titles.reserve(cols.len());
+            for col in cols.iter() {
+                titles.push(Cell::new(col));
+            }
+            print_table(Row::new(titles), rows, writer);
+            env.set_last_objs(kobjs);
+        }
+        None => env.clear_last_objs(),
+    }
+}
+
+// row building
 pub fn build_specs<'a, T, F>(
-    cols: Vec<&'static str>,
+    cols: &Vec<&str>,
     list: &'a List<T>,
     include_index: bool,
     extractors: Option<&HashMap<String, Extractor<T>>>,
@@ -46,7 +87,7 @@ where
             vec![]
         };
         for col in cols.iter() {
-            match *col {
+            match col.as_ref() {
                 "Name" => row.push(extract_name(item).into()),
                 "Age" => row.push(extract_age(item).into()),
                 _ => match extractors {

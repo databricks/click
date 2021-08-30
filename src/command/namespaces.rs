@@ -6,7 +6,7 @@ use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{build_specs, print_table, Extractor},
+    command::{handle_list_result, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -71,21 +71,14 @@ command!(
         let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
         let ns_list_opt: Option<List<api::Namespace>> =
             env.run_on_context(|c| c.execute_list(request));
-
-        match ns_list_opt {
-            Some(ns_list) => {
-                let (kobjs, rows) = build_specs(
-                    vec!["Name", "Age", "Status"],
-                    &ns_list,
-                    true,
-                    Some(&NS_EXTRACTORS),
-                    regex,
-                    namespace_to_kobj,
-                );
-                print_table(row!["####", "Name", "Age", "Status"], rows, writer);
-                env.set_last_objs(kobjs);
-            }
-            None => env.clear_last_objs(),
-        }
+        handle_list_result(
+            env,
+            writer,
+            vec!["Name", "Age", "Status"],
+            ns_list_opt,
+            Some(&NS_EXTRACTORS),
+            regex,
+            namespace_to_kobj,
+        );
     }
 );

@@ -224,10 +224,13 @@ impl Context {
         }
     }
 
-    pub fn execute(&self, k8sreq: http::Request<Vec<u8>>) -> http::Response<Bytes> {
+    pub fn execute(
+        &self,
+        k8sreq: http::Request<Vec<u8>>,
+    ) -> Result<http::Response<Bytes>, Box<dyn std::error::Error>> {
         let (parts, body) = k8sreq.into_parts();
 
-        let url = self.endpoint.join(&parts.uri.to_string()).unwrap();
+        let url = self.endpoint.join(&parts.uri.to_string())?;
 
         if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
             self.handle_exec_provider(exec_provider);
@@ -262,19 +265,20 @@ impl Context {
             },
             None => req,
         };
-        let resp = req.send().unwrap();
+        let resp = req.send()?;
+        let bytes = resp.bytes()?;
 
-        http::response::Builder::new()
+        Ok(http::response::Builder::new()
             .status(200)
-            .body(resp.bytes().unwrap())
-            .unwrap()
+            .body(bytes)
+            .unwrap())
     }
 
     pub fn read<T: k8s_openapi::Response + Debug>(
         &self,
         k8sreq: http::Request<Vec<u8>>,
     ) -> Result<T, Box<dyn std::error::Error>> {
-        let response = self.execute(k8sreq);
+        let response = self.execute(k8sreq)?;
         let status_code: http::StatusCode = response.status();
         match k8s_openapi::Response::try_from_parts(status_code, response.body()) {
             Ok((res, _)) => Ok(res),
@@ -291,7 +295,7 @@ impl Context {
         &self,
         k8sreq: http::Request<Vec<u8>>,
     ) -> Result<List<T>, Box<dyn std::error::Error>> {
-        let response = self.execute(k8sreq);
+        let response = self.execute(k8sreq)?;
         let status_code: http::StatusCode = response.status();
 
         let res_list: List<T> =

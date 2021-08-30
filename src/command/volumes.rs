@@ -140,45 +140,49 @@ command!(
 
         let (request, _response_body) =
             api::PersistentVolume::list_persistent_volume(Default::default()).unwrap();
-        let pv_list: List<api::PersistentVolume> = env
-            .run_on_context(|c| Ok(c.execute_list(request).unwrap()))
-            .unwrap();
+        let pv_list_opt: Option<List<api::PersistentVolume>> =
+            env.run_on_context(|c| c.execute_list(request));
 
-        let (kobjs, rows) = build_specs(
-            vec![
-                "Name",
-                "Age",
-                "Capacity",
-                "Access Modes",
-                "Reclaim Policy",
-                "Status",
-                "Claim",
-                "Storage Class",
-                "Reason",
-            ],
-            &pv_list,
-            true,
-            Some(&PV_EXTRACTORS),
-            regex,
-            pv_to_kobj,
-        );
+        match pv_list_opt {
+            Some(pv_list) => {
+                let (kobjs, rows) = build_specs(
+                    vec![
+                        "Name",
+                        "Age",
+                        "Capacity",
+                        "Access Modes",
+                        "Reclaim Policy",
+                        "Status",
+                        "Claim",
+                        "Storage Class",
+                        "Reason",
+                    ],
+                    &pv_list,
+                    true,
+                    Some(&PV_EXTRACTORS),
+                    regex,
+                    pv_to_kobj,
+                );
 
-        print_table(
-            row![
-                "####",
-                "Name",
-                "Age",
-                "Capacity",
-                "Access Modes",
-                "Reclaim Policy",
-                "Status",
-                "Claim",
-                "Storage Class",
-                "Reason"
-            ],
-            rows,
-            writer,
-        );
-        env.set_last_objs(kobjs);
+                print_table(
+                    row![
+                        "####",
+                        "Name",
+                        "Age",
+                        "Capacity",
+                        "Access Modes",
+                        "Reclaim Policy",
+                        "Status",
+                        "Claim",
+                        "Storage Class",
+                        "Reason"
+                    ],
+                    rows,
+                    writer,
+                );
+                env.set_last_objs(kobjs);
+            }
+            None => env.clear_last_objs(),
+        }
     }
 );

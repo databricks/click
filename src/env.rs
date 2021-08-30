@@ -352,7 +352,7 @@ impl Env {
 
     pub fn run_on_context<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(&crate::k8s::Context) -> Result<R, KubeError>,
+        F: FnOnce(&crate::k8s::Context) -> Result<R, Box<dyn std::error::Error>>,
     {
         match self.context {
             Some(ref c) => match f(c) {

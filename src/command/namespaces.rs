@@ -69,20 +69,23 @@ command!(
         };
 
         let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
-        let ns_list: List<api::Namespace> = env
-            .run_on_context(|c| Ok(c.execute_list(request).unwrap()))
-            .unwrap();
+        let ns_list_opt: Option<List<api::Namespace>> =
+            env.run_on_context(|c| c.execute_list(request));
 
-        let (kobjs, rows) = build_specs(
-            vec!["Name", "Age", "Status"],
-            &ns_list,
-            true,
-            Some(&NS_EXTRACTORS),
-            regex,
-            namespace_to_kobj,
-        );
-
-        print_table(row!["####", "Name", "Age", "Status"], rows, writer);
-        env.set_last_objs(kobjs);
+        match ns_list_opt {
+            Some(ns_list) => {
+                let (kobjs, rows) = build_specs(
+                    vec!["Name", "Age", "Status"],
+                    &ns_list,
+                    true,
+                    Some(&NS_EXTRACTORS),
+                    regex,
+                    namespace_to_kobj,
+                );
+                print_table(row!["####", "Name", "Age", "Status"], rows, writer);
+                env.set_last_objs(kobjs);
+            }
+            None => env.clear_last_objs(),
+        }
     }
 );

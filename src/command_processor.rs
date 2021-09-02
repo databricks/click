@@ -163,7 +163,7 @@ impl CommandProcessor {
             Box::new(crate::cmd::Contexts::new()),
             Box::new(crate::cmd::Range::new()),
             Box::new(crate::cmd::Pods::new()),
-            Box::new(crate::cmd::Nodes::new()),
+            //Box::new(crate::cmd::Nodes::new()),
             Box::new(crate::cmd::Deployments::new()),
             Box::new(crate::cmd::Services::new()),
             Box::new(crate::cmd::ReplicaSets::new()),
@@ -188,6 +188,7 @@ impl CommandProcessor {
             Box::new(crate::cmd::Alias::new()),
             Box::new(crate::cmd::Unalias::new()),
             Box::new(crate::command::namespaces::Namespaces::new()),
+            Box::new(crate::command::nodes::Nodes::new()),
             Box::new(crate::command::volumes::PersistentVolumes::new()),
         ];
         commands

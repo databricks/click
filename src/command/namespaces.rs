@@ -11,9 +11,9 @@ use crate::{
     env::Env,
     kobj::{KObj, ObjType},
     output::ClickWriter,
+    table::CellSpec,
 };
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stderr, Write};
@@ -38,11 +38,11 @@ fn namespace_to_kobj(namespace: &api::Namespace) -> KObj {
     }
 }
 
-fn namespace_status<'a>(namespace: &'a api::Namespace) -> Option<Cow<'a, str>> {
+fn namespace_status<'a>(namespace: &'a api::Namespace) -> Option<CellSpec<'a>> {
     namespace
         .status
         .as_ref()
-        .and_then(|stat| stat.phase.as_ref().map(|p| p.into()))
+        .and_then(|stat| stat.phase.as_ref().map(|p| p.as_str().into()))
 }
 
 command!(
@@ -78,6 +78,8 @@ command!(
             ns_list_opt,
             Some(&NS_EXTRACTORS),
             regex,
+            None,
+            matches.is_present("reverse"),
             namespace_to_kobj,
         );
     }

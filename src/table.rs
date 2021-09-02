@@ -23,7 +23,7 @@ use prettytable::{format, Table};
 use regex::Regex;
 
 use std::borrow::Cow;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, PartialEq, PartialOrd};
 use std::io::Write;
 
 lazy_static! {
@@ -36,6 +36,7 @@ lazy_static! {
         .build();
 }
 
+#[derive(Debug)]
 enum CellSpecTxt<'a> {
     Index,
     Str(Cow<'a, str>),
@@ -140,6 +141,37 @@ where
         match opt {
             Some(v) => v.into(),
             None => "Unknown".into(),
+        }
+    }
+}
+impl<'a> PartialEq for CellSpec<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.txt, &other.txt) {
+            (CellSpecTxt::Index, CellSpecTxt::Index) => true,
+            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => false,
+            (CellSpecTxt::Str(_), CellSpecTxt::Index) => false,
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
+        }
+    }
+}
+impl<'a> Eq for CellSpec<'a> {}
+
+impl<'a> PartialOrd for CellSpec<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (&self.txt, &other.txt) {
+            (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
+            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => None,
+            (CellSpecTxt::Str(_), CellSpecTxt::Index) => None,
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
+        }
+    }
+}
+
+impl<'a> Ord for CellSpec<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.partial_cmp(other) {
+            Some(o) => o,
+            None => Ordering::Equal,
         }
     }
 }

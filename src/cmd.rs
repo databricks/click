@@ -21,8 +21,7 @@ use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
-    Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList, Service, ServiceList,
-    StatefulSetList,
+    Pod, PodList, ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -664,122 +663,122 @@ fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
     buf
 }
 
-/// Print out the specified list of nodes in a pretty format
-fn print_nodelist(
-    mut nodelist: NodeList,
-    labels: bool,
-    regex: Option<Regex>,
-    sort: Option<&str>,
-    reverse: bool,
-    writer: &mut ClickWriter,
-) -> NodeList {
-    let mut table = Table::new();
-    let mut title_row = row!["####", "Name", "State", "Age"];
-    let show_labels = labels
-        || sort
-            .map(|s| s == "Labels" || s == "labels")
-            .unwrap_or(false);
-    if show_labels {
-        title_row.add_cell(Cell::new("Labels"));
-    }
-    table.set_titles(title_row);
+// /// Print out the specified list of nodes in a pretty format
+// fn print_nodelist(
+//     mut nodelist: NodeList,
+//     labels: bool,
+//     regex: Option<Regex>,
+//     sort: Option<&str>,
+//     reverse: bool,
+//     writer: &mut ClickWriter,
+// ) -> NodeList {
+//     let mut table = Table::new();
+//     let mut title_row = row!["####", "Name", "State", "Age"];
+//     let show_labels = labels
+//         || sort
+//             .map(|s| s == "Labels" || s == "labels")
+//             .unwrap_or(false);
+//     if show_labels {
+//         title_row.add_cell(Cell::new("Labels"));
+//     }
+//     table.set_titles(title_row);
 
-    if let Some(sortcol) = sort {
-        match sortcol {
-            "Name" | "name" => nodelist
-                .items
-                .sort_by(|n1, n2| n1.metadata.name.partial_cmp(&n2.metadata.name).unwrap()),
-            "State" | "state" => nodelist.items.sort_by(|n1, n2| {
-                let orn1 = n1.status.conditions.iter().find(|c| c.typ == "Ready");
-                let orn2 = n2.status.conditions.iter().find(|c| c.typ == "Ready");
-                opt_sort(orn1, orn2, |rn1, rn2| {
-                    let sort_key1 = if rn1.status == "True" {
-                        "Ready"
-                    } else {
-                        "Not Ready"
-                    };
-                    let sort_key2 = if rn2.status == "True" {
-                        "Ready"
-                    } else {
-                        "Not Ready"
-                    };
-                    sort_key1.partial_cmp(sort_key2).unwrap()
-                })
-            }),
-            "Age" | "age" => nodelist.items.sort_by(|n1, n2| {
-                opt_sort(
-                    n1.metadata.creation_timestamp,
-                    n2.metadata.creation_timestamp,
-                    |a1, a2| a1.partial_cmp(a2).unwrap(),
-                )
-            }),
-            "Labels" | "labels" => nodelist.items.sort_by(|n1, n2| {
-                let n1s = keyval_string(&n1.metadata.labels);
-                let n2s = keyval_string(&n2.metadata.labels);
-                n1s.partial_cmp(&n2s).unwrap()
-            }),
-            _ => {
-                clickwriteln!(
-                    writer,
-                    "Invalid sort col: {}, this is a bug, please report it",
-                    sortcol
-                );
-            }
-        }
-    }
-    let to_map: Box<dyn Iterator<Item = Node>> = if reverse {
-        Box::new(nodelist.items.into_iter().rev())
-    } else {
-        Box::new(nodelist.items.into_iter())
-    };
+//     if let Some(sortcol) = sort {
+//         match sortcol {
+//             "Name" | "name" => nodelist
+//                 .items
+//                 .sort_by(|n1, n2| n1.metadata.name.partial_cmp(&n2.metadata.name).unwrap()),
+//             "State" | "state" => nodelist.items.sort_by(|n1, n2| {
+//                 let orn1 = n1.status.conditions.iter().find(|c| c.typ == "Ready");
+//                 let orn2 = n2.status.conditions.iter().find(|c| c.typ == "Ready");
+//                 opt_sort(orn1, orn2, |rn1, rn2| {
+//                     let sort_key1 = if rn1.status == "True" {
+//                         "Ready"
+//                     } else {
+//                         "Not Ready"
+//                     };
+//                     let sort_key2 = if rn2.status == "True" {
+//                         "Ready"
+//                     } else {
+//                         "Not Ready"
+//                     };
+//                     sort_key1.partial_cmp(sort_key2).unwrap()
+//                 })
+//             }),
+//             "Age" | "age" => nodelist.items.sort_by(|n1, n2| {
+//                 opt_sort(
+//                     n1.metadata.creation_timestamp,
+//                     n2.metadata.creation_timestamp,
+//                     |a1, a2| a1.partial_cmp(a2).unwrap(),
+//                 )
+//             }),
+//             "Labels" | "labels" => nodelist.items.sort_by(|n1, n2| {
+//                 let n1s = keyval_string(&n1.metadata.labels);
+//                 let n2s = keyval_string(&n2.metadata.labels);
+//                 n1s.partial_cmp(&n2s).unwrap()
+//             }),
+//             _ => {
+//                 clickwriteln!(
+//                     writer,
+//                     "Invalid sort col: {}, this is a bug, please report it",
+//                     sortcol
+//                 );
+//             }
+//         }
+//     }
+//     let to_map: Box<dyn Iterator<Item = Node>> = if reverse {
+//         Box::new(nodelist.items.into_iter().rev())
+//     } else {
+//         Box::new(nodelist.items.into_iter())
+//     };
 
-    let nodes_specs = to_map.map(|node| {
-        let mut specs = Vec::new();
-        {
-            // scope borrows
-            let readycond: Option<&NodeCondition> =
-                node.status.conditions.iter().find(|c| c.typ == "Ready");
-            let (state, state_style) = if let Some(cond) = readycond {
-                if cond.status == "True" {
-                    ("Ready", "Fg")
-                } else {
-                    ("Not Ready", "Fr")
-                }
-            } else {
-                ("Unknown", "Fy")
-            };
+//     let nodes_specs = to_map.map(|node| {
+//         let mut specs = Vec::new();
+//         {
+//             // scope borrows
+//             let readycond: Option<&NodeCondition> =
+//                 node.status.conditions.iter().find(|c| c.typ == "Ready");
+//             let (state, state_style) = if let Some(cond) = readycond {
+//                 if cond.status == "True" {
+//                     ("Ready", "Fg")
+//                 } else {
+//                     ("Not Ready", "Fr")
+//                 }
+//             } else {
+//                 ("Unknown", "Fy")
+//             };
 
-            let state = if let Some(b) = node.spec.unschedulable {
-                if b {
-                    format!("{}\nSchedulingDisabled", state)
-                } else {
-                    state.to_owned()
-                }
-            } else {
-                state.to_owned()
-            };
+//             let state = if let Some(b) = node.spec.unschedulable {
+//                 if b {
+//                     format!("{}\nSchedulingDisabled", state)
+//                 } else {
+//                     state.to_owned()
+//                 }
+//             } else {
+//                 state.to_owned()
+//             };
 
-            specs.push(CellSpec::new_index());
-            specs.push(node.metadata.name.clone().into());
-            specs.push(CellSpec::with_style(state.into(), state_style));
-            specs.push(time_since(node.metadata.creation_timestamp.unwrap()).into());
-            if show_labels {
-                specs.push(keyval_string(&node.metadata.labels).into());
-            }
-        }
-        (node, specs)
-    });
+//             specs.push(CellSpec::new_index());
+//             specs.push(node.metadata.name.clone().into());
+//             specs.push(CellSpec::with_style(state.into(), state_style));
+//             specs.push(time_since(node.metadata.creation_timestamp.unwrap()).into());
+//             if show_labels {
+//                 specs.push(keyval_string(&node.metadata.labels).into());
+//             }
+//         }
+//         (node, specs)
+//     });
 
-    let filtered = match regex {
-        Some(r) => crate::table::filter(nodes_specs, r),
-        None => nodes_specs.collect(),
-    };
+//     let filtered = match regex {
+//         Some(r) => crate::table::filter(nodes_specs, r),
+//         None => nodes_specs.collect(),
+//     };
 
-    crate::table::print_table(&mut table, &filtered, writer);
+//     crate::table::print_table(&mut table, &filtered, writer);
 
-    let final_nodes = filtered.into_iter().map(|node_spec| node_spec.0).collect();
-    NodeList { items: final_nodes }
-}
+//     let final_nodes = filtered.into_iter().map(|node_spec| node_spec.0).collect();
+//     NodeList { items: final_nodes }
+// }
 
 /// Print out the specified list of deployments in a pretty format
 fn print_deployments(
@@ -2188,79 +2187,79 @@ command!(
     }
 );
 
-command!(
-    Nodes,
-    "nodes",
-    "Get nodes",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("labels")
-                .short("L")
-                .long("labels")
-                .help("include labels in output")
-                .takes_value(false)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter pods by the specified regex")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("sort")
-                .short("s")
-                .long("sort")
-                .help(
-                    "Sort by specified column (if column isn't shown by default, it will \
-                     be shown)"
-                )
-                .takes_value(true)
-                .possible_values(&[
-                    "Name", "name", "State", "state", "Age", "age", "Labels", "labels",
-                ])
-        )
-        .arg(
-            Arg::with_name("reverse")
-                .short("R")
-                .long("reverse")
-                .help("Reverse the order of the returned list")
-                .takes_value(false)
-        ),
-    vec!["nodes"],
-    noop_complete!(),
-    IntoIter::new([(
-        "sort".to_string(),
-        completer::node_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
-    .collect(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
+// command!(
+//     Nodes,
+//     "nodes",
+//     "Get nodes",
+//     |clap: App<'static, 'static>| clap
+//         .arg(
+//             Arg::with_name("labels")
+//                 .short("L")
+//                 .long("labels")
+//                 .help("include labels in output")
+//                 .takes_value(false)
+//         )
+//         .arg(
+//             Arg::with_name("regex")
+//                 .short("r")
+//                 .long("regex")
+//                 .help("Filter pods by the specified regex")
+//                 .takes_value(true)
+//         )
+//         .arg(
+//             Arg::with_name("sort")
+//                 .short("s")
+//                 .long("sort")
+//                 .help(
+//                     "Sort by specified column (if column isn't shown by default, it will \
+//                      be shown)"
+//                 )
+//                 .takes_value(true)
+//                 .possible_values(&[
+//                     "Name", "name", "State", "state", "Age", "age", "Labels", "labels",
+//                 ])
+//         )
+//         .arg(
+//             Arg::with_name("reverse")
+//                 .short("R")
+//                 .long("reverse")
+//                 .help("Reverse the order of the returned list")
+//                 .takes_value(false)
+//         ),
+//     vec!["nodes"],
+//     noop_complete!(),
+//     IntoIter::new([(
+//         "sort".to_string(),
+//         completer::node_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+//     )])
+//     .collect(),
+//     |matches, env, writer| {
+//         let regex = match crate::table::get_regex(&matches) {
+//             Ok(r) => r,
+//             Err(s) => {
+//                 write!(stderr(), "{}\n", s).unwrap_or(());
+//                 return;
+//             }
+//         };
 
-        let url = "/api/v1/nodes";
-        let nl: Option<NodeList> = env.run_on_kluster(|k| k.get(url));
-        match nl {
-            Some(n) => {
-                let final_list = print_nodelist(
-                    n,
-                    matches.is_present("labels"),
-                    regex,
-                    matches.value_of("sort"),
-                    matches.is_present("reverse"),
-                    writer,
-                );
-                env.set_last_objs(final_list);
-            }
-            None => env.clear_last_objs(),
-        }
-    }
-);
+//         let url = "/api/v1/nodes";
+//         let nl: Option<NodeList> = env.run_on_kluster(|k| k.get(url));
+//         match nl {
+//             Some(n) => {
+//                 let final_list = print_nodelist(
+//                     n,
+//                     matches.is_present("labels"),
+//                     regex,
+//                     matches.value_of("sort"),
+//                     matches.is_present("reverse"),
+//                     writer,
+//                 );
+//                 env.set_last_objs(final_list);
+//             }
+//             None => env.clear_last_objs(),
+//         }
+//     }
+// );
 
 command!(
     Services,

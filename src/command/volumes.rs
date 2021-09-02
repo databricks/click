@@ -11,9 +11,9 @@ use crate::{
     env::Env,
     kobj::{KObj, ObjType},
     output::ClickWriter,
+    table::CellSpec,
 };
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stderr, Write};
@@ -42,7 +42,7 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
     }
 }
 
-fn volume_capacity<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_capacity<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.capacity
             .get("storage")
@@ -51,7 +51,7 @@ fn volume_capacity<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>
     })
 }
 
-fn volume_access_modes<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_access_modes<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume.spec.as_ref().map(|spec| {
         spec.access_modes
             .iter()
@@ -68,7 +68,7 @@ fn volume_access_modes<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, 
     })
 }
 
-fn volume_reclaim_policy<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_reclaim_policy<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.persistent_volume_reclaim_policy
             .as_ref()
@@ -76,14 +76,14 @@ fn volume_reclaim_policy<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a
     })
 }
 
-fn volume_status<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_status<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume
         .status
         .as_ref()
-        .and_then(|stat| stat.phase.as_ref().map(|p| p.into()))
+        .and_then(|stat| stat.phase.as_ref().map(|p| p.as_str().into()))
 }
 
-fn volume_claim<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_claim<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume
         .spec
         .as_ref()
@@ -98,19 +98,20 @@ fn volume_claim<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
         })
 }
 
-fn volume_storage_class<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
-    volume
-        .spec
-        .as_ref()
-        .and_then(|spec| spec.storage_class_name.as_ref().map(|sc| sc.into()))
+fn volume_storage_class<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+    volume.spec.as_ref().and_then(|spec| {
+        spec.storage_class_name
+            .as_ref()
+            .map(|sc| sc.as_str().into())
+    })
 }
 
-fn volume_reason<'a>(volume: &'a api::PersistentVolume) -> Option<Cow<'a, str>> {
+fn volume_reason<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
     volume
         .status
         .as_ref()
         .map(|stat| match stat.reason.as_ref() {
-            Some(r) => r.into(),
+            Some(r) => r.as_str().into(),
             None => "".into(),
         })
 }
@@ -159,6 +160,8 @@ command!(
             pv_list_opt,
             Some(&PV_EXTRACTORS),
             regex,
+            None,
+            matches.is_present("reverse"),
             pv_to_kobj,
         );
     }

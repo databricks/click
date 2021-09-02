@@ -381,7 +381,7 @@ impl Config {
     pub fn get_context(
         &self,
         context_name: &str,
-        _click_conf: &ClickConfig,
+        click_conf: &ClickConfig,
     ) -> Result<crate::k8s::Context, KubeError> {
         let context = self
             .contexts
@@ -453,6 +453,8 @@ impl Config {
             endpoint,
             ca_cert,
             k8suser,
+            click_conf.connect_timeout_secs,
+            click_conf.read_timeout_secs,
         ))
     }
 }

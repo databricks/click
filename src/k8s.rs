@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::config::{AuthProvider, ExecAuth, ExecProvider};
 
@@ -144,6 +145,8 @@ pub struct Context {
     client: RefCell<Client>,
     root_ca: Option<Certificate>,
     auth: RefCell<Option<UserAuth>>,
+    connect_timeout_secs: u32,
+    read_timeout_secs: u32,
 }
 
 impl Context {
@@ -152,8 +155,17 @@ impl Context {
         endpoint: Url,
         root_ca: Option<Certificate>,
         auth: Option<UserAuth>,
+        connect_timeout_secs: u32,
+        read_timeout_secs: u32,
     ) -> Context {
-        let (client, auth) = Context::get_client(&endpoint, root_ca.clone(), auth, None);
+        let (client, auth) = Context::get_client(
+            &endpoint,
+            root_ca.clone(),
+            auth,
+            None,
+            connect_timeout_secs,
+            read_timeout_secs,
+        );
         let client = RefCell::new(client);
         let auth = RefCell::new(auth);
         Context {
@@ -162,6 +174,8 @@ impl Context {
             client,
             root_ca,
             auth,
+            connect_timeout_secs,
+            read_timeout_secs,
         }
     }
 
@@ -170,6 +184,8 @@ impl Context {
         root_ca: Option<Certificate>,
         auth: Option<UserAuth>,
         id: Option<Identity>,
+        connect_timeout_secs: u32,
+        read_timeout_secs: u32,
     ) -> (Client, Option<UserAuth>) {
         let host = endpoint.host().unwrap();
         let client = match host {
@@ -191,7 +207,14 @@ impl Context {
             Some(id) => client.identity(id),
             None => client,
         };
-        (client.build().unwrap(), auth)
+        (
+            client
+                .connect_timeout(Duration::new(connect_timeout_secs.into(), 0))
+                .timeout(Duration::new(read_timeout_secs.into(), 0))
+                .build()
+                .unwrap(),
+            auth,
+        )
     }
 
     fn use_pkcs12(endpoint: &Url) -> bool {
@@ -215,8 +238,14 @@ impl Context {
                     let pkcs12 = Context::use_pkcs12(&self.endpoint);
                     let id = get_id_from_data(key_data, cert_data, pkcs12);
                     let auth = self.auth.take();
-                    let (new_client, new_auth) =
-                        Context::get_client(&self.endpoint, self.root_ca.clone(), auth, Some(id));
+                    let (new_client, new_auth) = Context::get_client(
+                        &self.endpoint,
+                        self.root_ca.clone(),
+                        auth,
+                        Some(id),
+                        self.connect_timeout_secs,
+                        self.read_timeout_secs,
+                    );
                     *self.client.borrow_mut() = new_client;
                     *self.auth.borrow_mut() = new_auth;
                 }

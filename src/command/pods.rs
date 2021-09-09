@@ -1,4 +1,7 @@
-use ansi_term::Colour::Yellow;
+use ansi_term::{
+    Colour::{Green, Red, Yellow},
+    Style
+};
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
 use k8s_openapi::List;
@@ -188,7 +191,7 @@ command!(
             Arg::with_name("labels")
                 .short("L")
                 .long("labels")
-                .help("include labels in output (deprecated, use --show labels")
+                .help("include labels in output (deprecated, use --show labels)")
                 .takes_value(false),
         )
         .arg(
@@ -320,26 +323,29 @@ command!(
 );
 
 // also add a command to print all the containers of a pod
-
-fn identity<T>(t: T) -> T {
-    t
-}
-
 command!(
     Containers,
     "containers",
     "Print information about the containers of the active pod",
-    identity,
+    |clap: App<'static, 'static>| {
+        clap.arg(
+            Arg::with_name("volumes")
+                .short("v")
+                .long("volumes")
+                .help("show information about each containers volume mounts")
+                .takes_value(false),
+        )
+    },
     vec!["conts", "containers"],
     noop_complete!(),
     no_named_complete!(),
-    |_matches, env, writer| {
+    |matches, env, writer| {
         env.apply_to_selection(
             writer,
             Some(&env.click_config.range_separator),
             |obj, writer| {
                 if obj.is_pod() {
-                    print_containers(obj, env, writer);
+                    print_containers(obj, env, matches.is_present("volumes"), writer);
                 } else {
                     clickwriteln!(writer, "containers only possible on a Pod");
                 }
@@ -349,7 +355,7 @@ command!(
 );
 
 // conainer helper commands
-fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWriter) {
     let (request, _) = api::Pod::read_namespaced_pod(
         obj.name(),
         obj.namespace.as_ref().unwrap(),
@@ -363,7 +369,7 @@ fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
         api::ReadNamespacedPodResponse::Ok(pod) => match pod.status {
             Some(status) => {
                 for cont in status.container_statuses.iter() {
-                    clickwrite!(writer, "Name:\t{}\n", cont.name);
+                    clickwrite!(writer, "Name:\t{}\n", Style::new().bold().paint(&cont.name));
                     clickwrite!(
                         writer,
                         "  ID:\t\t{}\n",
@@ -373,11 +379,7 @@ fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
                             .unwrap_or("<none>")
                     );
                     clickwrite!(writer, "  Image:\t{}\n", cont.image_id);
-                    clickwrite!(
-                        writer,
-                        "  State:\t{}\n",
-                        container_state_string(&cont.state)
-                    );
+                    print_state_string(&cont.state, writer);
                     clickwrite!(writer, "  Ready:\t{}\n", cont.ready);
                     clickwrite!(writer, "  Restarts:\t{}\n", cont.restart_count);
 
@@ -391,14 +393,14 @@ fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
                                 Some(resources) => {
                                     clickwrite!(writer, "    Requests:\n");
                                     for (resource, quant) in resources.requests.iter() {
-                                        clickwrite!(writer, "      {}: {}\n", resource, quant.0)
+                                        clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
                                     if resources.requests.len() == 0 {
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                     clickwrite!(writer, "    Limits:\n");
                                     for (resource, quant) in resources.limits.iter() {
-                                        clickwrite!(writer, "      {}: {}\n", resource, quant.0)
+                                        clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
                                     if resources.limits.len() == 0 {
                                         clickwrite!(writer, "      <none>\n");
@@ -409,28 +411,30 @@ fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
                                 }
                             }
 
-                            // print volumes
-                            clickwrite!(writer, "  Volumes:\n");
-                            if cont_spec.volume_mounts.len() > 0 {
-                                for vol in cont_spec.volume_mounts.iter() {
-                                    clickwrite!(writer, "   {}\n", vol.name);
-                                    clickwrite!(writer, "    Path:\t{}\n", vol.mount_path);
-                                    clickwrite!(
-                                        writer,
-                                        "    Sub-Path:\t{}\n",
-                                        vol.sub_path
-                                            .as_ref()
-                                            .map(|sp| { sp.as_str() })
-                                            .unwrap_or("<none>")
-                                    );
-                                    clickwrite!(
-                                        writer,
-                                        "    Read-Only:\t{}\n",
-                                        vol.read_only.unwrap_or(false)
-                                    );
+                            if volumes {
+                                // print volumes
+                                clickwrite!(writer, "  Volumes:\n");
+                                if cont_spec.volume_mounts.len() > 0 {
+                                    for vol in cont_spec.volume_mounts.iter() {
+                                        clickwrite!(writer, "   {}\n", vol.name);
+                                        clickwrite!(writer, "    Path:\t{}\n", vol.mount_path);
+                                        clickwrite!(
+                                            writer,
+                                            "    Sub-Path:\t{}\n",
+                                            vol.sub_path
+                                                .as_ref()
+                                                .map(|sp| { sp.as_str() })
+                                                .unwrap_or("<none>")
+                                        );
+                                        clickwrite!(
+                                            writer,
+                                            "    Read-Only:\t{}\n",
+                                            vol.read_only.unwrap_or(false)
+                                        );
+                                    }
+                                } else {
+                                    clickwrite!(writer, "    No Volumes\n");
                                 }
-                            } else {
-                                clickwrite!(writer, "    No Volumes\n");
                             }
                         }
                     }
@@ -448,13 +452,15 @@ fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
     }
 }
 
-fn container_state_string(state: &Option<api::ContainerState>) -> String {
+fn print_state_string(state: &Option<api::ContainerState>, writer: &mut ClickWriter) {
+    clickwrite!(writer, "  State:\t");
     match state {
         Some(state) => {
             if let Some(running) = state.running.as_ref() {
+                clickwrite!(writer, "{}\n", Green.paint("Running"));
                 match &running.started_at {
-                    Some(start) => format!("Running since {}", start.0),
-                    None => format!("Running (since unknown)"),
+                    Some(start) => clickwrite!(writer, "\t\t  started at: {}\n", start.0),
+                    None => clickwrite!(writer, "\t\t  since unknown\n"),
                 }
             } else if let Some(terminated) = state.terminated.as_ref() {
                 let message = terminated
@@ -467,10 +473,16 @@ fn container_state_string(state: &Option<api::ContainerState>) -> String {
                     .as_ref()
                     .map(|m| m.as_str())
                     .unwrap_or("no reason");
-                format!(
-                    "Terminated (code: {}, message: {}, reason: {})",
-                    terminated.exit_code, message, reason
-                )
+                let tsr = terminated
+                    .finished_at
+                    .as_ref()
+                    .map(|fa| fa.0.to_string())
+                    .unwrap_or("<unknown>".to_string());
+                clickwrite!(writer, "{}\n", Red.paint("Terminated"));
+                clickwrite!(writer, "\t\t  at: {}\n", tsr);
+                clickwrite!(writer, "\t\t  code: {}\n", terminated.exit_code);
+                clickwrite!(writer, "\t\t  message: {}\n", message);
+                clickwrite!(writer, "\t\t  reason: {}\n", reason);
             } else if let Some(waiting) = state.waiting.as_ref() {
                 let message = waiting
                     .message
@@ -482,11 +494,17 @@ fn container_state_string(state: &Option<api::ContainerState>) -> String {
                     .as_ref()
                     .map(|m| m.as_str())
                     .unwrap_or("no reason");
-                format!("Waiting (message: {}, reason: {})", message, reason)
+                clickwrite!(writer, "{}\n", Yellow.paint("Waiting"));
+                clickwrite!(writer, "\t\t  message: {}\n", message);
+                clickwrite!(writer, "\t\t  reason: {}\n", reason);
             } else {
-                "Waiting (reason unknown)".into()
+                clickwrite!(
+                    writer,
+                    "{}",
+                    format!("{} (reason unknown)\n", Yellow.paint("Waiting"))
+                );
             }
         }
-        None => "Unknown".into(),
+        None => clickwrite!(writer, "Unknown"),
     }
 }

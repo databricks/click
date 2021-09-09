@@ -283,9 +283,10 @@ command!(
                 }
             });
 
-        let specified_show_namespace = flags.iter().find(|flag| {
-            flag.eq_ignore_ascii_case("namespace")
-        }).is_some();
+        let specified_show_namespace = flags
+            .iter()
+            .find(|flag| flag.eq_ignore_ascii_case("namespace"))
+            .is_some();
 
         add_extra_cols(&mut cols, matches.is_present("labels"), flags, &EXTRA_COLS);
 
@@ -317,3 +318,175 @@ command!(
         );
     }
 );
+
+// also add a command to print all the containers of a pod
+
+fn identity<T>(t: T) -> T {
+    t
+}
+
+command!(
+    Containers,
+    "containers",
+    "Print information about the containers of the active pod",
+    identity,
+    vec!["conts", "containers"],
+    noop_complete!(),
+    no_named_complete!(),
+    |_matches, env, writer| {
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                if obj.is_pod() {
+                    print_containers(obj, env, writer);
+                } else {
+                    clickwriteln!(writer, "containers only possible on a Pod");
+                }
+            },
+        );
+    }
+);
+
+// conainer helper commands
+fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+    let (request, _) = api::Pod::read_namespaced_pod(
+        obj.name(),
+        obj.namespace.as_ref().unwrap(),
+        Default::default(),
+    )
+    .unwrap();
+    match env
+        .run_on_context(|c| c.read::<api::ReadNamespacedPodResponse>(request))
+        .unwrap()
+    {
+        api::ReadNamespacedPodResponse::Ok(pod) => match pod.status {
+            Some(status) => {
+                for cont in status.container_statuses.iter() {
+                    clickwrite!(writer, "Name:\t{}\n", cont.name);
+                    clickwrite!(
+                        writer,
+                        "  ID:\t\t{}\n",
+                        cont.container_id
+                            .as_ref()
+                            .map(|id| id.as_str())
+                            .unwrap_or("<none>")
+                    );
+                    clickwrite!(writer, "  Image:\t{}\n", cont.image_id);
+                    clickwrite!(
+                        writer,
+                        "  State:\t{}\n",
+                        container_state_string(&cont.state)
+                    );
+                    clickwrite!(writer, "  Ready:\t{}\n", cont.ready);
+                    clickwrite!(writer, "  Restarts:\t{}\n", cont.restart_count);
+
+                    // find the spec for this container
+                    if let Some(spec) = pod.spec.as_ref() {
+                        let cont_spec = spec.containers.iter().find(|cs| cs.name == cont.name);
+                        if let Some(cont_spec) = cont_spec {
+                            // print resources
+                            clickwrite!(writer, "  Resources:\n");
+                            match cont_spec.resources.as_ref() {
+                                Some(resources) => {
+                                    clickwrite!(writer, "    Requests:\n");
+                                    for (resource, quant) in resources.requests.iter() {
+                                        clickwrite!(writer, "      {}: {}\n", resource, quant.0)
+                                    }
+                                    if resources.requests.len() == 0 {
+                                        clickwrite!(writer, "      <none>\n");
+                                    }
+                                    clickwrite!(writer, "    Limits:\n");
+                                    for (resource, quant) in resources.limits.iter() {
+                                        clickwrite!(writer, "      {}: {}\n", resource, quant.0)
+                                    }
+                                    if resources.limits.len() == 0 {
+                                        clickwrite!(writer, "      <none>\n");
+                                    }
+                                }
+                                None => {
+                                    clickwrite!(writer, "    <Unknown>\n");
+                                }
+                            }
+
+                            // print volumes
+                            clickwrite!(writer, "  Volumes:\n");
+                            if cont_spec.volume_mounts.len() > 0 {
+                                for vol in cont_spec.volume_mounts.iter() {
+                                    clickwrite!(writer, "   {}\n", vol.name);
+                                    clickwrite!(writer, "    Path:\t{}\n", vol.mount_path);
+                                    clickwrite!(
+                                        writer,
+                                        "    Sub-Path:\t{}\n",
+                                        vol.sub_path
+                                            .as_ref()
+                                            .map(|sp| { sp.as_str() })
+                                            .unwrap_or("<none>")
+                                    );
+                                    clickwrite!(
+                                        writer,
+                                        "    Read-Only:\t{}\n",
+                                        vol.read_only.unwrap_or(false)
+                                    );
+                                }
+                            } else {
+                                clickwrite!(writer, "    No Volumes\n");
+                            }
+                        }
+                    }
+
+                    clickwrite!(writer, "\n");
+                }
+            }
+            None => {
+                clickwrite!(writer, "No container info returned from api server\n");
+            }
+        },
+        api::ReadNamespacedPodResponse::Other(o) => {
+            clickwrite!(writer, "Error getting pod info: {:?}\n", o);
+        }
+    }
+}
+
+fn container_state_string(state: &Option<api::ContainerState>) -> String {
+    match state {
+        Some(state) => {
+            if let Some(running) = state.running.as_ref() {
+                match &running.started_at {
+                    Some(start) => format!("Running since {}", start.0),
+                    None => format!("Running (since unknown)"),
+                }
+            } else if let Some(terminated) = state.terminated.as_ref() {
+                let message = terminated
+                    .message
+                    .as_ref()
+                    .map(|m| m.as_str())
+                    .unwrap_or("no message");
+                let reason = terminated
+                    .reason
+                    .as_ref()
+                    .map(|m| m.as_str())
+                    .unwrap_or("no reason");
+                format!(
+                    "Terminated (code: {}, message: {}, reason: {})",
+                    terminated.exit_code, message, reason
+                )
+            } else if let Some(waiting) = state.waiting.as_ref() {
+                let message = waiting
+                    .message
+                    .as_ref()
+                    .map(|m| m.as_str())
+                    .unwrap_or("no message");
+                let reason = waiting
+                    .reason
+                    .as_ref()
+                    .map(|m| m.as_str())
+                    .unwrap_or("no reason");
+                format!("Waiting (message: {}, reason: {})", message, reason)
+            } else {
+                "Waiting (reason unknown)".into()
+            }
+        }
+        None => "Unknown".into(),
+    }
+}

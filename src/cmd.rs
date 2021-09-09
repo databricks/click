@@ -20,8 +20,8 @@ use crate::env::{self, Env};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
-    ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
-    Pod, ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
+    ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata, Pod,
+    ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};

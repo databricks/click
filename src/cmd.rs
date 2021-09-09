@@ -16,12 +16,12 @@
 
 use crate::completer;
 use crate::config;
-use crate::env::{self, Env, ObjectSelection};
+use crate::env::{self, Env};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
-    ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
-    Pod, PodList, ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
+    ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
+    Pod, ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -355,60 +355,60 @@ fn valid_bool(s: String) -> Result<(), String> {
     s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
 }
 
-/// Check if a pod has a waiting container
-fn has_waiting(pod: &Pod) -> bool {
-    if let Some(ref stats) = pod.status.container_statuses {
-        stats
-            .iter()
-            .any(|cs| matches!(cs.state, ContainerState::Waiting { .. }))
-    } else {
-        false
-    }
-}
+// /// Check if a pod has a waiting container
+// fn has_waiting(pod: &Pod) -> bool {
+//     if let Some(ref stats) = pod.status.container_statuses {
+//         stats
+//             .iter()
+//             .any(|cs| matches!(cs.state, ContainerState::Waiting { .. }))
+//     } else {
+//         false
+//     }
+// }
 
-// Figure out the right thing to print for the phase of the given pod
-fn phase_str<'a>(pod: &Pod) -> Cow<'a, str> {
-    if pod.metadata.deletion_timestamp.is_some() {
-        // Was deleted
-        "Terminating".into()
-    } else if has_waiting(pod) {
-        "ContainerCreating".into()
-    } else {
-        pod.status.phase.clone().into()
-    }
-}
+// // Figure out the right thing to print for the phase of the given pod
+// fn phase_str<'a>(pod: &Pod) -> Cow<'a, str> {
+//     if pod.metadata.deletion_timestamp.is_some() {
+//         // Was deleted
+//         "Terminating".into()
+//     } else if has_waiting(pod) {
+//         "ContainerCreating".into()
+//     } else {
+//         pod.status.phase.clone().into()
+//     }
+// }
 
 // get the number of ready containers and total containers
 // or None if that cannot be determined
-fn ready_counts(pod: &Pod) -> Option<(u32, u32)> {
-    pod.status.container_statuses.as_ref().map(|statuses| {
-        let mut count = 0;
-        let mut ready = 0;
-        for stat in statuses.iter() {
-            count += 1;
-            if stat.ready {
-                ready += 1;
-            }
-        }
-        (ready, count)
-    })
-}
+// fn ready_counts(pod: &Pod) -> Option<(u32, u32)> {
+//     pod.status.container_statuses.as_ref().map(|statuses| {
+//         let mut count = 0;
+//         let mut ready = 0;
+//         for stat in statuses.iter() {
+//             count += 1;
+//             if stat.ready {
+//                 ready += 1;
+//             }
+//         }
+//         (ready, count)
+//     })
+// }
 
-fn phase_style(phase: &str) -> &'static str {
-    phase_style_str(phase)
-}
+// fn phase_style(phase: &str) -> &'static str {
+//     phase_style_str(phase)
+// }
 
-fn phase_style_str(phase: &str) -> &'static str {
-    match phase {
-        "Pending" | "Running" | "Active" => "Fg",
-        "Terminated" | "Terminating" => "Fr",
-        "ContainerCreating" => "Fy",
-        "Succeeded" => "Fb",
-        "Failed" => "Fr",
-        "Unknown" => "Fr",
-        _ => "Fr",
-    }
-}
+// fn phase_style_str(phase: &str) -> &'static str {
+//     match phase {
+//         "Pending" | "Running" | "Active" => "Fg",
+//         "Terminated" | "Terminating" => "Fr",
+//         "ContainerCreating" => "Fy",
+//         "Succeeded" => "Fb",
+//         "Failed" => "Fr",
+//         "Unknown" => "Fr",
+//         _ => "Fr",
+//     }
+// }
 
 fn time_since(date: DateTime<Utc>) -> String {
     let now = Utc::now();
@@ -445,205 +445,205 @@ fn shorten_to(s: String, max_len: usize) -> String {
     }
 }
 
-fn create_podlist_specs<'a>(
-    pod: Pod,
-    show_labels: bool,
-    show_annot: bool,
-    show_node: bool,
-    show_namespace: bool,
-) -> (Pod, Vec<CellSpec<'a>>) {
-    let mut specs = vec![CellSpec::new_index(), pod.metadata.name.clone().into()];
+// fn create_podlist_specs<'a>(
+//     pod: Pod,
+//     show_labels: bool,
+//     show_annot: bool,
+//     show_node: bool,
+//     show_namespace: bool,
+// ) -> (Pod, Vec<CellSpec<'a>>) {
+//     let mut specs = vec![CellSpec::new_index(), pod.metadata.name.clone().into()];
 
-    let ready_str = match ready_counts(&pod) {
-        Some((ready, count)) => Cow::Owned(format!("{}/{}", ready, count)),
-        None => Cow::Borrowed("Unknown"),
-    };
-    specs.push(ready_str.into());
+//     let ready_str = match ready_counts(&pod) {
+//         Some((ready, count)) => Cow::Owned(format!("{}/{}", ready, count)),
+//         None => Cow::Borrowed("Unknown"),
+//     };
+//     specs.push(ready_str.into());
 
-    {
-        let ps = phase_str(&pod);
-        let ss = phase_style(&ps);
-        specs.push(CellSpec::with_style(ps.into(), ss));
-    }
+//     {
+//         let ps = phase_str(&pod);
+//         let ss = phase_style(&ps);
+//         specs.push(CellSpec::with_style(ps.into(), ss));
+//     }
 
-    if let Some(ts) = pod.metadata.creation_timestamp {
-        specs.push(time_since(ts).into());
-    } else {
-        specs.push("unknown".into());
-    }
+//     if let Some(ts) = pod.metadata.creation_timestamp {
+//         specs.push(time_since(ts).into());
+//     } else {
+//         specs.push("unknown".into());
+//     }
 
-    let restarts = pod
-        .status
-        .container_statuses
-        .as_ref()
-        .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
-        .unwrap_or(0);
-    specs.push(restarts.to_string().into());
+//     let restarts = pod
+//         .status
+//         .container_statuses
+//         .as_ref()
+//         .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
+//         .unwrap_or(0);
+//     specs.push(restarts.to_string().into());
 
-    if show_labels {
-        specs.push(keyval_string(&pod.metadata.labels).into());
-    }
+//     if show_labels {
+//         specs.push(keyval_string(&pod.metadata.labels).into());
+//     }
 
-    if show_annot {
-        specs.push(keyval_string(&pod.metadata.annotations).into());
-    }
+//     if show_annot {
+//         specs.push(keyval_string(&pod.metadata.annotations).into());
+//     }
 
-    if show_node {
-        specs.push(match pod.spec.node_name {
-            Some(ref nn) => nn.clone().into(),
-            None => "[Unknown]".into(),
-        });
-    }
+//     if show_node {
+//         specs.push(match pod.spec.node_name {
+//             Some(ref nn) => nn.clone().into(),
+//             None => "[Unknown]".into(),
+//         });
+//     }
 
-    if show_namespace {
-        specs.push(match pod.metadata.namespace {
-            Some(ref ns) => ns.clone().into(),
-            None => "[Unknown]".into(),
-        });
-    }
-    (pod, specs)
-}
+//     if show_namespace {
+//         specs.push(match pod.metadata.namespace {
+//             Some(ref ns) => ns.clone().into(),
+//             None => "[Unknown]".into(),
+//         });
+//     }
+//     (pod, specs)
+// }
 
-/// Print out the specified list of pods in a pretty format
-#[allow(clippy::too_many_arguments)]
-fn print_podlist(
-    mut podlist: PodList,
-    show_labels: bool,
-    show_annot: bool,
-    show_node: bool,
-    show_namespace: bool,
-    regex: Option<Regex>,
-    sort: Option<&str>,
-    reverse: bool,
-    writer: &mut ClickWriter,
-) -> PodList {
-    let mut table = Table::new();
-    let mut title_row = row!["####", "Name", "Ready", "Phase", "Age", "Restarts"];
+// /// Print out the specified list of pods in a pretty format
+// #[allow(clippy::too_many_arguments)]
+// fn print_podlist(
+//     mut podlist: PodList,
+//     show_labels: bool,
+//     show_annot: bool,
+//     show_node: bool,
+//     show_namespace: bool,
+//     regex: Option<Regex>,
+//     sort: Option<&str>,
+//     reverse: bool,
+//     writer: &mut ClickWriter,
+// ) -> PodList {
+//     let mut table = Table::new();
+//     let mut title_row = row!["####", "Name", "Ready", "Phase", "Age", "Restarts"];
 
-    let show_labels = show_labels
-        || sort
-            .map(|s| s == "Lables" || s == "labels")
-            .unwrap_or(false);
-    let show_annot = show_annot
-        || sort
-            .map(|s| s == "Annotations" || s == "annotations")
-            .unwrap_or(false);
-    let show_node = show_node || sort.map(|s| s == "Node" || s == "node").unwrap_or(false);
-    let show_namespace = show_namespace
-        || sort
-            .map(|s| s == "Namespace" || s == "namespace")
-            .unwrap_or(false);
+//     let show_labels = show_labels
+//         || sort
+//             .map(|s| s == "Lables" || s == "labels")
+//             .unwrap_or(false);
+//     let show_annot = show_annot
+//         || sort
+//             .map(|s| s == "Annotations" || s == "annotations")
+//             .unwrap_or(false);
+//     let show_node = show_node || sort.map(|s| s == "Node" || s == "node").unwrap_or(false);
+//     let show_namespace = show_namespace
+//         || sort
+//             .map(|s| s == "Namespace" || s == "namespace")
+//             .unwrap_or(false);
 
-    if show_labels {
-        title_row.add_cell(Cell::new("Labels"));
-    }
-    if show_annot {
-        title_row.add_cell(Cell::new("Annotations"));
-    }
-    if show_node {
-        title_row.add_cell(Cell::new("Node"));
-    }
-    if show_namespace {
-        title_row.add_cell(Cell::new("Namespace"));
-    }
-    table.set_titles(title_row);
+//     if show_labels {
+//         title_row.add_cell(Cell::new("Labels"));
+//     }
+//     if show_annot {
+//         title_row.add_cell(Cell::new("Annotations"));
+//     }
+//     if show_node {
+//         title_row.add_cell(Cell::new("Node"));
+//     }
+//     if show_namespace {
+//         title_row.add_cell(Cell::new("Namespace"));
+//     }
+//     table.set_titles(title_row);
 
-    if let Some(sortcol) = sort {
-        match sortcol {
-            "Name" | "name" => podlist
-                .items
-                .sort_by(|p1, p2| p1.metadata.name.partial_cmp(&p2.metadata.name).unwrap()),
-            "Ready" | "ready" => podlist.items.sort_by(|p1, p2| {
-                opt_sort(ready_counts(p1), ready_counts(p2), |(r1, c1), (r2, c2)| {
-                    if c1 < c2 {
-                        cmp::Ordering::Less
-                    } else if c1 > c2 {
-                        cmp::Ordering::Greater
-                    } else if r1 < r2 {
-                        cmp::Ordering::Less
-                    } else if r1 > r2 {
-                        cmp::Ordering::Greater
-                    } else {
-                        cmp::Ordering::Equal
-                    }
-                })
-            }),
-            "Age" | "age" => podlist.items.sort_by(|p1, p2| {
-                opt_sort(
-                    p1.metadata.creation_timestamp,
-                    p2.metadata.creation_timestamp,
-                    |a1, a2| a1.partial_cmp(a2).unwrap(),
-                )
-            }),
-            "Phase" | "phase" => podlist.items.sort_by_key(|phase| phase_str(phase)),
-            "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
-                let p1r = p1
-                    .status
-                    .container_statuses
-                    .as_ref()
-                    .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
-                    .unwrap_or(0);
-                let p2r = p2
-                    .status
-                    .container_statuses
-                    .as_ref()
-                    .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
-                    .unwrap_or(0);
-                p1r.partial_cmp(&p2r).unwrap()
-            }),
-            "Labels" | "labels" => podlist.items.sort_by(|p1, p2| {
-                let p1s = keyval_string(&p1.metadata.labels);
-                let p2s = keyval_string(&p2.metadata.labels);
-                p1s.partial_cmp(&p2s).unwrap()
-            }),
-            "Annotations" | "annotations" => podlist.items.sort_by(|p1, p2| {
-                let p1s = keyval_string(&p1.metadata.annotations);
-                let p2s = keyval_string(&p2.metadata.annotations);
-                p1s.partial_cmp(&p2s).unwrap()
-            }),
-            "Node" | "node" => podlist.items.sort_by(|p1, p2| {
-                opt_sort(
-                    p1.spec.node_name.as_ref(),
-                    p2.spec.node_name.as_ref(),
-                    |p1n, p2n| p1n.partial_cmp(p2n).unwrap(),
-                )
-            }),
-            "Namespace" | "namespace" => podlist.items.sort_by(|p1, p2| {
-                opt_sort(
-                    p1.metadata.namespace.as_ref(),
-                    p2.metadata.namespace.as_ref(),
-                    |p1n, p2n| p1n.partial_cmp(p2n).unwrap(),
-                )
-            }),
-            _ => {
-                clickwriteln!(
-                    writer,
-                    "Invalid sort col: {}, this is a bug, please report it",
-                    sortcol
-                );
-            }
-        }
-    }
+//     if let Some(sortcol) = sort {
+//         match sortcol {
+//             "Name" | "name" => podlist
+//                 .items
+//                 .sort_by(|p1, p2| p1.metadata.name.partial_cmp(&p2.metadata.name).unwrap()),
+//             "Ready" | "ready" => podlist.items.sort_by(|p1, p2| {
+//                 opt_sort(ready_counts(p1), ready_counts(p2), |(r1, c1), (r2, c2)| {
+//                     if c1 < c2 {
+//                         cmp::Ordering::Less
+//                     } else if c1 > c2 {
+//                         cmp::Ordering::Greater
+//                     } else if r1 < r2 {
+//                         cmp::Ordering::Less
+//                     } else if r1 > r2 {
+//                         cmp::Ordering::Greater
+//                     } else {
+//                         cmp::Ordering::Equal
+//                     }
+//                 })
+//             }),
+//             "Age" | "age" => podlist.items.sort_by(|p1, p2| {
+//                 opt_sort(
+//                     p1.metadata.creation_timestamp,
+//                     p2.metadata.creation_timestamp,
+//                     |a1, a2| a1.partial_cmp(a2).unwrap(),
+//                 )
+//             }),
+//             "Phase" | "phase" => podlist.items.sort_by_key(|phase| phase_str(phase)),
+//             "Restarts" | "restarts" => podlist.items.sort_by(|p1, p2| {
+//                 let p1r = p1
+//                     .status
+//                     .container_statuses
+//                     .as_ref()
+//                     .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
+//                     .unwrap_or(0);
+//                 let p2r = p2
+//                     .status
+//                     .container_statuses
+//                     .as_ref()
+//                     .map(|stats| stats.iter().fold(0, |acc, x| acc + x.restart_count))
+//                     .unwrap_or(0);
+//                 p1r.partial_cmp(&p2r).unwrap()
+//             }),
+//             "Labels" | "labels" => podlist.items.sort_by(|p1, p2| {
+//                 let p1s = keyval_string(&p1.metadata.labels);
+//                 let p2s = keyval_string(&p2.metadata.labels);
+//                 p1s.partial_cmp(&p2s).unwrap()
+//             }),
+//             "Annotations" | "annotations" => podlist.items.sort_by(|p1, p2| {
+//                 let p1s = keyval_string(&p1.metadata.annotations);
+//                 let p2s = keyval_string(&p2.metadata.annotations);
+//                 p1s.partial_cmp(&p2s).unwrap()
+//             }),
+//             "Node" | "node" => podlist.items.sort_by(|p1, p2| {
+//                 opt_sort(
+//                     p1.spec.node_name.as_ref(),
+//                     p2.spec.node_name.as_ref(),
+//                     |p1n, p2n| p1n.partial_cmp(p2n).unwrap(),
+//                 )
+//             }),
+//             "Namespace" | "namespace" => podlist.items.sort_by(|p1, p2| {
+//                 opt_sort(
+//                     p1.metadata.namespace.as_ref(),
+//                     p2.metadata.namespace.as_ref(),
+//                     |p1n, p2n| p1n.partial_cmp(p2n).unwrap(),
+//                 )
+//             }),
+//             _ => {
+//                 clickwriteln!(
+//                     writer,
+//                     "Invalid sort col: {}, this is a bug, please report it",
+//                     sortcol
+//                 );
+//             }
+//         }
+//     }
 
-    let to_map: Box<dyn Iterator<Item = Pod>> = if reverse {
-        Box::new(podlist.items.into_iter().rev())
-    } else {
-        Box::new(podlist.items.into_iter())
-    };
+//     let to_map: Box<dyn Iterator<Item = Pod>> = if reverse {
+//         Box::new(podlist.items.into_iter().rev())
+//     } else {
+//         Box::new(podlist.items.into_iter())
+//     };
 
-    let pods_specs = to_map
-        .map(|pod| create_podlist_specs(pod, show_labels, show_annot, show_node, show_namespace));
+//     let pods_specs = to_map
+//         .map(|pod| create_podlist_specs(pod, show_labels, show_annot, show_node, show_namespace));
 
-    let filtered = match regex {
-        Some(r) => crate::table::filter(pods_specs, r),
-        None => pods_specs.collect(),
-    };
+//     let filtered = match regex {
+//         Some(r) => crate::table::filter(pods_specs, r),
+//         None => pods_specs.collect(),
+//     };
 
-    crate::table::print_table(&mut table, &filtered, writer);
+//     crate::table::print_table(&mut table, &filtered, writer);
 
-    let final_pods = filtered.into_iter().map(|pod_spec| pod_spec.0).collect();
-    PodList { items: final_pods }
-}
+//     let final_pods = filtered.into_iter().map(|pod_spec| pod_spec.0).collect();
+//     PodList { items: final_pods }
+// }
 
 /// Build a multi-line string of the specified keyvals
 fn keyval_string(keyvals: &Option<serde_json::Map<String, Value>>) -> String {
@@ -1244,145 +1244,145 @@ command!(
     }
 );
 
-command!(
-    Pods,
-    "pods",
-    "Get pods (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("label")
-                .short("l")
-                .long("label")
-                .help("Get pods with specified label selector (example: app=kinesis2prom)")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter pods by the specified regex")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("showlabels")
-                .short("L")
-                .long("labels")
-                .help("Show pod labels as column in output")
-                .takes_value(false)
-        )
-        .arg(
-            Arg::with_name("showannot")
-                .short("A")
-                .long("show-annotations")
-                .help("Show pod annotations as column in output")
-                .takes_value(false)
-        )
-        .arg(
-            Arg::with_name("shownode")
-                .short("n")
-                .long("show-node")
-                .help("Show node pod is on as column in output")
-                .takes_value(false)
-        )
-        .arg(
-            Arg::with_name("sort")
-                .short("s")
-                .long("sort")
-                .help(
-                    "Sort by specified column (if column isn't shown by default, it will \
-                     be shown)"
-                )
-                .takes_value(true)
-                .possible_values(&[
-                    "Name",
-                    "name",
-                    "Ready",
-                    "ready",
-                    "Phase",
-                    "phase",
-                    "Age",
-                    "age",
-                    "Restarts",
-                    "restarts",
-                    "Labels",
-                    "labels",
-                    "Annotations",
-                    "annotations",
-                    "Node",
-                    "node",
-                    "Namespace",
-                    "namespace"
-                ])
-        )
-        .arg(
-            Arg::with_name("reverse")
-                .short("R")
-                .long("reverse")
-                .help("Reverse the order of the returned list")
-                .takes_value(false)
-        ),
-    vec!["pods"],
-    noop_complete!(),
-    IntoIter::new([(
-        "sort".to_string(),
-        completer::pod_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
-    .collect(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                writeln!(stderr(), "{}", s).unwrap_or(());
-                return;
-            }
-        };
+// command!(
+//     Pods,
+//     "pods",
+//     "Get pods (in current namespace if set)",
+//     |clap: App<'static, 'static>| clap
+//         .arg(
+//             Arg::with_name("label")
+//                 .short("l")
+//                 .long("label")
+//                 .help("Get pods with specified label selector (example: app=kinesis2prom)")
+//                 .takes_value(true)
+//         )
+//         .arg(
+//             Arg::with_name("regex")
+//                 .short("r")
+//                 .long("regex")
+//                 .help("Filter pods by the specified regex")
+//                 .takes_value(true)
+//         )
+//         .arg(
+//             Arg::with_name("showlabels")
+//                 .short("L")
+//                 .long("labels")
+//                 .help("Show pod labels as column in output")
+//                 .takes_value(false)
+//         )
+//         .arg(
+//             Arg::with_name("showannot")
+//                 .short("A")
+//                 .long("show-annotations")
+//                 .help("Show pod annotations as column in output")
+//                 .takes_value(false)
+//         )
+//         .arg(
+//             Arg::with_name("shownode")
+//                 .short("n")
+//                 .long("show-node")
+//                 .help("Show node pod is on as column in output")
+//                 .takes_value(false)
+//         )
+//         .arg(
+//             Arg::with_name("sort")
+//                 .short("s")
+//                 .long("sort")
+//                 .help(
+//                     "Sort by specified column (if column isn't shown by default, it will \
+//                      be shown)"
+//                 )
+//                 .takes_value(true)
+//                 .possible_values(&[
+//                     "Name",
+//                     "name",
+//                     "Ready",
+//                     "ready",
+//                     "Phase",
+//                     "phase",
+//                     "Age",
+//                     "age",
+//                     "Restarts",
+//                     "restarts",
+//                     "Labels",
+//                     "labels",
+//                     "Annotations",
+//                     "annotations",
+//                     "Node",
+//                     "node",
+//                     "Namespace",
+//                     "namespace"
+//                 ])
+//         )
+//         .arg(
+//             Arg::with_name("reverse")
+//                 .short("R")
+//                 .long("reverse")
+//                 .help("Reverse the order of the returned list")
+//                 .takes_value(false)
+//         ),
+//     vec!["pods"],
+//     noop_complete!(),
+//     IntoIter::new([(
+//         "sort".to_string(),
+//         completer::pod_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+//     )])
+//     .collect(),
+//     |matches, env, writer| {
+//         let regex = match crate::table::get_regex(&matches) {
+//             Ok(r) => r,
+//             Err(s) => {
+//                 writeln!(stderr(), "{}", s).unwrap_or(());
+//                 return;
+//             }
+//         };
 
-        let mut urlstr = if let Some(ref ns) = env.namespace {
-            format!("/api/v1/namespaces/{}/pods", ns)
-        } else {
-            "/api/v1/pods".to_owned()
-        };
+//         let mut urlstr = if let Some(ref ns) = env.namespace {
+//             format!("/api/v1/namespaces/{}/pods", ns)
+//         } else {
+//             "/api/v1/pods".to_owned()
+//         };
 
-        let mut pushed_label = false;
-        if let Some(label_selector) = matches.value_of("label") {
-            urlstr.push_str("?labelSelector=");
-            urlstr.push_str(label_selector);
-            pushed_label = true;
-        }
+//         let mut pushed_label = false;
+//         if let Some(label_selector) = matches.value_of("label") {
+//             urlstr.push_str("?labelSelector=");
+//             urlstr.push_str(label_selector);
+//             pushed_label = true;
+//         }
 
-        if let ObjectSelection::Single(obj) = env.current_selection() {
-            if obj.is(ObjType::Node) {
-                if pushed_label {
-                    urlstr.push('&');
-                } else {
-                    urlstr.push('?');
-                }
-                urlstr.push_str("fieldSelector=spec.nodeName=");
-                urlstr.push_str(obj.name());
-            }
-        }
+//         if let ObjectSelection::Single(obj) = env.current_selection() {
+//             if obj.is(ObjType::Node) {
+//                 if pushed_label {
+//                     urlstr.push('&');
+//                 } else {
+//                     urlstr.push('?');
+//                 }
+//                 urlstr.push_str("fieldSelector=spec.nodeName=");
+//                 urlstr.push_str(obj.name());
+//             }
+//         }
 
-        let pl: Option<PodList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+//         let pl: Option<PodList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
 
-        match pl {
-            Some(l) => {
-                let end_list = print_podlist(
-                    l,
-                    matches.is_present("showlabels"),
-                    matches.is_present("showannot"),
-                    matches.is_present("shownode"),
-                    env.namespace.is_none(),
-                    regex,
-                    matches.value_of("sort"),
-                    matches.is_present("reverse"),
-                    writer,
-                );
-                env.set_last_objs(end_list);
-            }
-            None => env.clear_last_objs(),
-        }
-    }
-);
+//         match pl {
+//             Some(l) => {
+//                 let end_list = print_podlist(
+//                     l,
+//                     matches.is_present("showlabels"),
+//                     matches.is_present("showannot"),
+//                     matches.is_present("shownode"),
+//                     env.namespace.is_none(),
+//                     regex,
+//                     matches.value_of("sort"),
+//                     matches.is_present("reverse"),
+//                     writer,
+//                 );
+//                 env.set_last_objs(end_list);
+//             }
+//             None => env.clear_last_objs(),
+//         }
+//     }
+// );
 
 // logs helper commands
 fn pick_container<'a>(obj: &'a KObj, writer: &mut ClickWriter) -> &'a str {

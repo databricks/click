@@ -1,5 +1,6 @@
 pub mod namespaces;
 pub mod nodes;
+pub mod pods;
 pub mod volumes;
 
 use chrono::offset::Utc;
@@ -320,7 +321,8 @@ fn show_arg<'a>(extra_cols: &[&'a str], labels: bool) -> Arg<'a, 'a> {
         .long("show")
         .takes_value(true)
         .possible_value("all")
-        .possible_values(extra_cols);
+        .possible_values(extra_cols)
+        .use_delimiter(true);
     if labels {
         arg.help(SHOW_HELP_WITH_LABELS)
     } else {

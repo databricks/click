@@ -38,6 +38,7 @@ type Extractor<T> = fn(&T) -> Option<CellSpec<'_>>;
  * NB: This function assumes you want the printed list to be numbered. It further assumes the cols
  * will NOT include a colume named ####, and inserts it for you at the start.
  */
+#[allow(clippy::too_many_arguments)]
 pub fn handle_list_result<'a, T, F>(
     env: &mut Env,
     writer: &mut ClickWriter,
@@ -48,8 +49,7 @@ pub fn handle_list_result<'a, T, F>(
     sort: Option<SortFunc<T>>,
     reverse: bool,
     get_kobj: F,
-) -> ()
-where
+) where
     T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
     F: Fn(&T) -> KObj,
 {
@@ -113,7 +113,7 @@ where
  * things returned, and the row specs that can be used to print out that list.
  */
 pub fn build_specs<'a, T, F>(
-    cols: &Vec<&str>,
+    cols: &[&str],
     list: &'a List<T>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     include_index: bool,
@@ -132,7 +132,7 @@ where
             vec![]
         };
         for col in cols.iter() {
-            match col.as_ref() {
+            match *col {
                 "Name" => row.push(extract_name(item).into()),
                 "Age" => row.push(extract_age(item).into()),
                 _ => match extractors {
@@ -161,13 +161,13 @@ where
 // common extractors
 
 /// An extractor for the Name field. Extracts the name out of the object metadata
-pub fn extract_name<'a, T: Metadata<Ty = ObjectMeta>>(obj: &'a T) -> Option<Cow<'a, str>> {
+pub fn extract_name<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
     meta.name.as_ref().map(|n| n.into())
 }
 
 /// An extractor for the Age field. Extracts the age out of the object metadata
-pub fn extract_age<'a, T: Metadata<Ty = ObjectMeta>>(obj: &'a T) -> Option<Cow<'a, str>> {
+pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
     meta.creation_timestamp
         .as_ref()
@@ -175,11 +175,11 @@ pub fn extract_age<'a, T: Metadata<Ty = ObjectMeta>>(obj: &'a T) -> Option<Cow<'
 }
 
 // utility functions
-fn row_matches<'a>(row: &Vec<CellSpec<'a>>, regex: &Regex) -> bool {
+fn row_matches<'a>(row: &[CellSpec<'a>], regex: &Regex) -> bool {
     let mut has_match = false;
     for cell_spec in row.iter() {
         if !has_match {
-            has_match = cell_spec.matches(&regex);
+            has_match = cell_spec.matches(regex);
         }
     }
     has_match
@@ -238,32 +238,17 @@ fn add_extra_cols<'a>(
     cols: &mut Vec<&'a str>,
     labels: bool,
     flags: Vec<&str>,
-    extra_cols: &Vec<(&'a str, &'a str)>,
+    extra_cols: &[(&'a str, &'a str)],
 ) {
-    let show_all = flags
-        .iter()
-        .find(|e| e.eq_ignore_ascii_case("all"))
-        .is_some();
+    let show_all = flags.iter().any(|e| e.eq_ignore_ascii_case("all"));
 
     for (flag, col) in extra_cols.iter() {
         if col.eq(&"Labels") {
-            if labels
-                || flags
-                    .iter()
-                    .find(|e| e.eq_ignore_ascii_case("labels"))
-                    .is_some()
-            {
+            if labels || flags.iter().any(|e| e.eq_ignore_ascii_case("labels")) {
                 cols.push(col)
             }
-        } else {
-            if show_all
-                || flags
-                    .iter()
-                    .find(|e| e.eq_ignore_ascii_case(flag))
-                    .is_some()
-            {
-                cols.push(col)
-            }
+        } else if show_all || flags.iter().any(|e| e.eq_ignore_ascii_case(flag)) {
+            cols.push(col)
         }
     }
 }
@@ -307,10 +292,10 @@ fn sort_arg<'a>(cols: &[&'a str], extra_cols: Option<&[&'a str]>) -> Arg<'a, 'a>
     }
 }
 
-static SHOW_HELP: &'static str =
+static SHOW_HELP: &str =
     "Comma separated list (case-insensitive) of extra columns to show in output. \
      Use '--show all' to show all available columns.";
-static SHOW_HELP_WITH_LABELS: &'static str =
+static SHOW_HELP_WITH_LABELS: &str =
     "Comma separated list (case-insensitive) of extra columns to show in output. \
      Use '--show all,labels' to show all available columns. (Note that 'all' doesn't \
      include labels due to thier size)";

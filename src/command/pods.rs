@@ -1,17 +1,17 @@
 use ansi_term::{
     Colour::{Green, Red, Yellow},
-    Style
+    Style,
 };
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::List;
+use k8s_openapi::{List, ListOptional};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
     command::{add_extra_cols, handle_list_result, show_arg, sort_arg, Extractor, SortFunc},
     completer,
-    env::Env,
+    env::{Env, ObjectSelection},
     kobj::{KObj, ObjType},
     output::ClickWriter,
     table::CellSpec,
@@ -58,7 +58,7 @@ fn pod_to_kobj(pod: &api::Pod) -> KObj {
     };
     let meta = &pod.metadata;
     KObj {
-        name: meta.name.clone().unwrap_or("<Unknown>".into()),
+        name: meta.name.clone().unwrap_or_else(|| "<Unknown>".into()),
         namespace: meta.namespace.clone(),
         typ: ObjType::Pod { containers },
     }
@@ -97,37 +97,37 @@ fn phase_style_str(phase: &str) -> &'static str {
     }
 }
 
-fn pod_ip<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_ip(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status
         .as_ref()
         .and_then(|status| status.pod_ip.as_ref().map(|pi| pi.as_str().into()))
 }
 
-fn pod_labels<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_labels(pod: &api::Pod) -> Option<CellSpec<'_>> {
     Some(crate::command::keyval_string(&pod.metadata.labels).into())
 }
 
-fn pod_namespace<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_namespace(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.metadata.namespace.as_ref().map(|ns| ns.as_str().into())
 }
 
-fn pod_node<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_node(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.spec
         .as_ref()
         .and_then(|spec| spec.node_name.as_ref().map(|nn| nn.as_str().into()))
 }
 
-fn pod_nominated_node<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_nominated_node(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status
         .as_ref()
-        .and_then(|status| match status.nominated_node_name.as_ref() {
-            Some(nn) => Some(nn.as_str().into()),
-            None => Some("<none>".into()),
+        .map(|status| match status.nominated_node_name.as_ref() {
+            Some(nn) => nn.as_str().into(),
+            None => "<none>".into(),
         })
 }
 
 // get the number of ready containers and total containers as ready/total
-fn ready_counts<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn ready_counts(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status.as_ref().map(|stat| {
         let mut count = 0;
         let mut ready = 0;
@@ -141,22 +141,22 @@ fn ready_counts<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
     })
 }
 
-fn pod_readiness_gates<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
-    pod.spec.as_ref().and_then(|spec| {
-        if spec.readiness_gates.len() == 0 {
-            Some("<none>".into())
+fn pod_readiness_gates(pod: &api::Pod) -> Option<CellSpec<'_>> {
+    pod.spec.as_ref().map(|spec| {
+        if spec.readiness_gates.is_empty() {
+            "<none>".into()
         } else {
-            let gates: Vec<&'a str> = spec
+            let gates: Vec<&str> = spec
                 .readiness_gates
                 .iter()
                 .map(|rg| rg.condition_type.as_str())
                 .collect();
-            Some(gates.join(", ").into())
+            gates.join(", ").into()
         }
     })
 }
 
-fn restart_count<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn restart_count(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status.as_ref().map(|stat| {
         let count = stat
             .container_statuses
@@ -166,7 +166,7 @@ fn restart_count<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
     })
 }
 
-fn pod_status<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
+fn pod_status(pod: &api::Pod) -> Option<CellSpec<'_>> {
     let status = if pod.metadata.deletion_timestamp.is_some() {
         // Was deleted
         "Terminating"
@@ -175,7 +175,7 @@ fn pod_status<'a>(pod: &'a api::Pod) -> Option<CellSpec<'a>> {
     } else {
         pod.status
             .as_ref()
-            .and_then(|stat| stat.phase.as_ref().map(|phase| phase.as_str().into()))
+            .and_then(|stat| stat.phase.as_deref())
             .unwrap_or("Unknown")
     };
     let style = phase_style_str(status);
@@ -193,6 +193,13 @@ command!(
                 .long("labels")
                 .help("include labels in output (deprecated, use --show labels)")
                 .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("node")
+                .short("n")
+                .long("node")
+                .help("Only fetch pods on the specified node.")
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("regex")
@@ -241,9 +248,28 @@ command!(
             }
         };
 
+        let mut opts: ListOptional = ListOptional::<'_> {
+            label_selector: matches.value_of("label"),
+            ..Default::default()
+        };
+        let mut field_sel = None;
+        match matches.value_of("node") {
+            Some(nodeval) => {
+                field_sel = Some(format!("spec.nodeName={}", nodeval));
+            }
+            None => {
+                if let ObjectSelection::Single(obj) = env.current_selection() {
+                    if obj.is(ObjType::Node) {
+                        field_sel = Some(format!("spec.nodeName={}", obj.name()));
+                    }
+                }
+            }
+        }
+        opts.field_selector = field_sel.as_deref();
+
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => api::Pod::list_namespaced_pod(&ns, Default::default()).unwrap(),
-            None => api::Pod::list_pod_for_all_namespaces(Default::default()).unwrap(),
+            Some(ns) => api::Pod::list_namespaced_pod(ns, opts).unwrap(),
+            None => api::Pod::list_pod_for_all_namespaces(opts).unwrap(),
         };
         let pod_list_opt: Option<List<api::Pod>> = env.run_on_context(|c| c.execute_list(request));
 
@@ -288,8 +314,7 @@ command!(
 
         let specified_show_namespace = flags
             .iter()
-            .find(|flag| flag.eq_ignore_ascii_case("namespace"))
-            .is_some();
+            .any(|flag| flag.eq_ignore_ascii_case("namespace"));
 
         add_extra_cols(&mut cols, matches.is_present("labels"), flags, &EXTRA_COLS);
 
@@ -373,10 +398,7 @@ fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWrit
                     clickwrite!(
                         writer,
                         "  ID:\t\t{}\n",
-                        cont.container_id
-                            .as_ref()
-                            .map(|id| id.as_str())
-                            .unwrap_or("<none>")
+                        cont.container_id.as_deref().unwrap_or("<none>")
                     );
                     clickwrite!(writer, "  Image:\t{}\n", cont.image_id);
                     print_state_string(&cont.state, writer);
@@ -395,14 +417,14 @@ fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWrit
                                     for (resource, quant) in resources.requests.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
-                                    if resources.requests.len() == 0 {
+                                    if resources.requests.is_empty() {
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                     clickwrite!(writer, "    Limits:\n");
                                     for (resource, quant) in resources.limits.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
-                                    if resources.limits.len() == 0 {
+                                    if resources.limits.is_empty() {
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                 }
@@ -414,17 +436,14 @@ fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWrit
                             if volumes {
                                 // print volumes
                                 clickwrite!(writer, "  Volumes:\n");
-                                if cont_spec.volume_mounts.len() > 0 {
+                                if !cont_spec.volume_mounts.is_empty() {
                                     for vol in cont_spec.volume_mounts.iter() {
                                         clickwrite!(writer, "   {}\n", vol.name);
                                         clickwrite!(writer, "    Path:\t{}\n", vol.mount_path);
                                         clickwrite!(
                                             writer,
                                             "    Sub-Path:\t{}\n",
-                                            vol.sub_path
-                                                .as_ref()
-                                                .map(|sp| { sp.as_str() })
-                                                .unwrap_or("<none>")
+                                            vol.sub_path.as_deref().unwrap_or("<none>")
                                         );
                                         clickwrite!(
                                             writer,
@@ -463,37 +482,21 @@ fn print_state_string(state: &Option<api::ContainerState>, writer: &mut ClickWri
                     None => clickwrite!(writer, "\t\t  since unknown\n"),
                 }
             } else if let Some(terminated) = state.terminated.as_ref() {
-                let message = terminated
-                    .message
-                    .as_ref()
-                    .map(|m| m.as_str())
-                    .unwrap_or("no message");
-                let reason = terminated
-                    .reason
-                    .as_ref()
-                    .map(|m| m.as_str())
-                    .unwrap_or("no reason");
+                let message = terminated.message.as_deref().unwrap_or("no message");
+                let reason = terminated.reason.as_deref().unwrap_or("no reason");
                 let tsr = terminated
                     .finished_at
                     .as_ref()
                     .map(|fa| fa.0.to_string())
-                    .unwrap_or("<unknown>".to_string());
+                    .unwrap_or_else(|| "<unknown>".to_string());
                 clickwrite!(writer, "{}\n", Red.paint("Terminated"));
                 clickwrite!(writer, "\t\t  at: {}\n", tsr);
                 clickwrite!(writer, "\t\t  code: {}\n", terminated.exit_code);
                 clickwrite!(writer, "\t\t  message: {}\n", message);
                 clickwrite!(writer, "\t\t  reason: {}\n", reason);
             } else if let Some(waiting) = state.waiting.as_ref() {
-                let message = waiting
-                    .message
-                    .as_ref()
-                    .map(|m| m.as_str())
-                    .unwrap_or("no message");
-                let reason = waiting
-                    .reason
-                    .as_ref()
-                    .map(|m| m.as_str())
-                    .unwrap_or("no reason");
+                let message = waiting.message.as_deref().unwrap_or("no message");
+                let reason = waiting.reason.as_deref().unwrap_or("no reason");
                 clickwrite!(writer, "{}\n", Yellow.paint("Waiting"));
                 clickwrite!(writer, "\t\t  message: {}\n", message);
                 clickwrite!(writer, "\t\t  reason: {}\n", reason);

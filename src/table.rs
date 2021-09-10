@@ -98,7 +98,7 @@ impl<'a> CellSpec<'a> {
     pub fn matches(&self, regex: &Regex) -> bool {
         match &self.txt {
             CellSpecTxt::Index => false,
-            CellSpecTxt::Str(s) => regex.is_match(&s),
+            CellSpecTxt::Str(s) => regex.is_match(s),
         }
     }
 }
@@ -252,7 +252,7 @@ pub fn print_table<'a, T>(
 }
 
 #[allow(clippy::ptr_arg)]
-pub fn print_table_kapi<'a>(titles: Row, specs: Vec<Vec<CellSpec<'a>>>, writer: &mut ClickWriter) {
+pub fn print_table_kapi(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(titles);
     for (index, t_spec) in specs.iter().enumerate() {

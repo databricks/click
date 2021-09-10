@@ -32,13 +32,13 @@ fn namespace_to_kobj(namespace: &api::Namespace) -> KObj {
             .metadata
             .name
             .clone()
-            .unwrap_or("<Unknown>".into()),
+            .unwrap_or_else(|| "<Unknown>".into()),
         namespace: None,
         typ: ObjType::Namespace,
     }
 }
 
-fn namespace_status<'a>(namespace: &'a api::Namespace) -> Option<CellSpec<'a>> {
+fn namespace_status(namespace: &api::Namespace) -> Option<CellSpec<'_>> {
     namespace
         .status
         .as_ref()

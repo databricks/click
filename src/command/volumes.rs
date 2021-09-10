@@ -36,13 +36,13 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
     //println!("{:?}", volume.spec.as_ref().map(|spec| &spec.claim_ref));
     let meta = &volume.metadata;
     KObj {
-        name: meta.name.clone().unwrap_or("<Unknown>".into()),
+        name: meta.name.clone().unwrap_or_else(|| "<Unknown>".into()),
         namespace: meta.namespace.clone(),
         typ: ObjType::PersistentVolume,
     }
 }
 
-fn volume_capacity<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_capacity(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.capacity
             .get("storage")
@@ -51,7 +51,7 @@ fn volume_capacity<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>
     })
 }
 
-fn volume_access_modes<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_access_modes(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().map(|spec| {
         spec.access_modes
             .iter()
@@ -68,7 +68,7 @@ fn volume_access_modes<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec
     })
 }
 
-fn volume_reclaim_policy<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_reclaim_policy(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.persistent_volume_reclaim_policy
             .as_ref()
@@ -76,29 +76,29 @@ fn volume_reclaim_policy<'a>(volume: &'a api::PersistentVolume) -> Option<CellSp
     })
 }
 
-fn volume_status<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_status(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume
         .status
         .as_ref()
         .and_then(|stat| stat.phase.as_ref().map(|p| p.as_str().into()))
 }
 
-fn volume_claim<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_claim(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume
         .spec
         .as_ref()
         .map(|spec| match spec.claim_ref.as_ref() {
             Some(claim_ref) => {
-                let mut claim = claim_ref.namespace.clone().unwrap_or("".into());
+                let mut claim = claim_ref.namespace.clone().unwrap_or_else(|| "".into());
                 claim.push('/');
-                claim.push_str(claim_ref.name.as_ref().map(|s| s.as_str()).unwrap_or(""));
+                claim.push_str(claim_ref.name.as_deref().unwrap_or(""));
                 claim.into()
             }
             None => "".into(),
         })
 }
 
-fn volume_storage_class<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_storage_class(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.storage_class_name
             .as_ref()
@@ -106,7 +106,7 @@ fn volume_storage_class<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpe
     })
 }
 
-fn volume_reason<'a>(volume: &'a api::PersistentVolume) -> Option<CellSpec<'a>> {
+fn volume_reason(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume
         .status
         .as_ref()

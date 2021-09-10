@@ -18,7 +18,7 @@ use crate::config::{AuthProvider, ExecAuth, ExecProvider};
 
 pub enum UserAuth {
     AuthProvider(Box<AuthProvider>),
-    ExecProvider(ExecProvider),
+    ExecProvider(Box<ExecProvider>),
     Ident(Identity),
     Token(String),
     UserPass(String, String),
@@ -35,7 +35,7 @@ impl UserAuth {
     }
 
     pub fn with_exec_provider(exec_provider: ExecProvider) -> UserAuth {
-        UserAuth::ExecProvider(exec_provider)
+        UserAuth::ExecProvider(Box::new(exec_provider))
     }
 
     pub fn with_token(token: String) -> UserAuth {
@@ -111,10 +111,9 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Identity {
 }
 
 fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Identity {
+    let mut key_buf = Vec::new();
+    File::open(key).unwrap().read_to_end(&mut key_buf).unwrap();
     if pkcs12 {
-        let mut key_buf = Vec::new();
-        File::open(key).unwrap().read_to_end(&mut key_buf).unwrap();
-
         let mut cert_buf = Vec::new();
         File::open(cert)
             .unwrap()
@@ -122,10 +121,9 @@ fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Identity {
             .unwrap();
         get_id_from_pkcs12(key_buf, cert_buf)
     } else {
-        let mut buf = Vec::new();
-        File::open(key).unwrap().read_to_end(&mut buf).unwrap();
-        File::open(cert).unwrap().read_to_end(&mut buf).unwrap();
-        Identity::from_pem(&buf).unwrap()
+        // for from_pem key and cert are in same buffer
+        File::open(cert).unwrap().read_to_end(&mut key_buf).unwrap();
+        Identity::from_pem(&key_buf).unwrap()
     }
 }
 
@@ -219,10 +217,7 @@ impl Context {
 
     fn use_pkcs12(endpoint: &Url) -> bool {
         let host = endpoint.host().unwrap();
-        match host {
-            Host::Domain(_) => false,
-            _ => true,
-        }
+        !matches!(host, Host::Domain(_))
     }
 
     fn handle_exec_provider(&self, exec_provider: &ExecProvider) {
@@ -313,10 +308,10 @@ impl Context {
             Ok((res, _)) => Ok(res),
             // Need more response data. We're blocking, so this is a hard error
             Err(k8s_openapi::ResponseError::NeedMoreData) => {
-                return Err("failed to read enough data".into())
+                Err("failed to read enough data".into())
             }
             // Some other error, like the response body being malformed JSON or invalid UTF-8.
-            Err(err) => return Err(format!("error: {} {:?}", status_code, err).into()),
+            Err(err) => Err(format!("error: {} {:?}", status_code, err).into()),
         }
     }
 

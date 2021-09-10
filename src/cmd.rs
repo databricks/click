@@ -20,8 +20,8 @@ use crate::env::{self, Env};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
-    ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata, Pod,
-    ReplicaSetList, SecretList, Service, ServiceList, StatefulSetList,
+    ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata, ReplicaSetList,
+    SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -985,7 +985,9 @@ fn print_servicelist(
         .iter()
         .map(|s| (get_external_ip(s), get_ports(s)))
         .collect();
-    let mut servswithipportss: Vec<(Service, (Cow<'_, str>, Cow<'_, str>))> =
+
+    type ServiceAndPorts<'a> = (Service, (Cow<'a, str>, Cow<'a, str>));
+    let mut servswithipportss: Vec<ServiceAndPorts<'_>> =
         servlist.items.into_iter().zip(extipsandports).collect();
 
     if let Some(sortcol) = sort {
@@ -1034,7 +1036,7 @@ fn print_servicelist(
         }
     }
 
-    let to_map: Box<dyn Iterator<Item = (Service, (Cow<'_, str>, Cow<'_, str>))>> = if reverse {
+    let to_map: Box<dyn Iterator<Item = ServiceAndPorts<'_>>> = if reverse {
         Box::new(servswithipportss.into_iter().rev())
     } else {
         Box::new(servswithipportss.into_iter())
@@ -1161,7 +1163,7 @@ command!(
                         Some(c) => c.server.as_str(),
                         None => "[no cluster for context]",
                     };
-                    row.push(CellSpec::with_style(context.clone().into(), "FR"));
+                    row.push(CellSpec::with_style((*context).clone().into(), "FR"));
                     row.push(cluster.into());
                     (context, row)
                 })
@@ -2046,82 +2048,82 @@ command!(
     }
 );
 
-fn containers_string(pod: &Pod) -> String {
-    let mut buf = String::new();
-    if let Some(ref stats) = pod.status.container_statuses {
-        for cont in stats.iter() {
-            buf.push_str(format!("Name:\t{}\n", cont.name).as_str());
-            buf.push_str(format!("  Image:\t{}\n", cont.image).as_str());
-            buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
-            buf.push_str(format!("  Ready:\t{}\n", cont.ready).as_str());
+// fn containers_string(pod: &Pod) -> String {
+//     let mut buf = String::new();
+//     if let Some(ref stats) = pod.status.container_statuses {
+//         for cont in stats.iter() {
+//             buf.push_str(format!("Name:\t{}\n", cont.name).as_str());
+//             buf.push_str(format!("  Image:\t{}\n", cont.image).as_str());
+//             buf.push_str(format!("  State:\t{}\n", cont.state).as_str());
+//             buf.push_str(format!("  Ready:\t{}\n", cont.ready).as_str());
 
-            // find the spec for this container
-            let mut spec_it = pod.spec.containers.iter().filter(|cs| cs.name == cont.name);
-            if let Some(spec) = spec_it.next() {
-                if let Some(ref vols) = spec.volume_mounts {
-                    buf.push_str("  Volumes:\n");
-                    for vol in vols.iter() {
-                        buf.push_str(format!("   {}\n", vol.name).as_str());
-                        buf.push_str(format!("    Path:\t{}\n", vol.mount_path).as_str());
-                        buf.push_str(
-                            format!(
-                                "    Sub-Path:\t{}\n",
-                                vol.sub_path.as_ref().unwrap_or(&"".to_owned())
-                            )
-                            .as_str(),
-                        );
-                        buf.push_str(
-                            format!("    Read-Only:\t{}\n", vol.read_only.unwrap_or(false))
-                                .as_str(),
-                        );
-                    }
-                } else {
-                    buf.push_str("  No Volumes\n");
-                }
-            }
-            buf.push('\n');
-        }
-    } else {
-        buf.push_str("<No Containers>\n");
-    }
-    buf
-}
+//             // find the spec for this container
+//             let mut spec_it = pod.spec.containers.iter().filter(|cs| cs.name == cont.name);
+//             if let Some(spec) = spec_it.next() {
+//                 if let Some(ref vols) = spec.volume_mounts {
+//                     buf.push_str("  Volumes:\n");
+//                     for vol in vols.iter() {
+//                         buf.push_str(format!("   {}\n", vol.name).as_str());
+//                         buf.push_str(format!("    Path:\t{}\n", vol.mount_path).as_str());
+//                         buf.push_str(
+//                             format!(
+//                                 "    Sub-Path:\t{}\n",
+//                                 vol.sub_path.as_ref().unwrap_or(&"".to_owned())
+//                             )
+//                             .as_str(),
+//                         );
+//                         buf.push_str(
+//                             format!("    Read-Only:\t{}\n", vol.read_only.unwrap_or(false))
+//                                 .as_str(),
+//                         );
+//                     }
+//                 } else {
+//                     buf.push_str("  No Volumes\n");
+//                 }
+//             }
+//             buf.push('\n');
+//         }
+//     } else {
+//         buf.push_str("<No Containers>\n");
+//     }
+//     buf
+// }
 
-// conainer helper command
-fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
-    let url = format!(
-        "/api/v1/namespaces/{}/pods/{}",
-        obj.namespace.as_ref().unwrap(),
-        obj.name()
-    );
-    let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
-    if let Some(pod) = pod_opt {
-        clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
-    }
-}
+// // conainer helper command
+// fn print_containers(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+//     let url = format!(
+//         "/api/v1/namespaces/{}/pods/{}",
+//         obj.namespace.as_ref().unwrap(),
+//         obj.name()
+//     );
+//     let pod_opt: Option<Pod> = env.run_on_kluster(|k| k.get(url.as_str()));
+//     if let Some(pod) = pod_opt {
+//         clickwrite!(writer, "{}", containers_string(&pod)); // extra newline in returned string
+//     }
+// }
 
-command!(
-    Containers,
-    "containers",
-    "List containers on the active pod",
-    identity,
-    vec!["conts", "containers"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_matches, env, writer| {
-        env.apply_to_selection(
-            writer,
-            Some(&env.click_config.range_separator),
-            |obj, writer| {
-                if obj.is_pod() {
-                    print_containers(obj, env, writer);
-                } else {
-                    clickwriteln!(writer, "containers only possible on a Pod");
-                }
-            },
-        );
-    }
-);
+// command!(
+//     Containers,
+//     "containers",
+//     "List containers on the active pod",
+//     identity,
+//     vec!["conts", "containers"],
+//     noop_complete!(),
+//     no_named_complete!(),
+//     |_matches, env, writer| {
+//         env.apply_to_selection(
+//             writer,
+//             Some(&env.click_config.range_separator),
+//             |obj, writer| {
+//                 if obj.is_pod() {
+//                     print_containers(obj, env, writer);
+//                 } else {
+//                     clickwriteln!(writer, "containers only possible on a Pod");
+//                 }
+//             },
+//         );
+//     }
+// );
 
 fn format_event(event: &Event) -> String {
     format!(

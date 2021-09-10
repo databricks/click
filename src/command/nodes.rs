@@ -46,13 +46,17 @@ lazy_static! {
 
 fn node_to_kobj(node: &api::Node) -> KObj {
     KObj {
-        name: node.metadata.name.clone().unwrap_or("<Unknown>".into()),
+        name: node
+            .metadata
+            .name
+            .clone()
+            .unwrap_or_else(|| "<Unknown>".into()),
         namespace: None,
         typ: ObjType::Node,
     }
 }
 
-fn node_container_runtime<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_container_runtime(node: &api::Node) -> Option<CellSpec<'_>> {
     node.status.as_ref().and_then(|stat| {
         stat.node_info
             .as_ref()
@@ -69,15 +73,15 @@ fn get_node_addr<'a>(node: &'a api::Node, type_: &str) -> Option<CellSpec<'a>> {
     })
 }
 
-fn node_external_ip<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_external_ip(node: &api::Node) -> Option<CellSpec<'_>> {
     get_node_addr(node, "ExternalIP")
 }
 
-fn node_internal_ip<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_internal_ip(node: &api::Node) -> Option<CellSpec<'_>> {
     get_node_addr(node, "InternalIP")
 }
 
-fn node_kernel_version<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_kernel_version(node: &api::Node) -> Option<CellSpec<'_>> {
     node.status.as_ref().and_then(|stat| {
         stat.node_info
             .as_ref()
@@ -85,11 +89,11 @@ fn node_kernel_version<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
     })
 }
 
-fn node_labels<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_labels(node: &api::Node) -> Option<CellSpec<'_>> {
     Some(crate::command::keyval_string(&node.metadata.labels).into())
 }
 
-fn node_os_image<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_os_image(node: &api::Node) -> Option<CellSpec<'_>> {
     node.status.as_ref().and_then(|stat| {
         stat.node_info
             .as_ref()
@@ -101,16 +105,16 @@ fn node_os_image<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
 //   node-role.kubernetes.io/[role]=""
 // or
 //   kubernetes.io/role="[role]"
-fn node_roles<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_roles(node: &api::Node) -> Option<CellSpec<'_>> {
     let mut roles = vec![];
     for (k, v) in node.metadata.labels.iter() {
         if k.eq("kubernetes.io/role") {
             roles.push(v.as_str());
-        } else if k.starts_with("node-role.kubernetes.io/") {
-            roles.push(&k[24..]);
+        } else if let Some(role) = k.strip_prefix("node-role.kubernetes.io/") {
+            roles.push(role);
         }
     }
-    if roles.len() == 0 {
+    if roles.is_empty() {
         Some("<none>".into())
     } else {
         Some(roles.join(", ").into())
@@ -146,7 +150,7 @@ fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
     Some(CellSpec::with_style(state, state_style))
 }
 
-fn node_version<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
+fn node_version(node: &api::Node) -> Option<CellSpec<'_>> {
     node.status.as_ref().and_then(|stat| {
         stat.node_info
             .as_ref()

@@ -1,7 +1,9 @@
-pub mod namespaces;
-pub mod nodes;
-pub mod pods;
-pub mod volumes;
+pub mod alias; // commands for alias/unalias
+pub mod click; // commands internal to click (setting config values, etc)
+pub mod namespaces; // commands relating to namespaces
+pub mod nodes; // commands relating to nodes
+pub mod pods; //commands relating to pods
+pub mod volumes; // commands relating to volumes
 
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -26,8 +28,16 @@ use std::io::Write;
 type RowSpec<'a> = Vec<CellSpec<'a>>;
 type Extractor<T> = fn(&T) -> Option<CellSpec<'_>>;
 
-// table printing / building
+// command definition
+/// Just return what we're given.  Useful for no-op closures in
+/// command! macro invocation
+fn identity<T>(t: T) -> T {
+    t
+}
 
+
+
+// table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.
  * it does the following thins:
  * - builds the row specs based on the passed extractors/regex

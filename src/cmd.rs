@@ -15,7 +15,6 @@
 //!  The commands one can run from the repl
 
 use crate::completer;
-use crate::config;
 use crate::env::{self, Env};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
@@ -1112,18 +1111,18 @@ fn print_servicelist(
 // Command defintions below.  See documentation for the command! macro for an explanation of
 // arguments passed here
 
-command!(
-    Quit,
-    "quit",
-    "Quit click",
-    identity,
-    vec!["q", "quit", "exit"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_, env, _| {
-        env.quit = true;
-    }
-);
+// command!(
+//     Quit,
+//     "quit",
+//     "Quit click",
+//     identity,
+//     vec!["q", "quit", "exit"],
+//     noop_complete!(),
+//     no_named_complete!(),
+//     |_, env, _| {
+//         env.quit = true;
+//     }
+// );
 
 command!(
     Context,
@@ -1188,38 +1187,6 @@ command!(
         for context in contexts.iter() {
             clickwriteln!(writer, "{}", context);
         }
-    }
-);
-
-command!(
-    Clear,
-    "clear",
-    "Clear the currently selected kubernetes object",
-    identity,
-    vec!["clear"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_, env, _| {
-        env.clear_current();
-    }
-);
-
-command!(
-    Namespace,
-    "namespace",
-    "Set the current namespace (no argument to clear namespace)",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("namespace")
-            .help("The namespace to use")
-            .required(false)
-            .index(1)
-    ),
-    vec!["ns", "namespace"],
-    vec![&completer::namespace_completer],
-    no_named_complete!(),
-    |matches, env, _| {
-        let ns = matches.value_of("namespace");
-        env.set_namespace(ns);
     }
 );
 
@@ -2356,110 +2323,6 @@ command!(
 );
 
 command!(
-    EnvCmd,
-    "env",
-    "Print information about the current environment",
-    identity,
-    vec!["env"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_matches, env, writer| {
-        clickwriteln!(writer, "{}", env);
-    }
-);
-
-pub const SET_OPTS: &[&str] = &[
-    "completion_type",
-    "edit_mode",
-    "editor",
-    "terminal",
-    "range_separator",
-];
-
-command!(
-    SetCmd,
-    "set",
-    "Set click options. (See 'help completion' and 'help edit_mode' for more information",
-    |clap: App<'static, 'static>| {
-        clap.arg(
-            Arg::with_name("option")
-                .help("The click option to set")
-                .required(true)
-                .index(1)
-                .possible_values(SET_OPTS),
-        )
-        .arg(
-            Arg::with_name("value")
-                .help("The value to set the option to")
-                .required(true)
-                .index(2),
-        )
-        .after_help(
-            "Note that if your value contains a -, you'll need to tell click it's not an option by
-passing '--' before.
-
-Example:
-  # Set the range_separator (needs the '--' after set since the value contains a -)
-  set -- range_separator \"---- {name} [{namespace}] ----\"
-
-  # set edit_mode
-  set edit_mode emacs",
-        )
-    },
-    vec!["set"],
-    vec![&completer::setoptions_values_completer],
-    no_named_complete!(),
-    |matches, env, writer| {
-        let option = matches.value_of("option").unwrap(); // safe, required
-        let value = matches.value_of("value").unwrap(); // safe, required
-        let mut failed = false;
-        match option {
-            "completion_type" => match value {
-                "circular" => env.set_completion_type(config::CompletionType::Circular),
-                "list" => env.set_completion_type(config::CompletionType::List),
-                _ => {
-                    write!(
-                        stderr(),
-                        "Invalid completion type.  Possible values are: [circular, list]\n"
-                    )
-                    .unwrap_or(());
-                    failed = true;
-                }
-            },
-            "edit_mode" => match value {
-                "vi" => env.set_edit_mode(config::EditMode::Vi),
-                "emacs" => env.set_edit_mode(config::EditMode::Emacs),
-                _ => {
-                    write!(
-                        stderr(),
-                        "Invalid edit_mode.  Possible values are: [emacs, vi]\n"
-                    )
-                    .unwrap_or(());
-                    failed = true;
-                }
-            },
-            "editor" => {
-                env.set_editor(Some(value));
-            }
-            "terminal" => {
-                env.set_terminal(Some(value));
-            }
-            "range_separator" => {
-                env.click_config.range_separator = value.to_string();
-            }
-            _ => {
-                // this shouldn't happen
-                write!(stderr(), "Invalid option\n").unwrap_or(());
-                failed = true;
-            }
-        }
-        if !failed {
-            clickwriteln!(writer, "Set {} to '{}'", option, value);
-        }
-    }
-);
-
-command!(
     Deployments,
     "deployments",
     "Get deployments (in current namespace if set)",
@@ -2920,19 +2783,6 @@ command!(
 // );
 
 command!(
-    UtcCmd,
-    "utc",
-    "Print current time in UTC",
-    identity,
-    vec!["utc"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_, _, writer| {
-        clickwriteln!(writer, "{}", Utc::now());
-    }
-);
-
-command!(
     PortForward,
     "port-forward",
     "Forward one (or more) local ports to the currently active pod",
@@ -3276,92 +3126,3 @@ fn print_jobs(
     let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
     JobList { items: final_jobs }
 }
-
-command!(
-    Alias,
-    "alias",
-    "Define or display aliases",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("alias")
-                .help(
-                    "the short version of the command.\nCannot be 'alias', 'unalias', or a number."
-                )
-                .validator(|s: String| {
-                    if s == "alias" || s == "unalias" || s.parse::<usize>().is_ok() {
-                        Err("alias cannot be \"alias\", \"unalias\", or a number".to_owned())
-                    } else {
-                        Ok(())
-                    }
-                })
-                .required(false)
-                .requires("expanded")
-        )
-        .arg(
-            Arg::with_name("expanded")
-                .help("what the short version of the command should expand to")
-                .required(false)
-                .requires("alias")
-        )
-        .after_help(
-            "An alias is a substitution rule.  When click encounters an alias at the start of a
-command, it will substitue the expanded version for what was typed.
-
-As with Bash: The first word of the expansion is tested for aliases, but a word that is identical to
-an alias being expanded is not expanded a second time.  So one can alias logs to \"logs -e\", for
-instance, without causing infinite expansion.
-
-Examples:
-  # Display current aliases
-  alias
-
-  # alias p to pods
-  alias p pods
-
-  # alias pn to get pods with nginx in the name
-  alias pn \"pods -r nginx\"
-
-  # alias el to run logs and grep for ERROR
-  alias el \"logs | grep ERROR\""
-        ),
-    vec!["alias", "aliases"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        if matches.is_present("alias") {
-            let alias = matches.value_of("alias").unwrap(); // safe, checked above
-            let expanded = matches.value_of("expanded").unwrap(); // safe, required with alias
-            env.add_alias(config::Alias {
-                alias: alias.to_owned(),
-                expanded: expanded.to_owned(),
-            });
-            clickwriteln!(writer, "aliased {} = '{}'", alias, expanded);
-        } else {
-            for alias in env.click_config.aliases.iter() {
-                clickwriteln!(writer, "alias {} = '{}'", alias.alias, alias.expanded);
-            }
-        }
-    }
-);
-
-command!(
-    Unalias,
-    "unalias",
-    "Remove an alias",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("alias")
-            .help("Short version of alias to remove")
-            .required(true)
-    ),
-    vec!["unalias"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let alias = matches.value_of("alias").unwrap(); // safe, required
-        if env.remove_alias(alias) {
-            clickwriteln!(writer, "unaliased: {}", alias);
-        } else {
-            clickwriteln!(writer, "no such alias: {}", alias);
-        }
-    }
-);

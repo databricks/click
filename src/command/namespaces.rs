@@ -18,6 +18,26 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stderr, Write};
 
+command!(
+    Namespace,
+    "namespace",
+    "Set the current namespace (no argument to clear namespace)",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("namespace")
+            .help("The namespace to use")
+            .required(false)
+            .index(1)
+    ),
+    vec!["ns", "namespace"],
+    vec![&completer::namespace_completer],
+    no_named_complete!(),
+    |matches, env, _| {
+        let ns = matches.value_of("namespace");
+        env.set_namespace(ns);
+    }
+);
+
+
 lazy_static! {
     static ref NS_EXTRACTORS: HashMap<String, Extractor<api::Namespace>> = {
         let mut m: HashMap<String, Extractor<api::Namespace>> = HashMap::new();

@@ -1,21 +1,21 @@
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
 use chrono::offset::Utc;
+use clap::{App, Arg};
+use prettytable::Table;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
     command::identity,
-    completer,
-    config,
+    completer, config,
     env::Env,
     output::ClickWriter,
+    table::CellSpec,
 };
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{stderr, Write};
-
 
 command!(
     Clear,
@@ -27,6 +27,72 @@ command!(
     no_named_complete!(),
     |_, env, _| {
         env.clear_current();
+    }
+);
+
+fn print_contexts(env: &Env, writer: &mut ClickWriter) {
+    let mut contexts: Vec<&String> = env.config.contexts.keys().collect();
+    contexts.sort();
+    let mut table = Table::new();
+    table.set_titles(row!["Context", "Api Server Address"]);
+    let ctxs = contexts
+        .iter()
+        .map(|context| {
+            let mut row: Vec<CellSpec> = Vec::new();
+            let cluster = match env.config.clusters.get(*context) {
+                Some(c) => c.server.as_str(),
+                None => "[no cluster for context]",
+            };
+            row.push(CellSpec::with_style((*context).clone().into(), "FR"));
+            row.push(cluster.into());
+            (context, row)
+        })
+        .collect();
+    table.set_format(*crate::cmd::TBLFMT);
+    crate::table::print_table(&mut table, &ctxs, writer);
+}
+
+command!(
+    Context,
+    "context",
+    "Set the current context (will clear any selected pod). \
+     With no argument, lists available contexts.",
+    |clap: App<'static, 'static>| clap.arg(
+        Arg::with_name("context")
+            .help("The name of the context")
+            .required(false)
+            .index(1)
+    ),
+    vec!["ctx", "context"],
+    vec![&completer::context_complete],
+    no_named_complete!(),
+    |matches, env, writer| {
+        if matches.is_present("context") {
+            let context = matches.value_of("context");
+            if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
+                if k.name == c {
+                    // no-op if we're already in the specified context
+                    return;
+                }
+            }
+            env.set_context(context);
+            env.clear_current();
+        } else {
+            print_contexts(env, writer);
+        }
+    }
+);
+
+command!(
+    Contexts,
+    "contexts",
+    "List available contexts",
+    identity,
+    vec!["contexts", "ctxs"],
+    noop_complete!(),
+    no_named_complete!(),
+    |_, env, writer| {
+        print_contexts(env, writer);
     }
 );
 
@@ -146,7 +212,6 @@ Example:
         }
     }
 );
-
 
 command!(
     UtcCmd,

@@ -57,7 +57,7 @@ use std::thread;
 use std::time::Duration;
 
 lazy_static! {
-    static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
+    pub static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
             format::LineSeparator::new('-', '+', '+', '+')
@@ -1123,72 +1123,6 @@ fn print_servicelist(
 //         env.quit = true;
 //     }
 // );
-
-command!(
-    Context,
-    "context",
-    "Set the current context (will clear any selected pod). \
-     With no argument, lists available contexts.",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("context")
-            .help("The name of the context")
-            .required(false)
-            .index(1)
-    ),
-    vec!["ctx", "context"],
-    vec![&completer::context_complete],
-    no_named_complete!(),
-    |matches, env, writer| {
-        if matches.is_present("context") {
-            let context = matches.value_of("context");
-            if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
-                if k.name == c {
-                    // no-op if we're already in the specified context
-                    return;
-                }
-            }
-            env.set_context(context);
-            env.clear_current();
-        } else {
-            let mut contexts: Vec<&String> = env.config.contexts.keys().collect();
-            contexts.sort();
-            let mut table = Table::new();
-            table.set_titles(row!["Context", "Api Server Address"]);
-            let ctxs = contexts
-                .iter()
-                .map(|context| {
-                    let mut row: Vec<CellSpec> = Vec::new();
-                    let cluster = match env.config.clusters.get(*context) {
-                        Some(c) => c.server.as_str(),
-                        None => "[no cluster for context]",
-                    };
-                    row.push(CellSpec::with_style((*context).clone().into(), "FR"));
-                    row.push(cluster.into());
-                    (context, row)
-                })
-                .collect();
-            table.set_format(*TBLFMT);
-            crate::table::print_table(&mut table, &ctxs, writer);
-        }
-    }
-);
-
-command!(
-    Contexts,
-    "contexts",
-    "List available contexts",
-    identity,
-    vec!["contexts", "ctxs"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_, env, writer| {
-        let mut contexts: Vec<&String> = env.get_contexts().iter().map(|kv| kv.0).collect();
-        contexts.sort();
-        for context in contexts.iter() {
-            clickwriteln!(writer, "{}", context);
-        }
-    }
-);
 
 command!(
     Range,

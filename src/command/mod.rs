@@ -35,8 +35,6 @@ fn identity<T>(t: T) -> T {
     t
 }
 
-
-
 // table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.
  * it does the following thins:

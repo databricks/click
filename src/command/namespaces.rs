@@ -37,7 +37,6 @@ command!(
     }
 );
 
-
 lazy_static! {
     static ref NS_EXTRACTORS: HashMap<String, Extractor<api::Namespace>> = {
         let mut m: HashMap<String, Extractor<api::Namespace>> = HashMap::new();

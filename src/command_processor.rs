@@ -158,8 +158,6 @@ impl CommandProcessor {
 
     fn get_command_vec() -> Vec<Box<dyn Cmd>> {
         let commands: Vec<Box<dyn Cmd>> = vec![
-            Box::new(crate::cmd::Context::new()),
-            Box::new(crate::cmd::Contexts::new()),
             Box::new(crate::cmd::Range::new()),
             Box::new(crate::cmd::Deployments::new()),
             Box::new(crate::cmd::Services::new()),
@@ -178,6 +176,8 @@ impl CommandProcessor {
             Box::new(crate::command::alias::Alias::new()),
             Box::new(crate::command::alias::Unalias::new()),
             Box::new(crate::command::click::Clear::new()),
+            Box::new(crate::command::click::Context::new()),
+            Box::new(crate::command::click::Contexts::new()),
             Box::new(crate::command::click::EnvCmd::new()),
             Box::new(crate::command::click::Quit::new()),
             Box::new(crate::command::click::SetCmd::new()),

@@ -122,6 +122,29 @@ command!(
     }
 );
 
+command!(
+    Range,
+    "range",
+    "List the objects that are in the currently selected range (see 'help ranges' for general \
+     information about ranges)",
+    identity,
+    vec!["range"],
+    noop_complete!(),
+    no_named_complete!(),
+    |_, env, writer| {
+        let mut table = Table::new();
+        table.set_titles(row!["Name", "Type", "Namespace"]);
+        env.apply_to_selection(writer, None, |obj, _| {
+            table.add_row(row!(
+                obj.name(),
+                obj.type_str(),
+                obj.namespace.as_deref().unwrap_or("")
+            ));
+        });
+        crate::table::print_filled_table(&mut table, writer);
+    }
+);
+
 pub const SET_OPTS: &[&str] = &[
     "completion_type",
     "edit_mode",

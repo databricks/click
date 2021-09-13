@@ -1,5 +1,6 @@
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
+pub mod exec;
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods

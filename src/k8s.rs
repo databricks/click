@@ -14,7 +14,10 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::config::{AuthProvider, ExecAuth, ExecProvider};
+use crate::{
+    config::{AuthProvider, ExecAuth, ExecProvider},
+    error::{KubeErrNo, KubeError},
+};
 
 pub enum UserAuth {
     AuthProvider(Box<AuthProvider>),
@@ -332,7 +335,13 @@ impl Context {
                 // Some unexpected response
                 // (not HTTP 200, but still parsed successfully)
                 Ok(other) => {
-                    return Err(format!("expected Ok but got {} {:?}", status_code, other).into())
+                    if status_code == http::StatusCode::UNAUTHORIZED {
+                        return Err(Box::new(KubeError::Kube(KubeErrNo::Unauthorized)));
+                    } else {
+                        return Err(
+                            format!("Got unexpected status {} {:?}", status_code, other).into()
+                        );
+                    }
                 }
 
                 // Need more response data. We're blocking, so this is a hard error
@@ -342,7 +351,6 @@ impl Context {
 
                 // Some other error, like the response body being malformed JSON or invalid UTF-8.
                 Err(err) => {
-                    println!("{:?}", response);
                     return Err(format!("error: {} {:?}", status_code, err).into());
                 }
             };

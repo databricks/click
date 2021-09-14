@@ -1,6 +1,7 @@
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
-pub mod exec;
+pub mod delete; // command to delete objects
+pub mod exec; // command to exec into pods
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods
@@ -9,6 +10,7 @@ pub mod volumes; // commands relating to volumes
 use chrono::offset::Utc;
 use chrono::DateTime;
 use clap::Arg;
+//use humantime::parse_duration;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, List, ListableResource, Metadata,
 };
@@ -35,6 +37,30 @@ type Extractor<T> = fn(&T) -> Option<CellSpec<'_>>;
 fn identity<T>(t: T) -> T {
     t
 }
+
+/// a clap validator for u32
+fn valid_u32(s: String) -> Result<(), String> {
+    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
+}
+
+// /// a clap validator for duration
+// fn valid_duration(s: String) -> Result<(), String> {
+//     parse_duration(s.as_str())
+//         .map(|_| ())
+//         .map_err(|e| e.to_string())
+// }
+
+// /// a clap validator for rfc3339 dates
+// fn valid_date(s: String) -> Result<(), String> {
+//     DateTime::parse_from_rfc3339(s.as_str())
+//         .map(|_| ())
+//         .map_err(|e| e.to_string())
+// }
+
+// /// a clap validator for boolean
+// fn valid_bool(s: String) -> Result<(), String> {
+//     s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
+// }
 
 // table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.
@@ -294,6 +320,7 @@ fn sort_arg<'a>(cols: &[&'a str], extra_cols: Option<&[&'a str]>) -> Arg<'a, 'a>
              be shown)",
         )
         .takes_value(true)
+        .case_insensitive(true)
         .possible_values(cols);
     match extra_cols {
         Some(extra) => arg.possible_values(extra),
@@ -316,6 +343,7 @@ fn show_arg<'a>(extra_cols: &[&'a str], labels: bool) -> Arg<'a, 'a> {
         .takes_value(true)
         .possible_value("all")
         .possible_values(extra_cols)
+        .case_insensitive(true)
         .use_delimiter(true);
     if labels {
         arg.help(SHOW_HELP_WITH_LABELS)

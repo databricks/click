@@ -23,8 +23,6 @@ extern crate prettytable;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
-extern crate serde_json;
-#[macro_use]
 mod output;
 
 extern crate ansi_term;
@@ -47,6 +45,7 @@ extern crate ring;
 extern crate rustls;
 extern crate rustyline;
 extern crate serde;
+extern crate serde_json;
 extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;

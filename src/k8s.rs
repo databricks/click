@@ -263,6 +263,7 @@ impl Context {
         let req = match parts.method {
             http::method::Method::GET => self.client.borrow().get(url),
             http::method::Method::POST => self.client.borrow().post(url),
+            http::method::Method::DELETE => self.client.borrow().delete(url),
             _ => unimplemented!(),
         };
 
@@ -290,10 +291,11 @@ impl Context {
             None => req,
         };
         let resp = req.send()?;
+        let stat = resp.status();
         let bytes = resp.bytes()?;
 
         Ok(http::response::Builder::new()
-            .status(200)
+            .status(stat)
             .body(bytes)
             .unwrap())
     }
@@ -339,7 +341,10 @@ impl Context {
                 }
 
                 // Some other error, like the response body being malformed JSON or invalid UTF-8.
-                Err(err) => return Err(format!("error: {} {:?}", status_code, err).into()),
+                Err(err) => {
+                    println!("{:?}", response);
+                    return Err(format!("error: {} {:?}", status_code, err).into());
+                }
             };
 
         Ok(res_list)

@@ -349,12 +349,12 @@ fn valid_date(s: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// a clap validator for boolean
-fn valid_bool(s: String) -> Result<(), String> {
-    s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
-}
+// /// a clap validator for boolean
+// fn valid_bool(s: String) -> Result<(), String> {
+//     s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
+// }
 
-// /// Check if a pod has a waiting container
+// /// check if a pod has a waiting container
 // fn has_waiting(pod: &Pod) -> bool {
 //     if let Some(ref stats) = pod.status.container_statuses {
 //         stats
@@ -1605,134 +1605,134 @@ command!(
     }
 );
 
-fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter) {
-    let name = obj.name();
-    let namespace = match obj.typ {
-        ObjType::Node => "",
-        _ => match obj.namespace {
-            Some(ref ns) => ns,
-            None => {
-                clickwriteln!(writer, "Don't know namespace for {}", obj.name());
-                return;
-            }
-        },
-    };
-    clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
-    io::stdout().flush().expect("Could not flush stdout");
-    let mut conf = String::new();
-    if io::stdin().read_line(&mut conf).is_ok() {
-        if conf.trim() == "y" || conf.trim() == "yes" {
-            let url = obj.url(namespace);
-            let body = if obj.is(ObjType::Service) {
-                None
-            } else {
-                Some(delete_body)
-            };
-            let result = env.run_on_kluster(|k| k.delete(url.as_str(), body, true));
-            if let Some(x) = result {
-                if x.status.is_success() {
-                    clickwriteln!(writer, "Deleted");
-                } else {
-                    clickwriteln!(writer, "Failed to delete: {:?}", x.get_ref());
-                }
-            } else {
-                clickwriteln!(writer, "Failed to delete");
-            }
-        } else {
-            clickwriteln!(writer, "Not deleting");
-        }
-    } else {
-        writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
-    }
-}
+// fn delete_obj(env: &Env, obj: &KObj, delete_body: &str, writer: &mut ClickWriter) {
+//     let name = obj.name();
+//     let namespace = match obj.typ {
+//         ObjType::Node => "",
+//         _ => match obj.namespace {
+//             Some(ref ns) => ns,
+//             None => {
+//                 clickwriteln!(writer, "Don't know namespace for {}", obj.name());
+//                 return;
+//             }
+//         },
+//     };
+//     clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
+//     io::stdout().flush().expect("Could not flush stdout");
+//     let mut conf = String::new();
+//     if io::stdin().read_line(&mut conf).is_ok() {
+//         if conf.trim() == "y" || conf.trim() == "yes" {
+//             let url = obj.url(namespace);
+//             let body = if obj.is(ObjType::Service) {
+//                 None
+//             } else {
+//                 Some(delete_body)
+//             };
+//             let result = env.run_on_kluster(|k| k.delete(url.as_str(), body, true));
+//             if let Some(x) = result {
+//                 if x.status.is_success() {
+//                     clickwriteln!(writer, "Deleted");
+//                 } else {
+//                     clickwriteln!(writer, "Failed to delete: {:?}", x.get_ref());
+//                 }
+//             } else {
+//                 clickwriteln!(writer, "Failed to delete");
+//             }
+//         } else {
+//             clickwriteln!(writer, "Not deleting");
+//         }
+//     } else {
+//         writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
+//     }
+// }
 
-command!(
-    Delete,
-    "delete",
-    "Delete the active object (will ask for confirmation)",
-    |clap: App<'static, 'static>| {
-        clap.arg(
-        Arg::with_name("grace")
-            .short("g")
-            .long("gracePeriod")
-            .help("The duration in seconds before the object should be deleted.")
-            .validator(valid_u32)
-            .takes_value(true)
-    ).arg(Arg::with_name("cascade")
-            .short("c")
-            .long("cascade")
-            .help("If true (the default), dependant objects are deleted. \
-                   If false, they are orphaned")
-            .validator(valid_bool)
-            .takes_value(true)
-    ).arg(Arg::with_name("now")
-          .long("now")
-          .help("If set, resources are signaled for immediate shutdown (same as --grace-period=1)")
-          .takes_value(false)
-          .conflicts_with("grace")
-    ).arg(Arg::with_name("force")
-          .long("force")
-          .help("Force immediate deletion.  For some resources this may result in inconsistency or \
-                 data loss")
-          .takes_value(false)
-          .conflicts_with("grace")
-          .conflicts_with("now")
-    )
-    },
-    vec!["delete"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let mut policy = "Foreground";
-        if let Some(cascade) = matches.value_of("cascade") {
-            if !(cascade.parse::<bool>()).unwrap() {
-                // safe as validated
-                policy = "Orphan";
-            }
-        }
-        let mut delete_body = json!({
-            "kind":"DeleteOptions",
-            "apiVersion":"v1",
-            "propagationPolicy": policy
-        });
-        if let Some(grace) = matches.value_of("grace") {
-            let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
-            if graceu32 == 0 {
-                // don't allow zero, make it one.  zero is force delete which
-                // can mess things up.
-                delete_body
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("gracePeriodSeconds".to_owned(), json!(1));
-            } else {
-                // already validated that it's a legit number
-                delete_body
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("gracePeriodSeconds".to_owned(), json!(graceu32));
-            }
-        } else if matches.is_present("force") {
-            delete_body
-                .as_object_mut()
-                .unwrap()
-                .insert("gracePeriodSeconds".to_owned(), json!(0));
-        } else if matches.is_present("now") {
-            delete_body
-                .as_object_mut()
-                .unwrap()
-                .insert("gracePeriodSeconds".to_owned(), json!(1));
-        }
-        let delete_body = delete_body.to_string();
+// command!(
+//     Delete,
+//     "delete",
+//     "Delete the active object (will ask for confirmation)",
+//     |clap: App<'static, 'static>| {
+//         clap.arg(
+//         Arg::with_name("grace")
+//             .short("g")
+//             .long("gracePeriod")
+//             .help("The duration in seconds before the object should be deleted.")
+//             .validator(valid_u32)
+//             .takes_value(true)
+//     ).arg(Arg::with_name("cascade")
+//             .short("c")
+//             .long("cascade")
+//             .help("If true (the default), dependant objects are deleted. \
+//                    If false, they are orphaned")
+//             .validator(valid_bool)
+//             .takes_value(true)
+//     ).arg(Arg::with_name("now")
+//           .long("now")
+//           .help("If set, resources are signaled for immediate shutdown (same as --grace-period=1)")
+//           .takes_value(false)
+//           .conflicts_with("grace")
+//     ).arg(Arg::with_name("force")
+//           .long("force")
+//           .help("Force immediate deletion.  For some resources this may result in inconsistency or \
+//                  data loss")
+//           .takes_value(false)
+//           .conflicts_with("grace")
+//           .conflicts_with("now")
+//     )
+//     },
+//     vec!["delete"],
+//     noop_complete!(),
+//     no_named_complete!(),
+//     |matches, env, writer| {
+//         let mut policy = "Foreground";
+//         if let Some(cascade) = matches.value_of("cascade") {
+//             if !(cascade.parse::<bool>()).unwrap() {
+//                 // safe as validated
+//                 policy = "Orphan";
+//             }
+//         }
+//         let mut delete_body = json!({
+//             "kind":"DeleteOptions",
+//             "apiVersion":"v1",
+//             "propagationPolicy": policy
+//         });
+//         if let Some(grace) = matches.value_of("grace") {
+//             let graceu32 = grace.parse::<u32>().unwrap(); // safe as validated
+//             if graceu32 == 0 {
+//                 // don't allow zero, make it one.  zero is force delete which
+//                 // can mess things up.
+//                 delete_body
+//                     .as_object_mut()
+//                     .unwrap()
+//                     .insert("gracePeriodSeconds".to_owned(), json!(1));
+//             } else {
+//                 // already validated that it's a legit number
+//                 delete_body
+//                     .as_object_mut()
+//                     .unwrap()
+//                     .insert("gracePeriodSeconds".to_owned(), json!(graceu32));
+//             }
+//         } else if matches.is_present("force") {
+//             delete_body
+//                 .as_object_mut()
+//                 .unwrap()
+//                 .insert("gracePeriodSeconds".to_owned(), json!(0));
+//         } else if matches.is_present("now") {
+//             delete_body
+//                 .as_object_mut()
+//                 .unwrap()
+//                 .insert("gracePeriodSeconds".to_owned(), json!(1));
+//         }
+//         let delete_body = delete_body.to_string();
 
-        env.apply_to_selection(
-            writer,
-            Some(&env.click_config.range_separator),
-            |obj, writer| {
-                delete_obj(env, obj, &delete_body, writer);
-            },
-        );
-    }
-);
+//         env.apply_to_selection(
+//             writer,
+//             Some(&env.click_config.range_separator),
+//             |obj, writer| {
+//                 delete_obj(env, obj, &delete_body, writer);
+//             },
+//         );
+//     }
+// );
 
 // fn containers_string(pod: &Pod) -> String {
 //     let mut buf = String::new();

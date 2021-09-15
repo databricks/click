@@ -20,7 +20,7 @@ use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
     ConfigMapList, Deployment, DeploymentList, Event, EventList, JobList, Metadata, ReplicaSetList,
-    SecretList, Service, ServiceList, StatefulSetList,
+    SecretList, Service, ServiceList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -2218,96 +2218,6 @@ command!(
                 env.set_last_objs(VecWrap::from(final_list));
             }
             None => env.clear_last_objs(),
-        }
-    }
-);
-
-fn print_statefulsets(
-    list: StatefulSetList,
-    regex: Option<Regex>,
-    writer: &mut ClickWriter,
-) -> StatefulSetList {
-    let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Desired", "Current", "Ready"]);
-    let statefulsets_specs = list.items.into_iter().map(|statefulset| {
-        let mut specs = Vec::new();
-        specs.push(CellSpec::new_index());
-        specs.push(
-            val_str("/metadata/name", &statefulset, "<none>")
-                .into_owned()
-                .into(),
-        );
-        specs.push(format!("{}", val_u64("/spec/replicas", &statefulset, 0)).into());
-        specs.push(format!("{}", val_u64("/status/currentReplicas", &statefulset, 0)).into());
-        specs.push(format!("{}", val_u64("/status/readyReplicas", &statefulset, 0)).into());
-        (statefulset, specs)
-    });
-
-    let filtered = match regex {
-        Some(r) => crate::table::filter(statefulsets_specs, r),
-        None => statefulsets_specs.collect(),
-    };
-
-    crate::table::print_table(&mut table, &filtered, writer);
-
-    let final_statefulsets = filtered
-        .into_iter()
-        .map(|statefulset_spec| statefulset_spec.0)
-        .collect();
-
-    StatefulSetList {
-        items: final_statefulsets,
-    }
-}
-
-command!(
-    StatefulSets,
-    "statefulsets",
-    "Get statefulsets (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("show_label")
-                .short("L")
-                .long("labels")
-                .help("Show statefulsets labels")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter statefulsets by the specified regex")
-                .takes_value(true)
-        ),
-    vec!["ss", "statefulsets"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
-        let urlstr = if let Some(ref ns) = env.namespace {
-            format!("/apis/apps/v1beta1/namespaces/{}/statefulsets", ns)
-        } else {
-            "/apis/apps/v1beta1/statefulsets".to_owned()
-        };
-
-        let statefulset_list: Option<StatefulSetList> =
-            env.run_on_kluster(|k| k.get(urlstr.as_str()));
-
-        match statefulset_list {
-            Some(l) => {
-                let final_list = print_statefulsets(l, regex, writer);
-                env.set_last_objs(VecWrap::from(final_list));
-            }
-            None => {
-                env.clear_last_objs();
-            }
         }
     }
 );

@@ -5,6 +5,7 @@ pub mod exec; // command to exec into pods
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods
+pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
 
 use chrono::offset::Utc;

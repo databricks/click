@@ -1,4 +1,3 @@
-
 use bytes::Bytes;
 use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;

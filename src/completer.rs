@@ -339,30 +339,6 @@ possible_values_completer!(
 );
 
 possible_values_completer!(
-    pod_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "Ready",
-        "ready",
-        "Phase",
-        "phase",
-        "Age",
-        "age",
-        "Restarts",
-        "restarts",
-        "Labels",
-        "labels",
-        "Annotations",
-        "annotations",
-        "Node",
-        "node",
-        "Namespace",
-        "namespace"
-    ]
-);
-
-possible_values_completer!(
     service_sort_values_completer,
     [
         "Name",

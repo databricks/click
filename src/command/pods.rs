@@ -4,12 +4,12 @@ use ansi_term::{
 };
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::{List, ListOptional};
+use k8s_openapi::ListOptional;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{add_extra_cols, handle_list_result, show_arg, sort_arg, Extractor, SortFunc},
+    command::{run_list_command, show_arg, sort_arg, Extractor},
     completer,
     env::{Env, ObjectSelection},
     kobj::{KObj, ObjType},
@@ -18,10 +18,9 @@ use crate::{
 };
 
 use std::array::IntoIter;
-//use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, Write};
+use std::io::Write;
 
 lazy_static! {
     static ref POD_EXTRACTORS: HashMap<String, Extractor<api::Pod>> = {
@@ -46,6 +45,27 @@ lazy_static! {
         ("readinessgates", "Readiness Gates"),
     ];
 }
+
+const COL_MAP: & [(& str, & str)] = &[
+    ("name", "Name"),
+    ("ready", "Ready"),
+    ("status", "Status"),
+    ("restarts", "Restarts"),
+    ("age", "Age"),
+];
+
+const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
+
+const EXTRA_COL_MAP: & [(& str, & str)] = &[
+    ("ip", "IP"),
+    ("labels", "Labels"),
+    ("namespace", "Namespace"),
+    ("node", "Node"),
+    ("nominatednode", "Nominated Node"),
+    ("readinessgates", "Readiness Gates"),
+];
+
+const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
 
 fn pod_to_kobj(pod: &api::Pod) -> KObj {
     let containers = match &pod.spec {
@@ -182,11 +202,12 @@ fn pod_status(pod: &api::Pod) -> Option<CellSpec<'_>> {
     Some(CellSpec::with_style(status.into(), style))
 }
 
-command!(
+list_command!(
     Pods,
     "pods",
     "Get pods (in current namespace if set)",
-    //&EXTRA_COLS,
+    super::COL_FLAGS,
+    super::EXTRA_COL_FLAGS,
     |clap: App<'static, 'static>| {
         clap.arg(
             Arg::with_name("labels")
@@ -209,22 +230,8 @@ command!(
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
         )
-        .arg(show_arg(
-            &EXTRA_COLS
-                .iter()
-                .map(|(flag, _)| *flag)
-                .collect::<Vec<&str>>(),
-            true,
-        ))
-        .arg(sort_arg(
-            &["name", "ready", "status", "restarts", "age"],
-            Some(
-                &EXTRA_COLS
-                    .iter()
-                    .map(|(flag, _)| *flag)
-                    .collect::<Vec<&str>>(),
-            ),
-        ))
+        .arg(show_arg(EXTRA_COL_FLAGS, true))
+        .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
         .arg(
             Arg::with_name("reverse")
                 .short("R")
@@ -235,20 +242,8 @@ command!(
     },
     vec!["pods"],
     noop_complete!(),
-    IntoIter::new([(
-        "sort".to_string(),
-        completer::pod_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
-    .collect(),
+    IntoIter::new([]),
     |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
         let mut opts: ListOptional = ListOptional::<'_> {
             label_selector: matches.value_of("label"),
             ..Default::default()
@@ -272,77 +267,18 @@ command!(
             Some(ns) => api::Pod::list_namespaced_pod(ns, opts).unwrap(),
             None => api::Pod::list_pod_for_all_namespaces(opts).unwrap(),
         };
-        let pod_list_opt: Option<List<api::Pod>> = env.run_on_context(|c| c.execute_list(request));
 
-        let mut cols = vec!["Name", "Ready", "Status", "Restarts", "Age"];
+        let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
-        let mut flags: Vec<&str> = match matches.values_of("show") {
-            Some(v) => v.collect(),
-            None => vec![],
-        };
-
-        let sort = matches
-            .value_of("sort")
-            .map(|s| match s.to_lowercase().as_str() {
-                "age" => {
-                    let sf = crate::command::PreExtractSort {
-                        cmp: crate::command::age_cmp,
-                    };
-                    SortFunc::Pre(sf)
-                }
-                "name" => SortFunc::Post("Name"),
-                "labels" => {
-                    flags.push("labels");
-                    SortFunc::Post("Labels")
-                }
-                "state" => SortFunc::Post("State"),
-                "roles" => SortFunc::Post("Roles"),
-                "version" => SortFunc::Post("Version"),
-                other => {
-                    let mut func = None;
-                    for (flag, col) in EXTRA_COLS.iter() {
-                        if flag.eq(&other) {
-                            flags.push(flag);
-                            func = Some(SortFunc::Post(col));
-                        }
-                    }
-                    match func {
-                        Some(f) => f,
-                        None => panic!("Shouldn't be allowed to ask to sort by: {}", other),
-                    }
-                }
-            });
-
-        let specified_show_namespace = flags
-            .iter()
-            .any(|flag| flag.eq_ignore_ascii_case("namespace"));
-
-        add_extra_cols(&mut cols, matches.is_present("labels"), flags, &EXTRA_COLS);
-
-        // if we're in a namespace, we don't want to add the namespace col
-        if env.namespace.is_some() {
-            // only remove if we haven't explicitly asked for Namespce
-            if !specified_show_namespace {
-                let mut i = 0;
-                while i < cols.len() {
-                    if cols[i] == "Namespace" {
-                        cols.remove(i);
-                    } else {
-                        i += 1;
-                    }
-                }
-            }
-        }
-
-        handle_list_result(
+        run_list_command(
+            matches,
             env,
             writer,
             cols,
-            pod_list_opt,
+            request,
+            COL_MAP,
+            EXTRA_COL_MAP,
             Some(&POD_EXTRACTORS),
-            regex,
-            sort,
-            matches.is_present("reverse"),
             pod_to_kobj,
         );
     }

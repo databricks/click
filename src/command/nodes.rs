@@ -35,7 +35,7 @@ lazy_static! {
     };
 }
 
-const COL_MAP: &'static [(&'static str, &'static str)] = &[
+const COL_MAP: & [(& str, & str)] = &[
     ("name", "Name"),
     ("state", "State"),
     ("roles", "Roles"),
@@ -43,11 +43,9 @@ const COL_MAP: &'static [(&'static str, &'static str)] = &[
     ("version", "Version"),
 ];
 
-const COL_FLAGS: &[&str] = &{
-    extract_first!(COL_MAP)
-};
+const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: &'static [(&'static str, &'static str)] = &[
+const EXTRA_COL_MAP: & [(& str, & str)] = &[
     ("internalip", "Internal Ip"),
     ("externalip", "External Ip"),
     ("osimage", "Os Image"),
@@ -56,9 +54,7 @@ const EXTRA_COL_MAP: &'static [(&'static str, &'static str)] = &[
     ("labels", "Labels"),
 ];
 
-const EXTRA_COL_FLAGS: &[&str] = &{
-    extract_first!(EXTRA_COL_MAP)
-};
+const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
 
 fn node_to_kobj(node: &api::Node) -> KObj {
     KObj {
@@ -195,7 +191,7 @@ list_command!(
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
         )
-        .arg(show_arg(EXTRA_COL_FLAGS, true, ))
+        .arg(show_arg(EXTRA_COL_FLAGS, true))
         .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
         .arg(
             Arg::with_name("reverse")
@@ -209,20 +205,19 @@ list_command!(
     noop_complete!(),
     IntoIter::new([]),
     |matches, env, writer| {
-
-        let cols:Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
+        let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = api::Node::list_node(Default::default()).unwrap();
 
         run_list_command(
             matches,
             env,
             writer,
+            cols,
             request,
             COL_MAP,
             EXTRA_COL_MAP,
             Some(&NODE_EXTRACTORS),
             node_to_kobj,
-            cols,
         );
     }
 );

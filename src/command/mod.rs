@@ -3,9 +3,7 @@ use chrono::DateTime;
 use clap::{Arg, ArgMatches};
 //use humantime::parse_duration;
 use k8s_openapi::{
-    apimachinery::pkg::apis::meta::v1::ObjectMeta,
-    http::Request,
-    List, ListableResource, Metadata,
+    apimachinery::pkg::apis::meta::v1::ObjectMeta, http::Request, List, ListableResource, Metadata,
 };
 use prettytable::{Cell, Row};
 use regex::Regex;
@@ -47,10 +45,6 @@ fn uppercase_first(s: &str) -> String {
     }
 }
 
-/// convenience macro for commands that list things (pods, nodes, statefulsets, etc). this macro
-/// adds the common various sorting/showing arguments and completors and then calls the base command
-/// macro
-
 pub fn try_complete_all(prefix: &str, cols: &[&str], extra_cols: &[&str]) -> Vec<Pair> {
     let mut v = vec![];
     for val in cols.iter().chain(extra_cols.iter()) {
@@ -78,28 +72,26 @@ pub fn try_complete(prefix: &str, extra_cols: &[&str]) -> Vec<Pair> {
 }
 
 macro_rules! extract_first {
-    ($map: ident) => {
-        {
-            let mut result: [&str; $map.len()] = [""; $map.len()];
-            let mut i = 0;
-            while i < $map.len() {
-                result[i] = $map[i].0;
-                i += 1;
-            }
-            result
+    ($map: ident) => {{
+        let mut result: [&str; $map.len()] = [""; $map.len()];
+        let mut i = 0;
+        while i < $map.len() {
+            result[i] = $map[i].0;
+            i += 1;
         }
-    }
+        result
+    }};
 }
 
+/// convenience macro for commands that list things (pods, nodes, statefulsets, etc). this macro
+/// adds the common various sorting/showing arguments and completors and then calls the base command
+/// macro
 macro_rules! list_command {
     ($cmd_name:ident, $name:expr, $about:expr, $cols: expr, $extra_cols:expr, $extra_args:expr,
      $aliases:expr, $cmplters: expr, $named_cmplters: expr, $cmd_expr:expr) => {
         mod list_sort_completers {
+            use crate::{command::try_complete_all, env::Env};
             use rustyline::completion::Pair;
-            use crate::{
-                command::try_complete_all,
-                env::Env,
-            };
             #[allow(non_snake_case)]
             pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
                 try_complete_all(prefix, $cols, $extra_cols)
@@ -107,11 +99,8 @@ macro_rules! list_command {
         }
 
         mod list_show_completers {
+            use crate::{command::try_complete, env::Env};
             use rustyline::completion::Pair;
-            use crate::{
-                command::try_complete,
-                env::Env,
-            };
             #[allow(non_snake_case)]
             pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
                 try_complete(prefix, $extra_cols)
@@ -136,12 +125,16 @@ macro_rules! list_command {
                     "show".to_string(),
                     list_show_completers::$cmd_name as fn(&str, &Env) -> Vec<Pair>
                 )
-            ]).chain($named_cmplters).collect(),
+            ])
+            .chain($named_cmplters)
+            .collect(),
             $cmd_expr,
             false
         );
-    }
+    };
 }
+
+// these have to come after the macro def since they use the above macro
 
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
@@ -156,22 +149,23 @@ pub mod volumes; // commands relating to volumes
 fn mapped_val(key: &str, map: &[(&'static str, &'static str)]) -> Option<&'static str> {
     for (map_key, val) in map.iter() {
         if &key == map_key {
-            return Some(val)
+            return Some(val);
         }
     }
     None
 }
 
+#[allow(clippy::too_many_arguments)] // factoring this out into structs just makes it worse
 pub fn run_list_command<T, F>(
     matches: ArgMatches,
     env: &mut Env,
     writer: &mut ClickWriter,
+    mut cols: Vec<&str>,
     request: Request<Vec<u8>>,
-    col_map:  &[(&'static str, &'static str)],
+    col_map: &[(&'static str, &'static str)],
     extra_col_map: &[(&'static str, &'static str)],
     extractors: Option<&HashMap<String, Extractor<T>>>,
     get_kobj: F,
-    mut cols: Vec<&str>,
 ) where
     T: ListableResource + Metadata<Ty = ObjectMeta> + for<'de> Deserialize<'de> + Debug,
     F: Fn(&T) -> KObj,
@@ -179,7 +173,7 @@ pub fn run_list_command<T, F>(
     let regex = match crate::table::get_regex(&matches) {
         Ok(r) => r,
         Err(s) => {
-            write!(stderr(), "{}\n", s).unwrap_or(());
+            writeln!(stderr(), "{}", s).unwrap_or(());
             return;
         }
     };
@@ -223,7 +217,12 @@ pub fn run_list_command<T, F>(
         .iter()
         .any(|flag| flag.eq_ignore_ascii_case("namespace"));
 
-    add_extra_cols(&mut cols, matches.is_present("labels"), flags, extra_col_map);
+    add_extra_cols(
+        &mut cols,
+        matches.is_present("labels"),
+        flags,
+        extra_col_map,
+    );
 
     // if we're in a namespace, we don't want to add the namespace col
     if env.namespace.is_some() {

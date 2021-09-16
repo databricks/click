@@ -35,14 +35,6 @@ lazy_static! {
         m.insert("Status".to_owned(), pod_status);
         m
     };
-    static ref EXTRA_COLS: Vec<(&'static str, &'static str)> = vec![
-        ("ip", "IP"),
-        ("labels", "Labels"),
-        ("namespace", "Namespace"),
-        ("node", "Node"),
-        ("nominatednode", "Nominated Node"),
-        ("readinessgates", "Readiness Gates"),
-    ];
 }
 
 const COL_MAP: & [(& str, & str)] = &[

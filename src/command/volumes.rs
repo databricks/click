@@ -1,12 +1,11 @@
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::List;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{handle_list_result, Extractor},
+    command::{run_list_command, show_arg, sort_arg, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -14,9 +13,10 @@ use crate::{
     table::CellSpec,
 };
 
+use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, Write};
+use std::io::Write;
 
 lazy_static! {
     static ref PV_EXTRACTORS: HashMap<String, Extractor<api::PersistentVolume>> = {
@@ -28,12 +28,32 @@ lazy_static! {
         m.insert("Claim".to_owned(), volume_claim);
         m.insert("Storage Class".to_owned(), volume_storage_class);
         m.insert("Reason".to_owned(), volume_reason);
+        m.insert("Volume Mode".to_owned(), volume_mode);
         m
     };
 }
 
+const COL_MAP: & [(& str, & str)] = &[
+    ("name", "Name"),
+    ("age", "Age"),
+    ("capacity", "Capacity"),
+    ("accessmodes", "Access Modes"),
+    ("replacepolicy", "Reclaim Policy"),
+    ("status", "Status"),
+    ("cliam", "Claim"),
+    ("storageclass", "Storage Class"),
+    ("reason", "Reason"),
+];
+
+const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
+
+const EXTRA_COL_MAP: & [(& str, & str)] = &[
+    ("volumemode", "Volume Mode"),
+];
+
+const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
+
 fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
-    //println!("{:?}", volume.spec.as_ref().map(|spec| &spec.claim_ref));
     let meta = &volume.metadata;
     KObj {
         name: meta.name.clone().unwrap_or_else(|| "<Unknown>".into()),
@@ -73,6 +93,12 @@ fn volume_reclaim_policy(volume: &api::PersistentVolume) -> Option<CellSpec<'_>>
         spec.persistent_volume_reclaim_policy
             .as_ref()
             .map(|p| p.clone().into())
+    })
+}
+
+fn volume_mode(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
+    volume.spec.as_ref().and_then(|spec| {
+        spec.volume_mode.as_ref().map(|mode| mode.as_str().into())
     })
 }
 
@@ -116,52 +142,47 @@ fn volume_reason(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
         })
 }
 
-command!(
+list_command!(
     PersistentVolumes,
     "pvs",
     "Get persistent volumes in current context",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("regex")
-            .short("r")
-            .long("regex")
-            .help("Filter pvs by the specified regex")
-            .takes_value(true)
-    ),
+    super::COL_FLAGS,
+    super::EXTRA_COL_FLAGS,
+    |clap: App<'static, 'static>| {
+        clap.arg(
+            Arg::with_name("regex")
+                .short("r")
+                .long("regex")
+                .help("Filter pvs by the specified regex")
+                .takes_value(true)
+        ).arg(
+            show_arg(EXTRA_COL_FLAGS, true)
+        ).arg(
+            sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS))
+        ).arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
+                .takes_value(false),
+        )
+    },
     vec!["persistentvolumes", "pvs"],
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
         let (request, _response_body) =
             api::PersistentVolume::list_persistent_volume(Default::default()).unwrap();
-        let pv_list_opt: Option<List<api::PersistentVolume>> =
-            env.run_on_context(|c| c.execute_list(request));
-        handle_list_result(
+        let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
+        run_list_command(
+            matches,
             env,
             writer,
-            vec![
-                "Name",
-                "Age",
-                "Capacity",
-                "Access Modes",
-                "Reclaim Policy",
-                "Status",
-                "Claim",
-                "Storage Class",
-                "Reason",
-            ],
-            pv_list_opt,
+            cols,
+            request,
+            COL_MAP,
+            Some(EXTRA_COL_MAP),
             Some(&PV_EXTRACTORS),
-            regex,
-            None,
-            matches.is_present("reverse"),
             pv_to_kobj,
         );
     }

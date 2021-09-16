@@ -27,7 +27,6 @@ lazy_static! {
         let mut m: HashMap<String, Extractor<api::Pod>> = HashMap::new();
         m.insert("IP".to_owned(), pod_ip);
         m.insert("Labels".to_owned(), pod_labels);
-        m.insert("Namespace".to_owned(), pod_namespace);
         m.insert("Node".to_owned(), pod_node);
         m.insert("Nominated Node".to_owned(), pod_nominated_node);
         m.insert("Readiness Gates".to_owned(), pod_readiness_gates);
@@ -125,10 +124,6 @@ fn pod_ip(pod: &api::Pod) -> Option<CellSpec<'_>> {
 
 fn pod_labels(pod: &api::Pod) -> Option<CellSpec<'_>> {
     Some(crate::command::keyval_string(&pod.metadata.labels).into())
-}
-
-fn pod_namespace(pod: &api::Pod) -> Option<CellSpec<'_>> {
-    pod.metadata.namespace.as_ref().map(|ns| ns.as_str().into())
 }
 
 fn pod_node(pod: &api::Pod) -> Option<CellSpec<'_>> {

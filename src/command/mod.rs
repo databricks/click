@@ -215,11 +215,12 @@ pub fn run_list_command<T, F>(
             }
         });
 
-    let specified_show_namespace = flags
-        .iter()
-        .any(|flag| flag.eq_ignore_ascii_case("namespace"));
-
     if let Some(ecm) = extra_col_map {
+        // if we're not in a namespace, we want to add a namespace col if it's in extra_col_map
+        if env.namespace.is_none() && mapped_val("namespace", ecm).is_some() {
+            flags.push("namespace");
+        }
+
         add_extra_cols(
             &mut cols,
             matches.is_present("labels"),
@@ -228,20 +229,9 @@ pub fn run_list_command<T, F>(
         );
     }
 
-    // if we're in a namespace, we don't want to add the namespace col
-    if env.namespace.is_some() {
-        // only remove if we haven't explicitly asked for Namespce
-        if !specified_show_namespace {
-            let mut i = 0;
-            while i < cols.len() {
-                if cols[i] == "Namespace" {
-                    cols.remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-        }
-    }
+
+    
+
 
     handle_list_result(
         env,
@@ -382,6 +372,7 @@ where
         for col in cols.iter() {
             match *col {
                 "Name" => row.push(extract_name(item).into()),
+                "Namespace" => row.push(extract_namespace(item).into()),
                 "Age" => row.push(extract_age(item).into()),
                 _ => match extractors {
                     Some(extractors) => match extractors.get(*col) {
@@ -420,6 +411,12 @@ pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>
     meta.creation_timestamp
         .as_ref()
         .map(|ts| time_since(ts.0).into())
+}
+
+/// An extractor for the Namespace field. Extracts the namespace out of the object metadata
+pub fn extract_namespace<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
+    let meta = obj.metadata();
+    meta.namespace.as_ref().map(|ns| ns.as_str().into())
 }
 
 // utility functions

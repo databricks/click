@@ -62,10 +62,11 @@ extern crate yasna;
 #[macro_use]
 mod cmd;
 #[macro_use]
+mod command;
+#[macro_use]
 mod completer;
 
 mod certs;
-mod command;
 mod command_processor;
 mod config;
 mod connector;

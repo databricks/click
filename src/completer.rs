@@ -339,11 +339,6 @@ possible_values_completer!(
 );
 
 possible_values_completer!(
-    node_sort_values_completer,
-    ["Name", "name", "State", "state", "Age", "age", "Labels", "labels"]
-);
-
-possible_values_completer!(
     pod_sort_values_completer,
     [
         "Name",

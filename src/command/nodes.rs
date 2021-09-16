@@ -1,12 +1,11 @@
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::List;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{add_extra_cols, handle_list_result, show_arg, sort_arg, Extractor, SortFunc},
+    command::{run_list_command, show_arg, sort_arg, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -18,7 +17,7 @@ use std::array::IntoIter;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, Write};
+use std::io::Write;
 
 lazy_static! {
     static ref NODE_EXTRACTORS: HashMap<String, Extractor<api::Node>> = {
@@ -34,15 +33,32 @@ lazy_static! {
         m.insert("Version".to_owned(), node_version);
         m
     };
-    static ref EXTRA_COLS: Vec<(&'static str, &'static str)> = vec![
-        ("internalip", "Internal Ip"),
-        ("externalip", "External Ip"),
-        ("osimage", "Os Image"),
-        ("kernelversion", "Kernel Version"),
-        ("containerruntime", "Container Runtime"),
-        ("labels", "Labels"),
-    ];
 }
+
+const COL_MAP: &'static [(&'static str, &'static str)] = &[
+    ("name", "Name"),
+    ("state", "State"),
+    ("roles", "Roles"),
+    ("age", "Age"),
+    ("version", "Version"),
+];
+
+const COL_FLAGS: &[&str] = &{
+    extract_first!(COL_MAP)
+};
+
+const EXTRA_COL_MAP: &'static [(&'static str, &'static str)] = &[
+    ("internalip", "Internal Ip"),
+    ("externalip", "External Ip"),
+    ("osimage", "Os Image"),
+    ("kernelversion", "Kernel Version"),
+    ("containerruntime", "Container Runtime"),
+    ("labels", "Labels"),
+];
+
+const EXTRA_COL_FLAGS: &[&str] = &{
+    extract_first!(EXTRA_COL_MAP)
+};
 
 fn node_to_kobj(node: &api::Node) -> KObj {
     KObj {
@@ -158,10 +174,12 @@ fn node_version(node: &api::Node) -> Option<CellSpec<'_>> {
     })
 }
 
-command!(
+list_command!(
     Nodes,
     "nodes",
     "Get nodes in the current context",
+    super::COL_FLAGS,
+    super::EXTRA_COL_FLAGS,
     |clap: App<'static, 'static>| {
         clap.arg(
             Arg::with_name("labels")
@@ -177,22 +195,8 @@ command!(
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
         )
-        .arg(show_arg(
-            &EXTRA_COLS
-                .iter()
-                .map(|(flag, _)| *flag)
-                .collect::<Vec<&str>>(),
-            true,
-        ))
-        .arg(sort_arg(
-            &["name", "state", "age", "roles", "version"],
-            Some(
-                &EXTRA_COLS
-                    .iter()
-                    .map(|(flag, _)| *flag)
-                    .collect::<Vec<&str>>(),
-            ),
-        ))
+        .arg(show_arg(EXTRA_COL_FLAGS, true, ))
+        .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
         .arg(
             Arg::with_name("reverse")
                 .short("R")
@@ -203,74 +207,22 @@ command!(
     },
     vec!["nodes"],
     noop_complete!(),
-    IntoIter::new([(
-        "sort".to_string(),
-        completer::node_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
-    .collect(),
+    IntoIter::new([]),
     |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
 
+        let cols:Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = api::Node::list_node(Default::default()).unwrap();
-        let node_list_opt: Option<List<api::Node>> =
-            env.run_on_context(|c| c.execute_list(request));
-        let mut cols = vec!["Name", "State", "Roles", "Age", "Version"];
 
-        let mut flags: Vec<&str> = match matches.values_of("show") {
-            Some(v) => v.collect(),
-            None => vec![],
-        };
-
-        let sort = matches
-            .value_of("sort")
-            .map(|s| match s.to_lowercase().as_str() {
-                "age" => {
-                    let sf = crate::command::PreExtractSort {
-                        cmp: crate::command::age_cmp,
-                    };
-                    SortFunc::Pre(sf)
-                }
-                "name" => SortFunc::Post("Name"),
-                "labels" => {
-                    flags.push("labels");
-                    SortFunc::Post("Labels")
-                }
-                "state" => SortFunc::Post("State"),
-                "roles" => SortFunc::Post("Roles"),
-                "version" => SortFunc::Post("Version"),
-                other => {
-                    let mut func = None;
-                    for (flag, col) in EXTRA_COLS.iter() {
-                        if flag.eq(&other) {
-                            flags.push(flag);
-                            func = Some(SortFunc::Post(col));
-                        }
-                    }
-                    match func {
-                        Some(f) => f,
-                        None => panic!("Shouldn't be allowed to ask to sort by: {}", other),
-                    }
-                }
-            });
-
-        add_extra_cols(&mut cols, matches.is_present("labels"), flags, &EXTRA_COLS);
-
-        handle_list_result(
+        run_list_command(
+            matches,
             env,
             writer,
-            cols,
-            node_list_opt,
+            request,
+            COL_MAP,
+            EXTRA_COL_MAP,
             Some(&NODE_EXTRACTORS),
-            regex,
-            sort,
-            matches.is_present("reverse"),
             node_to_kobj,
+            cols,
         );
     }
 );

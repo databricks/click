@@ -1,22 +1,16 @@
-pub mod alias; // commands for alias/unalias
-pub mod click; // commands internal to click (setting config values, etc)
-pub mod delete; // command to delete objects
-pub mod exec; // command to exec into pods
-pub mod namespaces; // commands relating to namespaces
-pub mod nodes; // commands relating to nodes
-pub mod pods; //commands relating to pods
-pub mod statefulsets; // commands for statefulsets
-pub mod volumes; // commands relating to volumes
-
 use chrono::offset::Utc;
 use chrono::DateTime;
-use clap::Arg;
+use clap::{Arg, ArgMatches};
 //use humantime::parse_duration;
 use k8s_openapi::{
-    apimachinery::pkg::apis::meta::v1::ObjectMeta, List, ListableResource, Metadata,
+    apimachinery::pkg::apis::meta::v1::ObjectMeta,
+    http::Request,
+    List, ListableResource, Metadata,
 };
 use prettytable::{Cell, Row};
 use regex::Regex;
+use rustyline::completion::Pair;
+use serde::Deserialize;
 
 use crate::env::Env;
 use crate::kobj::KObj;
@@ -26,7 +20,8 @@ use crate::table::CellSpec;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
-use std::io::Write;
+use std::fmt::Debug;
+use std::io::{stderr, Write};
 
 // utility types
 type RowSpec<'a> = Vec<CellSpec<'a>>;
@@ -42,6 +37,220 @@ fn identity<T>(t: T) -> T {
 /// a clap validator for u32
 fn valid_u32(s: String) -> Result<(), String> {
     s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
+}
+
+fn uppercase_first(s: &str) -> String {
+    let mut cs = s.chars();
+    match cs.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
+    }
+}
+
+/// convenience macro for commands that list things (pods, nodes, statefulsets, etc). this macro
+/// adds the common various sorting/showing arguments and completors and then calls the base command
+/// macro
+
+pub fn try_complete_all(prefix: &str, cols: &[&str], extra_cols: &[&str]) -> Vec<Pair> {
+    let mut v = vec![];
+    for val in cols.iter().chain(extra_cols.iter()) {
+        if let Some(rest) = val.strip_prefix(prefix) {
+            v.push(Pair {
+                display: val.to_string(),
+                replacement: rest.to_string(),
+            });
+        }
+    }
+    v
+}
+
+pub fn try_complete(prefix: &str, extra_cols: &[&str]) -> Vec<Pair> {
+    let mut v = vec![];
+    for val in extra_cols.iter() {
+        if let Some(rest) = val.strip_prefix(prefix) {
+            v.push(Pair {
+                display: val.to_string(),
+                replacement: rest.to_string(),
+            });
+        }
+    }
+    v
+}
+
+macro_rules! extract_first {
+    ($map: ident) => {
+        {
+            let mut result: [&str; $map.len()] = [""; $map.len()];
+            let mut i = 0;
+            while i < $map.len() {
+                result[i] = $map[i].0;
+                i += 1;
+            }
+            result
+        }
+    }
+}
+
+macro_rules! list_command {
+    ($cmd_name:ident, $name:expr, $about:expr, $cols: expr, $extra_cols:expr, $extra_args:expr,
+     $aliases:expr, $cmplters: expr, $named_cmplters: expr, $cmd_expr:expr) => {
+        mod list_sort_completers {
+            use rustyline::completion::Pair;
+            use crate::{
+                command::try_complete_all,
+                env::Env,
+            };
+            #[allow(non_snake_case)]
+            pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
+                try_complete_all(prefix, $cols, $extra_cols)
+            }
+        }
+
+        mod list_show_completers {
+            use rustyline::completion::Pair;
+            use crate::{
+                command::try_complete,
+                env::Env,
+            };
+            #[allow(non_snake_case)]
+            pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
+                try_complete(prefix, $extra_cols)
+            }
+        }
+
+        use rustyline::completion::Pair;
+        command!(
+            $cmd_name,
+            $name,
+            $about,
+            $extra_args,
+            $aliases,
+            $cmplters,
+            //$named_cmplters,
+            IntoIter::new([
+                (
+                    "sort".to_string(),
+                    list_sort_completers::$cmd_name as fn(&str, &Env) -> Vec<Pair>
+                ),
+                (
+                    "show".to_string(),
+                    list_show_completers::$cmd_name as fn(&str, &Env) -> Vec<Pair>
+                )
+            ]).chain($named_cmplters).collect(),
+            $cmd_expr,
+            false
+        );
+    }
+}
+
+pub mod alias; // commands for alias/unalias
+pub mod click; // commands internal to click (setting config values, etc)
+pub mod delete; // command to delete objects
+pub mod exec; // command to exec into pods
+pub mod namespaces; // commands relating to namespaces
+pub mod nodes; // commands relating to nodes
+pub mod pods; //commands relating to pods
+pub mod statefulsets; // commands for statefulsets
+pub mod volumes; // commands relating to volumes
+
+fn mapped_val(key: &str, map: &[(&'static str, &'static str)]) -> Option<&'static str> {
+    for (map_key, val) in map.iter() {
+        if &key == map_key {
+            return Some(val)
+        }
+    }
+    None
+}
+
+pub fn run_list_command<T, F>(
+    matches: ArgMatches,
+    env: &mut Env,
+    writer: &mut ClickWriter,
+    request: Request<Vec<u8>>,
+    col_map:  &[(&'static str, &'static str)],
+    extra_col_map: &[(&'static str, &'static str)],
+    extractors: Option<&HashMap<String, Extractor<T>>>,
+    get_kobj: F,
+    mut cols: Vec<&str>,
+) where
+    T: ListableResource + Metadata<Ty = ObjectMeta> + for<'de> Deserialize<'de> + Debug,
+    F: Fn(&T) -> KObj,
+{
+    let regex = match crate::table::get_regex(&matches) {
+        Ok(r) => r,
+        Err(s) => {
+            write!(stderr(), "{}\n", s).unwrap_or(());
+            return;
+        }
+    };
+
+    let list_opt: Option<List<T>> = env.run_on_context(|c| c.execute_list(request));
+
+    let mut flags: Vec<&str> = match matches.values_of("show") {
+        Some(v) => v.collect(),
+        None => vec![],
+    };
+
+    let sort = matches
+        .value_of("sort")
+        .map(|s| match s.to_lowercase().as_str() {
+            "age" => {
+                let sf = crate::command::PreExtractSort {
+                    cmp: crate::command::age_cmp,
+                };
+                SortFunc::Pre(sf)
+            }
+            other => {
+                if let Some(col) = mapped_val(other, col_map) {
+                    SortFunc::Post(col)
+                } else {
+                    let mut func = None;
+                    for (flag, col) in extra_col_map.iter() {
+                        if flag.eq(&other) {
+                            flags.push(flag);
+                            func = Some(SortFunc::Post(col));
+                        }
+                    }
+                    match func {
+                        Some(f) => f,
+                        None => panic!("Shouldn't be allowed to ask to sort by: {}", other),
+                    }
+                }
+            }
+        });
+
+    let specified_show_namespace = flags
+        .iter()
+        .any(|flag| flag.eq_ignore_ascii_case("namespace"));
+
+    add_extra_cols(&mut cols, matches.is_present("labels"), flags, extra_col_map);
+
+    // if we're in a namespace, we don't want to add the namespace col
+    if env.namespace.is_some() {
+        // only remove if we haven't explicitly asked for Namespce
+        if !specified_show_namespace {
+            let mut i = 0;
+            while i < cols.len() {
+                if cols[i] == "Namespace" {
+                    cols.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+        }
+    }
+
+    handle_list_result(
+        env,
+        writer,
+        cols,
+        list_opt,
+        extractors,
+        regex,
+        sort,
+        matches.is_present("reverse"),
+        get_kobj,
+    );
 }
 
 // /// a clap validator for duration

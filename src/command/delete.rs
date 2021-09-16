@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::valid_u32,
+    command::{uppercase_first, valid_u32},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -207,14 +207,6 @@ fn confirm_delete(env: &Env, obj: &KObj, options: DeleteOptional, writer: &mut C
         }
     } else {
         writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
-    }
-}
-
-fn uppercase_first(s: &str) -> String {
-    let mut cs = s.chars();
-    match cs.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
     }
 }
 

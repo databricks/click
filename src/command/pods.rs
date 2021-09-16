@@ -87,9 +87,9 @@ fn has_waiting(pod: &api::Pod) -> bool {
 
 fn phase_style_str(phase: &str) -> &'static str {
     match phase {
-        "Pending" | "Running" | "Active" => "Fg",
+        "Running" | "Active" => "Fg",
         "Terminated" | "Terminating" => "Fr",
-        "ContainerCreating" => "Fy",
+        "Pending" | "ContainerCreating" => "Fy",
         "Succeeded" => "Fb",
         "Failed" => "Fr",
         "Unknown" => "Fr",
@@ -186,6 +186,7 @@ command!(
     Pods,
     "pods",
     "Get pods (in current namespace if set)",
+    //&EXTRA_COLS,
     |clap: App<'static, 'static>| {
         clap.arg(
             Arg::with_name("labels")

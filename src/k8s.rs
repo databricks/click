@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 
 use bytes::Bytes;
 use k8s_openapi::{http, List, ListableResource};
@@ -9,6 +8,7 @@ use url::Host;
 use yasna::models::ObjectIdentifier;
 
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;

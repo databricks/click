@@ -163,7 +163,7 @@ pub fn run_list_command<T, F>(
     mut cols: Vec<&str>,
     request: Request<Vec<u8>>,
     col_map: &[(&'static str, &'static str)],
-    extra_col_map: &[(&'static str, &'static str)],
+    extra_col_map: Option<&[(&'static str, &'static str)]>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     get_kobj: F,
 ) where
@@ -197,9 +197,9 @@ pub fn run_list_command<T, F>(
             other => {
                 if let Some(col) = mapped_val(other, col_map) {
                     SortFunc::Post(col)
-                } else {
+                } else if let Some(ecm) = extra_col_map {
                     let mut func = None;
-                    for (flag, col) in extra_col_map.iter() {
+                    for (flag, col) in ecm.iter() {
                         if flag.eq(&other) {
                             flags.push(flag);
                             func = Some(SortFunc::Post(col));
@@ -209,6 +209,8 @@ pub fn run_list_command<T, F>(
                         Some(f) => f,
                         None => panic!("Shouldn't be allowed to ask to sort by: {}", other),
                     }
+                } else {
+                    panic!("Shouldn't be allowed to ask to sort by: {}", other);
                 }
             }
         });
@@ -217,12 +219,14 @@ pub fn run_list_command<T, F>(
         .iter()
         .any(|flag| flag.eq_ignore_ascii_case("namespace"));
 
-    add_extra_cols(
-        &mut cols,
-        matches.is_present("labels"),
-        flags,
-        extra_col_map,
-    );
+    if let Some(ecm) = extra_col_map {
+        add_extra_cols(
+            &mut cols,
+            matches.is_present("labels"),
+            flags,
+            ecm,
+        );
+    }
 
     // if we're in a namespace, we don't want to add the namespace col
     if env.namespace.is_some() {

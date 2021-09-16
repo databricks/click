@@ -1,12 +1,11 @@
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::List;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{handle_list_result, Extractor},
+    command::{run_list_command, sort_arg, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -16,7 +15,23 @@ use crate::{
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, Write};
+use std::io::Write;
+
+lazy_static! {
+    static ref NS_EXTRACTORS: HashMap<String, Extractor<api::Namespace>> = {
+        let mut m: HashMap<String, Extractor<api::Namespace>> = HashMap::new();
+        m.insert("Status".to_owned(), namespace_status);
+        m
+    };
+}
+
+const COL_MAP: & [(& str, & str)] = &[
+    ("name", "Name"),
+    ("age", "Age"),
+    ("status", "Status"),
+];
+
+const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
 command!(
     Namespace,
@@ -36,14 +51,6 @@ command!(
         env.set_namespace(ns);
     }
 );
-
-lazy_static! {
-    static ref NS_EXTRACTORS: HashMap<String, Extractor<api::Namespace>> = {
-        let mut m: HashMap<String, Extractor<api::Namespace>> = HashMap::new();
-        m.insert("Status".to_owned(), namespace_status);
-        m
-    };
-}
 
 fn namespace_to_kobj(namespace: &api::Namespace) -> KObj {
     KObj {
@@ -68,37 +75,38 @@ command!(
     Namespaces,
     "namespaces",
     "Get namespaces in current context",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("regex")
-            .short("r")
-            .long("regex")
-            .help("Filter namespaces by the specified regex")
-            .takes_value(true)
-    ),
+    |clap: App<'static, 'static>| {
+        clap.arg(
+            Arg::with_name("regex")
+                .short("r")
+                .long("regex")
+                .help("Filter returned value by the specified regex")
+                .takes_value(true),
+        ).arg(
+            sort_arg(COL_FLAGS, None)
+        ).arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
+                .takes_value(false)
+        )
+    },
     vec!["namespaces"],
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
+        let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
-        let ns_list_opt: Option<List<api::Namespace>> =
-            env.run_on_context(|c| c.execute_list(request));
-        handle_list_result(
+        run_list_command(
+            matches,
             env,
             writer,
-            vec!["Name", "Age", "Status"],
-            ns_list_opt,
-            Some(&NS_EXTRACTORS),
-            regex,
+            cols,
+            request,
+            COL_MAP,
             None,
-            matches.is_present("reverse"),
+            Some(&NS_EXTRACTORS),
             namespace_to_kobj,
         );
     }

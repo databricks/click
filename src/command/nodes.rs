@@ -215,7 +215,7 @@ list_command!(
             cols,
             request,
             COL_MAP,
-            EXTRA_COL_MAP,
+            Some(EXTRA_COL_MAP),
             Some(&NODE_EXTRACTORS),
             node_to_kobj,
         );

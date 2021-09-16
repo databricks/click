@@ -277,7 +277,7 @@ list_command!(
             cols,
             request,
             COL_MAP,
-            EXTRA_COL_MAP,
+            Some(EXTRA_COL_MAP),
             Some(&POD_EXTRACTORS),
             pod_to_kobj,
         );

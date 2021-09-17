@@ -35,7 +35,7 @@ lazy_static! {
     };
 }
 
-const COL_MAP: & [(& str, & str)] = &[
+const COL_MAP: &[(&str, &str)] = &[
     ("name", "Name"),
     ("state", "State"),
     ("roles", "Roles"),
@@ -45,7 +45,7 @@ const COL_MAP: & [(& str, & str)] = &[
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: & [(& str, & str)] = &[
+const EXTRA_COL_MAP: &[(&str, &str)] = &[
     ("internalip", "Internal Ip"),
     ("externalip", "External Ip"),
     ("osimage", "Os Image"),

@@ -33,7 +33,7 @@ lazy_static! {
     };
 }
 
-const COL_MAP: & [(& str, & str)] = &[
+const COL_MAP: &[(&str, &str)] = &[
     ("name", "Name"),
     ("age", "Age"),
     ("capacity", "Capacity"),
@@ -47,9 +47,7 @@ const COL_MAP: & [(& str, & str)] = &[
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: & [(& str, & str)] = &[
-    ("volumemode", "Volume Mode"),
-];
+const EXTRA_COL_MAP: &[(&str, &str)] = &[("volumemode", "Volume Mode")];
 
 const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
 
@@ -97,9 +95,10 @@ fn volume_reclaim_policy(volume: &api::PersistentVolume) -> Option<CellSpec<'_>>
 }
 
 fn volume_mode(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
-    volume.spec.as_ref().and_then(|spec| {
-        spec.volume_mode.as_ref().map(|mode| mode.as_str().into())
-    })
+    volume
+        .spec
+        .as_ref()
+        .and_then(|spec| spec.volume_mode.as_ref().map(|mode| mode.as_str().into()))
 }
 
 fn volume_status(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
@@ -154,12 +153,11 @@ list_command!(
                 .short("r")
                 .long("regex")
                 .help("Filter pvs by the specified regex")
-                .takes_value(true)
-        ).arg(
-            show_arg(EXTRA_COL_FLAGS, true)
-        ).arg(
-            sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS))
-        ).arg(
+                .takes_value(true),
+        )
+        .arg(show_arg(EXTRA_COL_FLAGS, true))
+        .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
+        .arg(
             Arg::with_name("reverse")
                 .short("R")
                 .long("reverse")

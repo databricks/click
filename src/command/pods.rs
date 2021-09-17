@@ -37,7 +37,7 @@ lazy_static! {
     };
 }
 
-const COL_MAP: & [(& str, & str)] = &[
+const COL_MAP: &[(&str, &str)] = &[
     ("name", "Name"),
     ("ready", "Ready"),
     ("status", "Status"),
@@ -47,7 +47,7 @@ const COL_MAP: & [(& str, & str)] = &[
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: & [(& str, & str)] = &[
+const EXTRA_COL_MAP: &[(&str, &str)] = &[
     ("ip", "IP"),
     ("labels", "Labels"),
     ("namespace", "Namespace"),

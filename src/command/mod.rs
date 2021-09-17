@@ -221,17 +221,8 @@ pub fn run_list_command<T, F>(
             flags.push("namespace");
         }
 
-        add_extra_cols(
-            &mut cols,
-            matches.is_present("labels"),
-            flags,
-            ecm,
-        );
+        add_extra_cols(&mut cols, matches.is_present("labels"), flags, ecm);
     }
-
-
-    
-
 
     handle_list_result(
         env,

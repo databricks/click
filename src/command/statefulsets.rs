@@ -29,7 +29,7 @@ lazy_static! {
         m
     };
 }
-const COL_MAP: & [(& str, & str)] = &[
+const COL_MAP: &[(&str, &str)] = &[
     ("name", "Name"),
     ("desired", "Desired"),
     ("current", "Current"),
@@ -38,7 +38,7 @@ const COL_MAP: & [(& str, & str)] = &[
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: & [(& str, & str)] = &[
+const EXTRA_COL_MAP: &[(&str, &str)] = &[
     ("containers", "Containers"),
     ("images", "Images"),
     ("namespace", "Namespace"),
@@ -150,7 +150,6 @@ list_command!(
                 .unwrap(),
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
-
 
         run_list_command(
             matches,

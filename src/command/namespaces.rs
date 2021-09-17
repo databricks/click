@@ -25,11 +25,7 @@ lazy_static! {
     };
 }
 
-const COL_MAP: & [(& str, & str)] = &[
-    ("name", "Name"),
-    ("age", "Age"),
-    ("status", "Status"),
-];
+const COL_MAP: &[(&str, &str)] = &[("name", "Name"), ("age", "Age"), ("status", "Status")];
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
@@ -82,14 +78,14 @@ command!(
                 .long("regex")
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
-        ).arg(
-            sort_arg(COL_FLAGS, None)
-        ).arg(
+        )
+        .arg(sort_arg(COL_FLAGS, None))
+        .arg(
             Arg::with_name("reverse")
                 .short("R")
                 .long("reverse")
                 .help("Reverse the order of the returned list")
-                .takes_value(false)
+                .takes_value(false),
         )
     },
     vec!["namespaces"],

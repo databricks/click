@@ -172,7 +172,7 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
 
         let status = match pf.child.try_wait() {
             Ok(Some(stat)) => format!("Exited with code {}", stat),
-            Ok(None) => format!("Running"),
+            Ok(None) => "Running".to_string(),
             Err(e) => format!("Error: {}", e),
         };
         row.push(Cell::new(status.as_str()));

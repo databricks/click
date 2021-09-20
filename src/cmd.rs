@@ -19,8 +19,7 @@ use crate::env::Env;
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
-    ConfigMapList, Event, EventList, JobList, Metadata, ReplicaSetList, SecretList, Service,
-    ServiceList,
+    ConfigMapList, JobList, Metadata, ReplicaSetList, SecretList, Service, ServiceList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -43,7 +42,6 @@ use strfmt::strfmt;
 use std::array::IntoIter;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::cmp;
 use std::collections::HashMap;
 use std::io::{stderr, BufRead, BufReader, Read, Write};
 use std::iter::Iterator;
@@ -319,12 +317,6 @@ macro_rules! command {
             }
         }
     };
-}
-
-/// Just return what we're given.  Useful for no-op closures in
-/// command! macro invocation
-fn identity<T>(t: T) -> T {
-    t
 }
 
 /// a clap validator for u32
@@ -1807,70 +1799,6 @@ command!(
 //         );
 //     }
 // );
-
-fn format_event(event: &Event) -> String {
-    format!(
-        "{} - {}\n count: {}\n reason: {}\n",
-        event
-            .last_timestamp
-            .map(|x| x.with_timezone(&Local))
-            .as_ref()
-            .map(|x| x as &dyn std::fmt::Display)
-            .unwrap_or_else(|| &"unknown" as &dyn std::fmt::Display),
-        event.message,
-        event.count.unwrap_or(1),
-        event.reason
-    )
-}
-
-fn event_cmp(e1: &Event, e2: &Event) -> cmp::Ordering {
-    match (e1.last_timestamp, e2.last_timestamp) {
-        (None, None) => cmp::Ordering::Equal,
-        (None, Some(_)) => cmp::Ordering::Less,
-        (Some(_), None) => cmp::Ordering::Greater,
-        (Some(e1ts), Some(e2ts)) => e1ts.partial_cmp(&e2ts).unwrap(),
-    }
-}
-
-fn print_events(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
-    let ns = obj.namespace.as_ref().unwrap();
-    let url = format!(
-        "/api/v1/namespaces/{}/events?fieldSelector=involvedObject.name={},involvedObject.namespace={}",
-        ns, obj.name(), ns
-    );
-    let oel: Option<EventList> = env.run_on_kluster(|k| k.get(url.as_str()));
-    if let Some(mut el) = oel {
-        if !el.items.is_empty() {
-            el.items.sort_by(event_cmp);
-            for e in el.items.iter() {
-                clickwriteln!(writer, "{}", format_event(e));
-            }
-        } else {
-            clickwriteln!(writer, "No events");
-        }
-    } else {
-        clickwriteln!(writer, "Failed to fetch events");
-    }
-}
-
-command!(
-    Events,
-    "events",
-    "Get events for the active pod",
-    identity,
-    vec!["events"],
-    noop_complete!(),
-    no_named_complete!(),
-    |_matches, env, writer| {
-        env.apply_to_selection(
-            writer,
-            Some(&env.click_config.range_separator),
-            |obj, writer| {
-                print_events(obj, env, writer);
-            },
-        );
-    }
-);
 
 // command!(
 //     Nodes,

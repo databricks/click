@@ -66,7 +66,7 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_align(txt: Cow<'a, str>, align: format::Alignment) -> CellSpec<'a> {
+    pub fn _with_align(txt: Cow<'a, str>, align: format::Alignment) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
             style: None,

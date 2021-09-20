@@ -139,6 +139,7 @@ macro_rules! list_command {
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
 pub mod delete; // command to delete objects
+pub mod deployments; // command to list deployments
 pub mod exec; // command to exec into pods
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes

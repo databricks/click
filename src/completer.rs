@@ -319,26 +319,6 @@ possible_values_completer!(
 );
 
 possible_values_completer!(
-    deployment_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "Desired",
-        "desired",
-        "Current",
-        "current",
-        "UpToDate",
-        "uptodate",
-        "Available",
-        "available",
-        "Age",
-        "age",
-        "Labels",
-        "labels"
-    ]
-);
-
-possible_values_completer!(
     service_sort_values_completer,
     [
         "Name",

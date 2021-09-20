@@ -166,8 +166,6 @@ impl CommandProcessor {
             Box::new(crate::cmd::Logs::new()),
             Box::new(crate::cmd::Describe::new()),
             Box::new(crate::cmd::Events::new()),
-            Box::new(crate::cmd::PortForward::new()),
-            Box::new(crate::cmd::PortForwards::new()),
             Box::new(crate::command::alias::Alias::new()),
             Box::new(crate::command::alias::Unalias::new()),
             Box::new(crate::command::click::Clear::new()),
@@ -186,6 +184,8 @@ impl CommandProcessor {
             Box::new(crate::command::nodes::Nodes::new()),
             Box::new(crate::command::pods::Containers::new()),
             Box::new(crate::command::pods::Pods::new()),
+            Box::new(crate::command::portforwards::PortForward::new()),
+            Box::new(crate::command::portforwards::PortForwards::new()),
             Box::new(crate::command::volumes::PersistentVolumes::new()),
             Box::new(crate::command::statefulsets::StatefulSets::new()),
         ];

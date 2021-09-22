@@ -54,6 +54,7 @@ extern crate untrusted;
 extern crate webpki;
 
 extern crate bytes;
+#[macro_use]
 extern crate k8s_openapi;
 extern crate reqwest;
 extern crate url;

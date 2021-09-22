@@ -307,6 +307,7 @@ impl Context {
     pub fn execute_reader(
         &self,
         k8sreq: http::Request<Vec<u8>>,
+        timeout: Option<Duration>,
     ) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
         let (parts, body) = k8sreq.into_parts();
 
@@ -346,13 +347,18 @@ impl Context {
             },
             None => req,
         };
-        let resp = req.send()?;
+
+        // we build the request here so we can set the timeout to None if needed. RequestBuilder
+        // doesn't support that for some reason
+        let mut req = req.build()?;
+        *req.timeout_mut() = timeout;
+        let resp = self.client.borrow().execute(req)?;
+
         if resp.status().is_success() {
             Ok(resp)
         } else {
-            resp.error_for_status().map_err(|e| {
-                format!("Error: {}", e).into()
-            })
+            resp.error_for_status()
+                .map_err(|e| format!("Error: {}", e).into())
         }
     }
 

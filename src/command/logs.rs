@@ -1,30 +1,27 @@
-use ansi_term::{
-    Colour::{Green, Red, Yellow},
-    Style,
-};
-use clap::{App, Arg};
+use ansi_term::Colour::Yellow;
 use chrono::offset::{Local, Utc};
+use chrono::DateTime;
+use clap::{App, Arg};
 use k8s_openapi::api::core::v1 as api;
-use k8s_openapi::ListOptional;
+
 use reqwest::blocking::Response;
 use rustyline::completion::Pair as RustlinePair;
 use strfmt::strfmt;
 
 use crate::{
     cmd::{exec_match, start_clap, Cmd},
-    command::{run_list_command, show_arg, sort_arg, valid_date, valid_duration, valid_u32},
+    command::{parse_duration, valid_date, valid_duration, valid_u32},
     completer,
-    env::{Env, ObjectSelection},
+    env::Env,
     error::KubeError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
-    table::CellSpec,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, BufRead, BufReader, Read, Write};
+use std::convert::TryFrom;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{channel, RecvTimeoutError};
@@ -77,13 +74,11 @@ fn do_logs<'a>(
     let cont = cont_opt.unwrap_or_else(|| pick_container(obj, writer));
     opts.container = Some(cont);
 
-    let (request, _resp) = api::Pod::read_namespaced_pod_log(
-        obj.name(),
-        obj.namespace.as_ref().unwrap(),
-        opts
-    ).unwrap();
+    let (request, _resp) =
+        api::Pod::read_namespaced_pod_log(obj.name(), obj.namespace.as_ref().unwrap(), opts)
+            .unwrap();
 
-    let logs_reader = env.run_on_context(|c| c.execute_reader(request));
+    let logs_reader = env.run_on_context(|c| c.execute_reader(request, timeout));
 
     if let Some(lreader) = logs_reader {
         let mut reader = BufReader::new(lreader);
@@ -205,94 +200,107 @@ command!(
     "logs",
     "Get logs from a container in the current pod",
     |clap: App<'static, 'static>| {
-        clap.arg(
-            Arg::with_name("container")
-                .help("Specify which container to get logs from")
-                .required(false)
-                .index(1),
-        )
-        .arg(
-            Arg::with_name("follow")
-                .short("f")
-                .long("follow")
-                .help("Follow the logs as new records arrive (stop with ^C)")
-                .conflicts_with("editor")
-                .conflicts_with("output")
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name("insecure")
-                .long("insecure-skip-tls-verify-backend")
-                .help("Skip verifying the identity of the kubelet that logs are requested from. \
-                       This could allow an attacker to provide invalid logs. \
-                       Useful if your kubelet serving certs have expired or similar.")
-                .takes_value(false)
-        )
-        .arg(
-            Arg::with_name("tail")
-                .short("t")
-                .long("tail")
-                .validator(valid_u32)
-                .help("Number of lines from the end of the logs to show")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("previous")
-                .short("p")
-                .long("previous")
-                .help("Return previous terminated container logs")
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name("since")
-                .long("since")
-                .conflicts_with("sinceTime")
-                .validator(valid_duration)
-                .help(
-                    "Only return logs newer than specified relative duration,
+        let ret = clap
+            .arg(
+                Arg::with_name("container")
+                    .help("Specify which container to get logs from")
+                    .required(false)
+                    .index(1),
+            )
+            .arg(
+                Arg::with_name("follow")
+                    .short("f")
+                    .long("follow")
+                    .help("Follow the logs as new records arrive (stop with ^C)")
+                    .conflicts_with("editor")
+                    .conflicts_with("output")
+                    .takes_value(false),
+            )
+            .arg(
+                Arg::with_name("tail")
+                    .short("t")
+                    .long("tail")
+                    .validator(valid_u32)
+                    .help("Number of lines from the end of the logs to show")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("previous")
+                    .short("p")
+                    .long("previous")
+                    .help("Return previous terminated container logs")
+                    .takes_value(false),
+            )
+            .arg(
+                Arg::with_name("since")
+                    .long("since")
+                    .conflicts_with("sinceTime")
+                    .validator(valid_duration)
+                    .help(
+                        "Only return logs newer than specified relative duration,
  e.g. 5s, 2m, 3m5s, 1h2min5sec",
-                )
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("sinceTime")
-                .long("since-time")
-                .conflicts_with("since")
-                .validator(valid_date)
-                .help(
-                    "Only return logs newer than specified RFC3339 date. Eg:
+                    )
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("sinceTime")
+                    .long("since-time")
+                    .conflicts_with("since")
+                    .validator(valid_date)
+                    .help(
+                        "Only return logs newer than specified RFC3339 date. Eg:
  1996-12-19T16:39:57-08:00",
-                )
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("editor")
-                .long("editor")
-                .short("e")
-                .conflicts_with("follow")
-                .conflicts_with("output")
-                .help(
-                    "Open fetched logs in an editor rather than printing them out. with \
+                    )
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::with_name("timestamps")
+                    .long("timestamps")
+                    .help(
+                        "Include an RFC3339 or RFC3339Nano timestamp at the beginning \
+                     of every line of log output.",
+                    )
+                    .takes_value(false),
+            )
+            .arg(
+                Arg::with_name("editor")
+                    .long("editor")
+                    .short("e")
+                    .conflicts_with("follow")
+                    .conflicts_with("output")
+                    .help(
+                        "Open fetched logs in an editor rather than printing them out. with \
                      --editor ARG, ARG is used as the editor command, otherwise click \
                      environment editor (see set/env commands) is used, otherwise the \
                      $EDITOR environment variable is used.",
-                )
-                .takes_value(true)
-                .min_values(0),
-        )
-        .arg(
-            Arg::with_name("output")
-                .long("output")
-                .short("o")
-                .conflicts_with("editor")
-                .conflicts_with("follow")
-                .help(
-                    "Write output to a file at the specified path instead of printing it. \
+                    )
+                    .takes_value(true)
+                    .min_values(0),
+            )
+            .arg(
+                Arg::with_name("output")
+                    .long("output")
+                    .short("o")
+                    .conflicts_with("editor")
+                    .conflicts_with("follow")
+                    .help(
+                        "Write output to a file at the specified path instead of printing it. \
                      This path can be templated with {name}, {namespace}, and {time} to write \
                      individual files for each pod in a range. (See 'help ranges').",
-                )
-                .takes_value(true),
-        )
+                    )
+                    .takes_value(true),
+            );
+        k8s_if_ge_1_17! {
+            let ret = ret.arg(
+                Arg::with_name("insecure")
+                    .long("insecure-skip-tls-verify-backend")
+                    .help("Skip verifying the identity of the kubelet that logs are requested from. \
+                           This could allow an attacker to provide invalid logs. \
+                           Useful if your kubelet serving certs have expired or similar.")
+                    .takes_value(false)
+            )
+        }
+        ret
     },
     vec!["logs"],
     vec![&completer::container_completer],
@@ -304,9 +312,11 @@ command!(
         if matches.is_present("follow") {
             opts.follow = Some(true);
         }
-        // if matches.is_present("insecure") {
-        //     opts.insecure_skip_tls_verify_backend = Some(true);
-        // }
+        k8s_if_ge_1_17! {
+            if matches.is_present("insecure") {
+                opts.insecure_skip_tls_verify_backend = Some(true);
+            }
+        }
         if matches.is_present("previous") {
             opts.previous = Some(true);
         }
@@ -314,22 +324,32 @@ command!(
             let lines = matches.value_of("tail").unwrap().parse::<i64>().unwrap();
             opts.tail_lines = Some(lines);
         }
-        // if matches.is_present("since") {
-        //     // all unwraps already validated
-        //     let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
-        //     url_args.push_str(format!("&sinceSeconds={}", dur.as_secs()).as_str());
-        // }
-        // if matches.is_present("sinceTime") {
-        //     let specified =
-        //         DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
-        //     let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
-        //     url_args.push_str(format!("&sinceSeconds={}", dur.num_seconds()).as_str());
-        // }
+        if matches.is_present("since") {
+            // all unwraps already validated
+            let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
+            let dur = match i64::try_from(dur.as_secs()) {
+                Ok(d) => d,
+                Err(e) => {
+                    clickwriteln!(writer, "Invalid duration in --since: {}", e);
+                    return;
+                }
+            };
+            opts.since_seconds = Some(dur);
+        }
+        if matches.is_present("sinceTime") {
+            let specified =
+                DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
+            let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
+            opts.since_seconds = Some(dur.num_seconds());
+        }
         let timeout = if matches.is_present("follow") {
             None
         } else {
             Some(Duration::new(20, 0)) // TODO what's a reasonable timeout here?
         };
+        if matches.is_present("timestamps") {
+            opts.timestamps = Some(true);
+        }
 
         env.apply_to_selection(
             writer,

@@ -16,8 +16,8 @@
 
 use crate::completer;
 use crate::env::Env;
-use crate::error::KubeError;
-use crate::kobj::{KObj, ObjType, VecWrap};
+
+use crate::kobj::VecWrap;
 use crate::kube::{
     ConfigMapList, JobList, Metadata, ReplicaSetList, SecretList, Service, ServiceList,
 };
@@ -26,30 +26,24 @@ use crate::table::{opt_sort, CellSpec};
 use crate::values::{get_val_as, val_item_count, val_str, val_u64};
 
 use ansi_term::Colour::Yellow;
-use chrono::offset::Local;
+
 use chrono::offset::Utc;
 use chrono::DateTime;
 use clap::{App, AppSettings, Arg, ArgMatches};
-use humantime::parse_duration;
-use hyper::client::Response;
+//use humantime::parse_duration;
+
 use prettytable::Cell;
 use prettytable::{format, Table};
 use regex::Regex;
 use rustyline::completion::Pair as RustlinePair;
 use serde_json::Value;
-use strfmt::strfmt;
 
 use std::array::IntoIter;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{stderr, BufRead, BufReader, Read, Write};
+use std::io::{stderr, Write};
 use std::iter::Iterator;
-use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use std::sync::mpsc::{channel, RecvTimeoutError};
-use std::thread;
-use std::time::Duration;
 
 lazy_static! {
     pub static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
@@ -319,24 +313,24 @@ macro_rules! command {
     };
 }
 
-/// a clap validator for u32
-fn valid_u32(s: String) -> Result<(), String> {
-    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
-}
+// /// a clap validator for u32
+// fn valid_u32(s: String) -> Result<(), String> {
+//     s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
+// }
 
-/// a clap validator for duration
-fn valid_duration(s: String) -> Result<(), String> {
-    parse_duration(s.as_str())
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
+// /// a clap validator for duration
+// fn valid_duration(s: String) -> Result<(), String> {
+//     parse_duration(s.as_str())
+//         .map(|_| ())
+//         .map_err(|e| e.to_string())
+// }
 
-/// a clap validator for rfc3339 dates
-fn valid_date(s: String) -> Result<(), String> {
-    DateTime::parse_from_rfc3339(s.as_str())
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
+// /// a clap validator for rfc3339 dates
+// fn valid_date(s: String) -> Result<(), String> {
+//     DateTime::parse_from_rfc3339(s.as_str())
+//         .map(|_| ())
+//         .map_err(|e| e.to_string())
+// }
 
 // /// a clap validator for boolean
 // fn valid_bool(s: String) -> Result<(), String> {

@@ -302,6 +302,60 @@ impl Context {
             .unwrap())
     }
 
+    // execute a request and return the reqwest response. this implements io::Read so it can be used
+    // for streaming operations like logs
+    pub fn execute_reader(
+        &self,
+        k8sreq: http::Request<Vec<u8>>,
+    ) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
+        let (parts, body) = k8sreq.into_parts();
+
+        let url = self.endpoint.join(&parts.uri.to_string())?;
+
+        if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
+            self.handle_exec_provider(exec_provider);
+        }
+
+        let req = match parts.method {
+            http::method::Method::GET => self.client.borrow().get(url),
+            http::method::Method::POST => self.client.borrow().post(url),
+            http::method::Method::DELETE => self.client.borrow().delete(url),
+            _ => unimplemented!(),
+        };
+
+        let req = req.body(body);
+        let req = match &*self.auth.borrow() {
+            Some(auth) => match auth {
+                UserAuth::AuthProvider(provider) => match provider.ensure_token() {
+                    Some(token) => req.bearer_auth(token),
+                    None => {
+                        crate::kube::print_token_err();
+                        req
+                    }
+                },
+                UserAuth::ExecProvider(ref exec_provider) => {
+                    let (auth, _) = exec_provider.get_auth();
+                    match auth {
+                        ExecAuth::Token(token) => req.bearer_auth(token),
+                        ExecAuth::ClientCertKey { .. } => req, // handled above
+                    }
+                }
+                UserAuth::Token(token) => req.bearer_auth(token),
+                UserAuth::UserPass(user, pass) => req.basic_auth(user, Some(pass)),
+                _ => req,
+            },
+            None => req,
+        };
+        let resp = req.send()?;
+        if resp.status().is_success() {
+            Ok(resp)
+        } else {
+            resp.error_for_status().map_err(|e| {
+                format!("Error: {}", e).into()
+            })
+        }
+    }
+
     pub fn read<T: k8s_openapi::Response + Debug>(
         &self,
         k8sreq: http::Request<Vec<u8>>,

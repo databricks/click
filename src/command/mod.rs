@@ -1,7 +1,7 @@
 use chrono::offset::Utc;
 use chrono::DateTime;
 use clap::{Arg, ArgMatches};
-//use humantime::parse_duration;
+use humantime::parse_duration;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, http::Request, List, ListableResource, Metadata,
 };
@@ -142,6 +142,7 @@ pub mod delete; // command to delete objects
 pub mod deployments; // command to list deployments
 pub mod events; // commands to print events
 pub mod exec; // command to exec into pods
+pub mod logs; // command to get pod logs
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods
@@ -241,18 +242,18 @@ pub fn run_list_command<T, F>(
 }
 
 // /// a clap validator for duration
-// fn valid_duration(s: String) -> Result<(), String> {
-//     parse_duration(s.as_str())
-//         .map(|_| ())
-//         .map_err(|e| e.to_string())
-// }
+fn valid_duration(s: String) -> Result<(), String> {
+    parse_duration(s.as_str())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
 
 // /// a clap validator for rfc3339 dates
-// fn valid_date(s: String) -> Result<(), String> {
-//     DateTime::parse_from_rfc3339(s.as_str())
-//         .map(|_| ())
-//         .map_err(|e| e.to_string())
-// }
+fn valid_date(s: String) -> Result<(), String> {
+    DateTime::parse_from_rfc3339(s.as_str())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
 
 // /// a clap validator for boolean
 // fn valid_bool(s: String) -> Result<(), String> {

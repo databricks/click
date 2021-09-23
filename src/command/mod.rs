@@ -140,6 +140,7 @@ pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
 pub mod delete; // command to delete objects
 pub mod deployments; // command to list deployments
+pub mod describe; // the describe command
 pub mod events; // commands to print events
 pub mod exec; // command to exec into pods
 pub mod logs; // command to get pod logs

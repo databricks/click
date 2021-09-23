@@ -7,7 +7,8 @@ use crate::Env;
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
-use k8s_openapi::api::core::v1 as api;
+use k8s_openapi::api::{apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api};
+
 use serde::ser::Serialize;
 use serde_json::Value;
 
@@ -220,100 +221,187 @@ impl KObj {
         }
     }
 
-    // do the describe using openapi. when fully migrated this will become just "describe"
-    // returns true if the describe was done, false otherwise
-    pub fn describe_openapi(
-        &self,
-        matches: &ArgMatches,
-        env: &Env,
-        writer: &mut ClickWriter,
-    ) -> bool {
+    // service is a bit more complex, so handle it here
+    fn service_describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
+        let ns = self.namespace.as_ref().unwrap();
+
+        let (request, _) =
+            api::Endpoints::read_namespaced_endpoints(&self.name, ns, Default::default()).unwrap();
+        let epval = match env.run_on_context(|c| c.read(request)).unwrap() {
+            api::ReadNamespacedEndpointsResponse::Ok(resp) => {
+                serde_json::value::to_value(&resp).ok()
+            }
+            _ => {
+                clickwriteln!(writer, "Error fetching endpoints");
+                None
+            }
+        };
+
+        let (request, _) =
+            api::Service::read_namespaced_service(&self.name, ns, Default::default()).unwrap();
+        match env.run_on_context(|c| c.read(request)).unwrap() {
+            api::ReadNamespacedServiceResponse::Ok(service) => {
+                if !maybe_full_describe_output(matches, &service, writer) {
+                    let val = serde_json::value::to_value(&service).unwrap();
+                    clickwriteln!(writer, "{}", describe::describe_format_service(val, epval));
+                }
+            }
+            _ => {
+                clickwriteln!(writer, "Invalid response trying to read service info");
+            }
+        }
+    }
+
+    /// describe the object represented by this kobj
+    pub fn describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
+        // we use some macro hacking here as each read_x call returns different types that have no
+        // common trait we could rely on to write generic code
         macro_rules! do_describe {
-            ($read_func:expr, $resp_typ:ty, $resp_ok:path) => {{
-                let (request, _) =
-                    $read_func(&self.name, Default::default()).unwrap();
+            ($read_func:expr, $resp_typ:ty, $resp_ok:path, $custom_desc: expr) => {{
+                let (request, _) = $read_func(&self.name, Default::default()).unwrap();
                 match env
-                    .run_on_context(|c| Ok(c.read::<$resp_typ>(request)))
+                    .run_on_context(|c| c.read::<$resp_typ>(request))
                     .unwrap()
-                    .unwrap() // TODO: Proper error handling
                 {
                     $resp_ok(t) => {
                         if !maybe_full_describe_output(matches, &t, writer) {
-                            clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
+                            let desc_func: Option<fn(Value) -> String> = $custom_desc;
+                            match desc_func {
+                                Some(custom) => {
+                                    let val = serde_json::value::to_value(&t).unwrap();
+                                    clickwriteln!(writer, "{}", custom(val));
+                                }
+                                None => {
+                                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
+                                }
+                            }
                         }
                     }
-                    _ => {}
+                    _ => {} // TODO
                 }
-            }}
+            }};
+        }
+        macro_rules! do_describe_with_namespace {
+            ($read_func: expr, $resp_typ: ty, $resp_ok: path, $custom_desc: expr) => {{
+                match self.namespace.as_ref() {
+                    Some(ns) => {
+                        let (request, _) = $read_func(&self.name, ns, Default::default()).unwrap();
+                        match env
+                            .run_on_context(|c| c.read::<$resp_typ>(request))
+                            .unwrap()
+                        {
+                            $resp_ok(t) => {
+                                if !maybe_full_describe_output(matches, &t, writer) {
+                                    let desc_func: Option<fn(Value) -> String> = $custom_desc;
+                                    match desc_func {
+                                        Some(custom) => {
+                                            let val = serde_json::value::to_value(&t).unwrap();
+                                            clickwriteln!(writer, "{}", custom(val));
+                                        }
+                                        None => {
+                                            clickwriteln!(
+                                                writer,
+                                                "{} {}",
+                                                self.type_str(),
+                                                NOTSUPPORTED
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    None => {
+                        clickwriteln!(writer, "No namespace for {}, cannot describe", self.name);
+                    }
+                }
+            }};
         }
         match self.typ {
+            ObjType::ConfigMap => {
+                do_describe_with_namespace!(
+                    api::ConfigMap::read_namespaced_config_map,
+                    api::ReadNamespacedConfigMapResponse,
+                    api::ReadNamespacedConfigMapResponse::Ok,
+                    None
+                );
+            }
+            ObjType::Deployment => {
+                do_describe_with_namespace!(
+                    api_apps::Deployment::read_namespaced_deployment,
+                    api_apps::ReadNamespacedDeploymentResponse,
+                    api_apps::ReadNamespacedDeploymentResponse::Ok,
+                    Some(describe::describe_format_deployment)
+                );
+            }
+            ObjType::Job => {
+                do_describe_with_namespace!(
+                    api_batch::Job::read_namespaced_job,
+                    api_batch::ReadNamespacedJobResponse,
+                    api_batch::ReadNamespacedJobResponse::Ok,
+                    None
+                );
+            }
             ObjType::Namespace => {
                 do_describe!(
                     api::Namespace::read_namespace,
                     api::ReadNamespaceResponse,
-                    api::ReadNamespaceResponse::Ok
+                    api::ReadNamespaceResponse::Ok,
+                    None
                 );
-                true
+            }
+            ObjType::Node => {
+                do_describe!(
+                    api::Node::read_node,
+                    api::ReadNodeResponse,
+                    api::ReadNodeResponse::Ok,
+                    Some(describe::describe_format_node)
+                );
             }
             ObjType::PersistentVolume => {
                 do_describe!(
                     api::PersistentVolume::read_persistent_volume,
                     api::ReadPersistentVolumeResponse,
-                    api::ReadPersistentVolumeResponse::Ok
+                    api::ReadPersistentVolumeResponse::Ok,
+                    None
                 );
-                true
             }
-            _ => false,
-        }
-    }
-
-    pub fn describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
-        if self.describe_openapi(matches, env, writer) {
-            return;
-        }
-        let namespace = match self.typ {
-            ObjType::Node => "",
-            _ => match self.namespace {
-                Some(ref ns) => ns,
-                None => {
-                    clickwriteln!(writer, "Don't know namespace for {}", self.name());
-                    return;
-                }
-            },
-        };
-
-        let url = self.url(namespace);
-        match env.run_on_kluster(|k| k.get_value(url.as_str())) {
-            Some(val) => {
-                if !maybe_full_describe_output(matches, &val, writer) {
-                    match self.typ {
-                        ObjType::Pod { .. } => {
-                            clickwriteln!(writer, "{}", describe::describe_format_pod(val))
-                        }
-                        ObjType::Node => {
-                            clickwriteln!(writer, "{}", describe::describe_format_node(val))
-                        }
-                        ObjType::Deployment => {
-                            clickwriteln!(writer, "{}", describe::describe_format_deployment(val))
-                        }
-                        ObjType::Secret => {
-                            clickwriteln!(writer, "{}", describe::describe_format_secret(val))
-                        }
-                        ObjType::Service => {
-                            let url =
-                                format!("/api/v1/namespaces/{}/endpoints/{}", namespace, self.name);
-                            let endpoint_val = env.run_on_kluster(|k| k.get_value(url.as_str()));
-                            clickwriteln!(
-                                writer,
-                                "{}",
-                                describe::describe_format_service(val, endpoint_val)
-                            )
-                        }
-                        _ => clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED),
-                    }
-                }
+            ObjType::Pod { .. } => {
+                do_describe_with_namespace!(
+                    api::Pod::read_namespaced_pod,
+                    api::ReadNamespacedPodResponse,
+                    api::ReadNamespacedPodResponse::Ok,
+                    Some(describe::describe_format_pod)
+                );
             }
-            None => clickwriteln!(writer, "Failed to fetch info from cluster"),
+            ObjType::ReplicaSet => {
+                do_describe_with_namespace!(
+                    api_apps::ReplicaSet::read_namespaced_replica_set,
+                    api_apps::ReadNamespacedReplicaSetResponse,
+                    api_apps::ReadNamespacedReplicaSetResponse::Ok,
+                    None
+                );
+            }
+            ObjType::Secret => {
+                do_describe_with_namespace!(
+                    api::Secret::read_namespaced_secret,
+                    api::ReadNamespacedSecretResponse,
+                    api::ReadNamespacedSecretResponse::Ok,
+                    Some(describe::describe_format_secret)
+                );
+            }
+            ObjType::Service => {
+                self.service_describe(matches, env, writer);
+            }
+            ObjType::StatefulSet => {
+                do_describe_with_namespace!(
+                    api_apps::StatefulSet::read_namespaced_stateful_set,
+                    api_apps::ReadNamespacedStatefulSetResponse,
+                    api_apps::ReadNamespacedStatefulSetResponse::Ok,
+                    None
+                );
+            }
         }
     }
 }

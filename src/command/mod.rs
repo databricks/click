@@ -150,6 +150,7 @@ pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods
 pub mod portforwards; // commands for forwarding ports
+pub mod replicasets; // commands relating to relicasets
 pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
 

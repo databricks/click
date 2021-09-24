@@ -18,10 +18,10 @@ use crate::completer;
 use crate::env::Env;
 
 use crate::kobj::VecWrap;
-use crate::kube::{Metadata, ReplicaSetList, SecretList, Service, ServiceList};
+use crate::kube::{Metadata, SecretList, Service, ServiceList};
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
-use crate::values::{get_val_as, val_item_count, val_str, val_u64};
+use crate::values::{get_val_as, val_item_count, val_str}; //, val_u64};
 
 use ansi_term::Colour::Yellow;
 
@@ -1720,83 +1720,6 @@ command!(
 //         }
 //     }
 // );
-
-fn print_replicasets(
-    list: ReplicaSetList,
-    regex: Option<Regex>,
-    writer: &mut ClickWriter,
-) -> ReplicaSetList {
-    let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Desired", "Current", "Ready"]);
-    let rss_specs = list.items.into_iter().map(|rs| {
-        let mut specs = Vec::new();
-        specs.push(CellSpec::new_index());
-        specs.push(val_str("/metadata/name", &rs, "<none>").into_owned().into());
-        specs.push(format!("{}", val_u64("/spec/replicas", &rs, 0)).into());
-        specs.push(format!("{}", val_u64("/status/replicas", &rs, 0)).into());
-        specs.push(format!("{}", val_u64("/status/readyReplicas", &rs, 0)).into());
-        (rs, specs)
-    });
-
-    let filtered = match regex {
-        Some(r) => crate::table::filter(rss_specs, r),
-        None => rss_specs.collect(),
-    };
-
-    crate::table::print_table(&mut table, &filtered, writer);
-
-    let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
-    ReplicaSetList { items: final_rss }
-}
-
-command!(
-    ReplicaSets,
-    "replicasets",
-    "Get replicasets (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("show_label")
-                .short("L")
-                .long("labels")
-                .help("Show replicaset labels")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter replicasets by the specified regex")
-                .takes_value(true)
-        ),
-    vec!["rs", "replicasets"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
-        let urlstr = if let Some(ref ns) = env.namespace {
-            format!("/apis/extensions/v1beta1/namespaces/{}/replicasets", ns)
-        } else {
-            "/apis/extensions/v1beta1/replicasets".to_owned()
-        };
-
-        let rsl: Option<ReplicaSetList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
-
-        match rsl {
-            Some(l) => {
-                let final_list = print_replicasets(l, regex, writer);
-                env.set_last_objs(VecWrap::from(final_list));
-            }
-            None => env.clear_last_objs(),
-        }
-    }
-);
 
 fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWriter) -> SecretList {
     let mut table = Table::new();

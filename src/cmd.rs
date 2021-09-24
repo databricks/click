@@ -18,7 +18,7 @@ use crate::completer;
 use crate::env::Env;
 
 use crate::kobj::VecWrap;
-use crate::kube::{JobList, Metadata, ReplicaSetList, SecretList, Service, ServiceList};
+use crate::kube::{Metadata, ReplicaSetList, SecretList, Service, ServiceList};
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
 use crate::values::{get_val_as, val_item_count, val_str, val_u64};
@@ -1906,98 +1906,3 @@ command!(
 //         }
 //     }
 // );
-
-command!(
-    Jobs,
-    "jobs",
-    "Get jobs (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("label")
-                .short("l")
-                .long("label")
-                .help("Get jobs with specified label selector")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter jobs by the specified regex")
-                .takes_value(true)
-        ),
-    vec!["job", "jobs"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
-        let mut urlstr = if let Some(ref ns) = env.namespace {
-            format!("/apis/batch/v1/namespaces/{}/jobs", ns)
-        } else {
-            "/apis/batch/v1/jobs".to_owned()
-        };
-
-        if let Some(label_selector) = matches.value_of("label") {
-            urlstr.push_str("?labelSelector=");
-            urlstr.push_str(label_selector);
-        }
-
-        let jl: Option<JobList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
-        match jl {
-            Some(j) => {
-                let final_list = print_jobs(j, matches.is_present("labels"), regex, writer);
-                env.set_last_objs(VecWrap::from(final_list));
-            }
-            None => env.clear_last_objs(),
-        }
-    }
-);
-
-fn print_jobs(
-    joblist: JobList,
-    _show_labels: bool,
-    regex: Option<Regex>,
-    writer: &mut ClickWriter,
-) -> JobList {
-    let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Desired", "Sucessful", "Age"]);
-    let jobs_specs = joblist.items.into_iter().map(|job| {
-        let mut specs = Vec::new();
-        let metadata: Metadata = get_val_as("/metadata", &job).unwrap();
-
-        specs.push(CellSpec::new_index());
-        specs.push(metadata.name.clone().into());
-        specs.push(
-            get_val_as::<u32>("/spec/parallelism", &job)
-                .unwrap()
-                .to_string()
-                .into(),
-        );
-        specs.push(
-            get_val_as::<u32>("/spec/completions", &job)
-                .unwrap()
-                .to_string()
-                .into(),
-        );
-        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
-
-        (job, specs)
-    });
-
-    let filtered = match regex {
-        Some(r) => crate::table::filter(jobs_specs, r),
-        None => jobs_specs.collect(),
-    };
-
-    crate::table::print_table(&mut table, &filtered, writer);
-
-    let final_jobs = filtered.into_iter().map(|job_spec| job_spec.0).collect();
-    JobList { items: final_jobs }
-}

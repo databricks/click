@@ -1,5 +1,5 @@
 use chrono::offset::Utc;
-use chrono::DateTime;
+use chrono::{DateTime, Duration};
 use clap::{Arg, ArgMatches};
 use humantime::parse_duration;
 use k8s_openapi::{
@@ -144,6 +144,7 @@ pub mod deployments; // command to list deployments
 pub mod describe; // the describe command
 pub mod events; // commands to print events
 pub mod exec; // command to exec into pods
+pub mod jobs; // commands relating to jobs
 pub mod logs; // command to get pod logs
 pub mod namespaces; // commands relating to namespaces
 pub mod nodes; // commands relating to nodes
@@ -434,30 +435,34 @@ fn row_matches<'a>(row: &[CellSpec<'a>], regex: &Regex) -> bool {
     has_match
 }
 
-fn time_since(date: DateTime<Utc>) -> String {
-    let now = Utc::now();
-    let diff = now.signed_duration_since(date);
-    if diff.num_days() > 0 {
+pub fn format_duration(duration: Duration) -> String {
+    if duration.num_days() > 0 {
         format!(
             "{}d {}h",
-            diff.num_days(),
-            (diff.num_hours() - (24 * diff.num_days()))
+            duration.num_days(),
+            (duration.num_hours() - (24 * duration.num_days()))
         )
-    } else if diff.num_hours() > 0 {
+    } else if duration.num_hours() > 0 {
         format!(
             "{}h {}m",
-            diff.num_hours(),
-            (diff.num_minutes() - (60 * diff.num_hours()))
+            duration.num_hours(),
+            (duration.num_minutes() - (60 * duration.num_hours()))
         )
-    } else if diff.num_minutes() > 0 {
+    } else if duration.num_minutes() > 0 {
         format!(
             "{}m {}s",
-            diff.num_minutes(),
-            (diff.num_seconds() - (60 * diff.num_minutes()))
+            duration.num_minutes(),
+            (duration.num_seconds() - (60 * duration.num_minutes()))
         )
     } else {
-        format!("{}s", diff.num_seconds())
+        format!("{}s", duration.num_seconds())
     }
+}
+
+pub fn time_since(date: DateTime<Utc>) -> String {
+    let now = Utc::now();
+    let diff = now.signed_duration_since(date);
+    format_duration(diff)
 }
 
 /// Build a multi-line string of the specified keyvals

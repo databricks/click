@@ -151,6 +151,7 @@ pub mod nodes; // commands relating to nodes
 pub mod pods; //commands relating to pods
 pub mod portforwards; // commands for forwarding ports
 pub mod replicasets; // commands relating to relicasets
+pub mod secrets; // commands for secrets
 pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
 
@@ -437,7 +438,12 @@ fn row_matches<'a>(row: &[CellSpec<'a>], regex: &Regex) -> bool {
 }
 
 pub fn format_duration(duration: Duration) -> String {
-    if duration.num_days() > 0 {
+    if duration.num_days() > 365 {
+        // TODO: maybe be more smart about printing years, or at least have an option
+        let days = duration.num_days();
+        let yrs = days / 365;
+        format!("{}y {}d", yrs, (duration.num_days() - (yrs * 365)))
+    } else if duration.num_days() > 0 {
         format!(
             "{}d {}h",
             duration.num_days(),

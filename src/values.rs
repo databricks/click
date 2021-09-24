@@ -49,7 +49,7 @@ pub fn val_u64(pointer: &str, value: &Value, default: u64) -> u64 {
 
 /// Return the count of the number of items in the item at the
 /// specified path.  Returns 0 if the the item there isn't an Array or Object
-pub fn val_item_count(pointer: &str, value: &Value) -> usize {
+pub fn _val_item_count(pointer: &str, value: &Value) -> usize {
     match value.pointer(pointer) {
         Some(p) => {
             if p.is_array() {
@@ -64,7 +64,7 @@ pub fn val_item_count(pointer: &str, value: &Value) -> usize {
     }
 }
 
-pub fn get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
+pub fn _get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
 where
     for<'de> T: serde::Deserialize<'de>,
 {

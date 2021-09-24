@@ -1,0 +1,111 @@
+use ansi_term::Colour::Yellow;
+use clap::{App, Arg};
+use k8s_openapi::api::core::v1 as api;
+use rustyline::completion::Pair as RustlinePair;
+
+use crate::{
+    cmd::{exec_match, start_clap, Cmd},
+    command::{run_list_command, show_arg, sort_arg, Extractor},
+    completer,
+    env::Env,
+    kobj::{KObj, ObjType},
+    output::ClickWriter,
+    table::CellSpec,
+};
+
+use std::array::IntoIter;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::io::Write;
+
+lazy_static! {
+    static ref SECRET_EXTRACTORS: HashMap<String, Extractor<api::Secret>> = {
+        let mut m: HashMap<String, Extractor<api::Secret>> = HashMap::new();
+        m.insert("Data".to_owned(), secret_data);
+        m.insert("Type".to_owned(), secret_type);
+        m
+    };
+}
+const COL_MAP: &[(&str, &str)] = &[
+    ("name", "Name"),
+    ("type", "Type"),
+    ("data", "Data"),
+    ("age", "Age"),
+];
+
+const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
+
+const EXTRA_COL_MAP: &[(&str, &str)] = &[("namespace", "Namespace"), ("labels", "Labels")];
+
+const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
+
+fn secret_to_kobj(secret: &api::Secret) -> KObj {
+    let meta = &secret.metadata;
+    KObj {
+        name: meta.name.clone().unwrap_or_else(|| "<Unknown>".into()),
+        namespace: meta.namespace.clone(),
+        typ: ObjType::Secret,
+    }
+}
+
+fn secret_type(secret: &api::Secret) -> Option<CellSpec<'_>> {
+    secret.type_.as_deref().map(|t| t.into())
+}
+
+fn secret_data(secret: &api::Secret) -> Option<CellSpec<'_>> {
+    Some(format!("{}", secret.data.len()).into())
+}
+
+list_command!(
+    Secrets,
+    "secrets",
+    "Get secrets (in current namespace if set)",
+    super::COL_FLAGS,
+    super::EXTRA_COL_FLAGS,
+    |clap: App<'static, 'static>| clap
+        .arg(
+            Arg::with_name("show_label")
+                .short("L")
+                .long("labels")
+                .help("Show secrets labels (deprecated, use --show labels)")
+                .takes_value(false)
+        )
+        .arg(
+            Arg::with_name("regex")
+                .short("r")
+                .long("regex")
+                .help("Filter secrets by the specified regex")
+                .takes_value(true)
+        )
+        .arg(show_arg(EXTRA_COL_FLAGS, true))
+        .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
+        .arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
+                .takes_value(false),
+        ),
+    vec!["secrets"],
+    noop_complete!(),
+    IntoIter::new([]),
+    |matches, env, writer| {
+        let (request, _response_body) = match &env.namespace {
+            Some(ns) => api::Secret::list_namespaced_secret(ns, Default::default()).unwrap(),
+            None => api::Secret::list_secret_for_all_namespaces(Default::default()).unwrap(),
+        };
+        let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
+
+        run_list_command(
+            matches,
+            env,
+            writer,
+            cols,
+            request,
+            COL_MAP,
+            Some(EXTRA_COL_MAP),
+            Some(&SECRET_EXTRACTORS),
+            secret_to_kobj,
+        );
+    }
+);

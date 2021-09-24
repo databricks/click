@@ -17,11 +17,10 @@
 use crate::completer;
 use crate::env::Env;
 
-use crate::kobj::VecWrap;
-use crate::kube::{Metadata, SecretList, Service, ServiceList};
+use crate::kube::{Service, ServiceList};
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
-use crate::values::{get_val_as, val_item_count, val_str}; //, val_u64};
+//use crate::values::{get_val_as, val_item_count, val_str}; //, val_u64};
 
 use ansi_term::Colour::Yellow;
 
@@ -1717,115 +1716,6 @@ command!(
 //                 env.set_last_objs(final_list);
 //             }
 //             None => env.clear_last_objs(),
-//         }
-//     }
-// );
-
-fn print_secrets(list: SecretList, regex: Option<Regex>, writer: &mut ClickWriter) -> SecretList {
-    let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Type", "Data", "Age"]);
-    let rss_specs = list.items.into_iter().map(|rs| {
-        let mut specs = Vec::new();
-
-        let metadata: Metadata = get_val_as("/metadata", &rs).unwrap();
-
-        specs.push(CellSpec::new_index());
-        specs.push(metadata.name.into());
-        specs.push(val_str("/type", &rs, "<none>").into_owned().into());
-        specs.push(val_item_count("/data", &rs).to_string().into());
-        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
-        (rs, specs)
-    });
-
-    let filtered = match regex {
-        Some(r) => crate::table::filter(rss_specs, r),
-        None => rss_specs.collect(),
-    };
-
-    crate::table::print_table(&mut table, &filtered, writer);
-
-    let final_rss = filtered.into_iter().map(|rs_spec| rs_spec.0).collect();
-    SecretList { items: final_rss }
-}
-
-command!(
-    Secrets,
-    "secrets",
-    "Get secrets (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("show_label")
-                .short("L")
-                .long("labels")
-                .help("Show secret labels")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter secrets by the specified regex")
-                .takes_value(true)
-        ),
-    vec!["secrets"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
-        let urlstr = if let Some(ref ns) = env.namespace {
-            format!("/api/v1/namespaces/{}/secrets", ns)
-        } else {
-            "/api/v1/secrets".to_owned()
-        };
-
-        let sl: Option<SecretList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
-
-        match sl {
-            Some(l) => {
-                let final_list = print_secrets(l, regex, writer);
-                env.set_last_objs(VecWrap::from(final_list));
-            }
-            None => {
-                env.clear_last_objs();
-            }
-        }
-    }
-);
-
-// command!(
-//     Namespaces,
-//     "namespaces",
-//     "Get namespaces in current context",
-//     |clap: App<'static, 'static>| clap.arg(
-//         Arg::with_name("regex")
-//             .short("r")
-//             .long("regex")
-//             .help("Filter namespaces by the specified regex")
-//             .takes_value(true)
-//     ),
-//     vec!["namespaces"],
-//     noop_complete!(),
-//     no_named_complete!(),
-//     |matches, env, writer| {
-//         let regex = match crate::table::get_regex(&matches) {
-//             Ok(r) => r,
-//             Err(s) => {
-//                 write!(stderr(), "{}\n", s).unwrap_or(());
-//                 return;
-//             }
-//         };
-
-//         let nl: Option<NamespaceList> = env.run_on_kluster(|k| k.get("/api/v1/namespaces"));
-
-//         if let Some(l) = nl {
-//             print_namespaces(&l, regex, writer);
 //         }
 //     }
 // );

@@ -138,6 +138,7 @@ macro_rules! list_command {
 
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
+pub mod configmaps; // commands relating to configmaps
 pub mod delete; // command to delete objects
 pub mod deployments; // command to list deployments
 pub mod describe; // the describe command
@@ -367,9 +368,10 @@ where
         };
         for col in cols.iter() {
             match *col {
+                "Age" => row.push(extract_age(item).into()),
+                "Labels" => row.push(extract_labels(item).into()),
                 "Name" => row.push(extract_name(item).into()),
                 "Namespace" => row.push(extract_namespace(item).into()),
-                "Age" => row.push(extract_age(item).into()),
                 _ => match extractors {
                     Some(extractors) => match extractors.get(*col) {
                         Some(extractor) => row.push(extractor(item).into()),
@@ -413,6 +415,12 @@ pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>
 pub fn extract_namespace<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
     meta.namespace.as_ref().map(|ns| ns.as_str().into())
+}
+
+/// An extractor for the Labels field. Extracts the labels out of the object metadata
+pub fn extract_labels<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
+    let meta = obj.metadata();
+    Some(keyval_string(&meta.labels).into())
 }
 
 // utility functions

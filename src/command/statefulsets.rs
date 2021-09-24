@@ -41,6 +41,7 @@ const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 const EXTRA_COL_MAP: &[(&str, &str)] = &[
     ("containers", "Containers"),
     ("images", "Images"),
+    ("labels", "Labels"),
     ("namespace", "Namespace"),
 ];
 
@@ -120,7 +121,7 @@ list_command!(
                 .short("L")
                 .long("labels")
                 .help("Show statefulsets labels (deprecated, use --show labels)")
-                .takes_value(true)
+                .takes_value(false)
         )
         .arg(
             Arg::with_name("regex")

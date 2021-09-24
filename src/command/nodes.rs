@@ -26,7 +26,6 @@ lazy_static! {
         m.insert("External Ip".to_owned(), node_external_ip);
         m.insert("Internal Ip".to_owned(), node_internal_ip);
         m.insert("Kernel Version".to_owned(), node_kernel_version);
-        m.insert("Labels".to_owned(), node_labels);
         m.insert("Roles".to_owned(), node_roles);
         m.insert("Os Image".to_owned(), node_os_image);
         m.insert("State".to_owned(), node_state);
@@ -99,10 +98,6 @@ fn node_kernel_version(node: &api::Node) -> Option<CellSpec<'_>> {
             .as_ref()
             .map(|info| info.kernel_version.as_str().into())
     })
-}
-
-fn node_labels(node: &api::Node) -> Option<CellSpec<'_>> {
-    Some(crate::command::keyval_string(&node.metadata.labels).into())
 }
 
 fn node_os_image(node: &api::Node) -> Option<CellSpec<'_>> {

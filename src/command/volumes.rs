@@ -47,7 +47,7 @@ const COL_MAP: &[(&str, &str)] = &[
 
 const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 
-const EXTRA_COL_MAP: &[(&str, &str)] = &[("volumemode", "Volume Mode")];
+const EXTRA_COL_MAP: &[(&str, &str)] = &[("labels", "Labels"), ("volumemode", "Volume Mode")];
 
 const EXTRA_COL_FLAGS: &[&str] = &{ extract_first!(EXTRA_COL_MAP) };
 

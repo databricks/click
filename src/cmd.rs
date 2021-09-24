@@ -18,9 +18,7 @@ use crate::completer;
 use crate::env::Env;
 
 use crate::kobj::VecWrap;
-use crate::kube::{
-    ConfigMapList, JobList, Metadata, ReplicaSetList, SecretList, Service, ServiceList,
-};
+use crate::kube::{JobList, Metadata, ReplicaSetList, SecretList, Service, ServiceList};
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
 use crate::values::{get_val_as, val_item_count, val_str, val_u64};
@@ -1796,86 +1794,6 @@ command!(
                 env.set_last_objs(VecWrap::from(final_list));
             }
             None => env.clear_last_objs(),
-        }
-    }
-);
-
-fn print_configmaps(
-    list: ConfigMapList,
-    regex: Option<Regex>,
-    writer: &mut ClickWriter,
-) -> ConfigMapList {
-    let mut table = Table::new();
-    table.set_titles(row!["####", "Name", "Data", "Age"]);
-    let cm_specs = list.items.into_iter().map(|cm| {
-        let mut specs = Vec::new();
-        let metadata: Metadata = get_val_as("/metadata", &cm).unwrap();
-        specs.push(CellSpec::new_index());
-        specs.push(metadata.name.into());
-        let data_count = val_item_count("/data", &cm);
-        specs.push(format!("{}", data_count).into());
-        specs.push(time_since(metadata.creation_timestamp.unwrap()).into());
-        (cm, specs)
-    });
-
-    let filtered = match regex {
-        Some(r) => crate::table::filter(cm_specs, r),
-        None => cm_specs.collect(),
-    };
-
-    crate::table::print_table(&mut table, &filtered, writer);
-
-    let final_rss = filtered.into_iter().map(|cm_spec| cm_spec.0).collect();
-    ConfigMapList { items: final_rss }
-}
-
-command!(
-    ConfigMaps,
-    "configmaps",
-    "Get configmaps (in current namespace if set)",
-    |clap: App<'static, 'static>| clap
-        .arg(
-            Arg::with_name("show_label")
-                .short("L")
-                .long("labels")
-                .help("Show replicaset labels")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name("regex")
-                .short("r")
-                .long("regex")
-                .help("Filter replicasets by the specified regex")
-                .takes_value(true)
-        ),
-    vec!["cm", "configmaps"],
-    noop_complete!(),
-    no_named_complete!(),
-    |matches, env, writer| {
-        let regex = match crate::table::get_regex(&matches) {
-            Ok(r) => r,
-            Err(s) => {
-                write!(stderr(), "{}\n", s).unwrap_or(());
-                return;
-            }
-        };
-
-        let urlstr = if let Some(ref ns) = env.namespace {
-            format!("/api/v1/namespaces/{}/configmaps", ns)
-        } else {
-            "/api/v1/configmaps".to_owned()
-        };
-
-        let cml: Option<ConfigMapList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
-
-        match cml {
-            Some(l) => {
-                let final_list = print_configmaps(l, regex, writer);
-                env.set_last_objs(VecWrap::from(final_list));
-            }
-            None => {
-                env.clear_last_objs();
-            }
         }
     }
 );

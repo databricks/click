@@ -158,7 +158,6 @@ impl CommandProcessor {
 
     fn get_command_vec() -> Vec<Box<dyn Cmd>> {
         let commands: Vec<Box<dyn Cmd>> = vec![
-            Box::new(crate::cmd::Services::new()),
             Box::new(crate::command::alias::Alias::new()),
             Box::new(crate::command::alias::Unalias::new()),
             Box::new(crate::command::click::Clear::new()),
@@ -186,6 +185,7 @@ impl CommandProcessor {
             Box::new(crate::command::portforwards::PortForwards::new()),
             Box::new(crate::command::replicasets::ReplicaSets::new()),
             Box::new(crate::command::secrets::Secrets::new()),
+            Box::new(crate::command::services::Services::new()),
             Box::new(crate::command::statefulsets::StatefulSets::new()),
             Box::new(crate::command::volumes::PersistentVolumes::new()),
         ];

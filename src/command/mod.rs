@@ -152,6 +152,7 @@ pub mod pods; //commands relating to pods
 pub mod portforwards; // commands for forwarding ports
 pub mod replicasets; // commands relating to relicasets
 pub mod secrets; // commands for secrets
+pub mod services; // commands for services
 pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
 

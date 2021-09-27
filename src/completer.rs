@@ -317,23 +317,3 @@ possible_values_completer!(
     portforwardaction_values_completer,
     ["list", "output", "stop"]
 );
-
-possible_values_completer!(
-    service_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "ClusterIP",
-        "clusterip",
-        "ExternalIP",
-        "externalip",
-        "Age",
-        "age",
-        "Ports",
-        "ports",
-        "Labels",
-        "labels",
-        "Namespace",
-        "namespace"
-    ]
-);

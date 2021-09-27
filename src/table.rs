@@ -189,35 +189,6 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
     }
 }
 
-pub fn filter<'a, T, I>(things: I, regex: Regex) -> Vec<(T, Vec<CellSpec<'a>>)>
-where
-    I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
-{
-    things
-        .filter(|thing| {
-            let mut has_match = false;
-            for cell_spec in thing.1.iter() {
-                if !has_match {
-                    has_match = cell_spec.matches(&regex);
-                }
-            }
-            has_match
-        })
-        .collect()
-}
-
-pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
-where
-    F: Fn(&T, &T) -> Ordering,
-{
-    match (o1, o2) {
-        (Some(ref v1), Some(ref v2)) => f(v1, v2),
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-        (None, None) => Ordering::Equal,
-    }
-}
-
 fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
     match term::TerminfoTerminal::new(writer) {
         Some(ref mut term) => {

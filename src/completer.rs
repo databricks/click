@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::command::command_def::Cmd;
-//use config::Alias;
-use crate::env::Env;
-
-use crate::kobj::ObjType;
-
+use k8s_openapi::{api::core::v1 as api, List};
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::{Context, Helper, Result};
+
+use crate::command::command_def::Cmd;
+use crate::env::Env;
+use crate::kobj::ObjType;
 
 use std::rc::Rc;
 
@@ -265,13 +264,24 @@ pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
 }
 
 pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
-    match env.run_on_kluster(|k| k.namespaces_for_context()) {
-        Some(v) => v
-            .iter()
-            .filter(|ns| ns.starts_with(prefix))
-            .map(|ns| Pair {
-                display: ns.clone(),
-                replacement: ns[prefix.len()..].to_string(),
+    let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
+    let ns_opt: Option<List<api::Namespace>> = env.run_on_context(|c| c.execute_list(request));
+    match ns_opt {
+        Some(nslist) => nslist
+            .items
+            .into_iter()
+            .filter_map(|ns| {
+                ns.metadata.name.and_then(|name| {
+                    if name.starts_with(prefix) {
+                        let replacement = name[prefix.len()..].to_string();
+                        Some(Pair {
+                            display: name,
+                            replacement,
+                        })
+                    } else {
+                        None
+                    }
+                })
             })
             .collect(),
         None => vec![],

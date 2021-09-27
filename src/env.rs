@@ -1,5 +1,4 @@
 use crate::config::{self, Alias, ClickConfig, Config};
-use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType};
 use crate::kube::Kluster;
 use crate::output::ClickWriter;
@@ -327,25 +326,6 @@ impl Env {
             }
             ObjectSelection::None => {
                 clickwriteln!(writer, "No objects currently active");
-            }
-        }
-    }
-
-    pub fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
-    where
-        F: FnOnce(&Kluster) -> Result<R, KubeError>,
-    {
-        match self.kluster {
-            Some(ref k) => match f(k) {
-                Ok(r) => Some(r),
-                Err(e) => {
-                    println!("{}", e);
-                    None
-                }
-            },
-            None => {
-                println!("Need to have an active context");
-                None
             }
         }
     }

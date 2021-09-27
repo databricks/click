@@ -5,8 +5,7 @@ use prettytable::Table;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
-    command::identity,
+    command::command_def::{exec_match, identity, start_clap, Cmd},
     completer, config,
     env::Env,
     output::ClickWriter,
@@ -48,7 +47,7 @@ fn print_contexts(env: &Env, writer: &mut ClickWriter) {
             (context, row)
         })
         .collect();
-    table.set_format(*crate::cmd::TBLFMT);
+    table.set_format(*crate::table::TBLFMT);
     crate::table::print_table(&mut table, &ctxs, writer);
 }
 

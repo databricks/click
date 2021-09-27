@@ -1,4 +1,4 @@
-use crate::cmd::Cmd;
+use crate::command::command_def::Cmd;
 use crate::completer::ClickHelper;
 use crate::error::KubeError;
 use crate::kobj::KObj;

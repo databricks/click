@@ -1,13 +1,10 @@
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
 use k8s_openapi::api::batch::v1 as batch_api;
-use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
-    command::{
-        format_duration, keyval_string, run_list_command, show_arg, sort_arg, time_since, Extractor,
-    },
+    command::command_def::{exec_match, show_arg, sort_arg, start_clap, Cmd},
+    command::{format_duration, keyval_string, run_list_command, time_since, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},

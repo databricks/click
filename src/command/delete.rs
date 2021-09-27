@@ -8,7 +8,7 @@ use rustyline::completion::Pair as RustlinePair;
 use serde::de::DeserializeOwned;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
+    command::command_def::{exec_match, start_clap, Cmd},
     command::{uppercase_first, valid_u32},
     completer,
     env::Env,

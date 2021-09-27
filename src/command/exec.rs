@@ -3,7 +3,7 @@ use clap::{App, Arg};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
+    command::command_def::{exec_match, start_clap, Cmd},
     completer,
     env::Env,
     kobj::KObj,

@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::cmd::Cmd;
+use crate::command::command_def::Cmd;
 //use config::Alias;
 use crate::env::Env;
+
 use crate::kobj::ObjType;
 
 use rustyline::completion::{Completer, Pair};

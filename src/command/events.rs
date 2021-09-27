@@ -6,7 +6,7 @@ use prettytable::{Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
+    command::command_def::{exec_match, start_clap, Cmd},
     command::time_since,
     completer,
     env::{Env, ObjectSelection},
@@ -116,7 +116,7 @@ fn print_events(
                     row.push(Cell::new(event.message.as_deref().unwrap_or("<none>")));
                     table.add_row(Row::new(row));
                 }
-                table.set_format(*crate::cmd::TBLFMT);
+                table.set_format(*crate::table::TBLFMT);
                 table.print(writer).unwrap_or(0);
             } else {
                 clickwriteln!(writer, "No events");
@@ -132,7 +132,7 @@ command!(
     Events,
     "events",
     "Get events for the active pod",
-    crate::command::identity,
+    crate::command::command_def::identity,
     vec!["events"],
     noop_complete!(),
     no_named_complete!(),

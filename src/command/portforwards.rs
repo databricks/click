@@ -4,7 +4,7 @@ use prettytable::{format, Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
-    cmd::{exec_match, start_clap, Cmd},
+    command::command_def::{exec_match, start_clap, Cmd},
     completer,
     env::{self, Env},
     output::ClickWriter,
@@ -185,7 +185,7 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
             "No active port forwards, see `port-forward -h` for help creating one"
         );
     } else {
-        table.set_format(*crate::cmd::TBLFMT);
+        table.set_format(*crate::table::TBLFMT);
         table.printstd();
     }
 }

@@ -1,13 +1,12 @@
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
-use clap::{Arg, ArgMatches};
+use clap::ArgMatches;
 use humantime::parse_duration;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, http::Request, List, ListableResource, Metadata,
 };
 use prettytable::{Cell, Row};
 use regex::Regex;
-use rustyline::completion::Pair;
 use serde::Deserialize;
 
 use crate::env::Env;
@@ -16,125 +15,12 @@ use crate::output::ClickWriter;
 use crate::table::CellSpec;
 
 use std::borrow::Cow;
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::io::{stderr, Write};
 
-// utility types
-type RowSpec<'a> = Vec<CellSpec<'a>>;
-type Extractor<T> = fn(&T) -> Option<CellSpec<'_>>;
-
-// command definition
-/// Just return what we're given.  Useful for no-op closures in
-/// command! macro invocation
-fn identity<T>(t: T) -> T {
-    t
-}
-
-/// a clap validator for u32
-fn valid_u32(s: String) -> Result<(), String> {
-    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
-}
-
-fn uppercase_first(s: &str) -> String {
-    let mut cs = s.chars();
-    match cs.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
-    }
-}
-
-pub fn try_complete_all(prefix: &str, cols: &[&str], extra_cols: &[&str]) -> Vec<Pair> {
-    let mut v = vec![];
-    for val in cols.iter().chain(extra_cols.iter()) {
-        if let Some(rest) = val.strip_prefix(prefix) {
-            v.push(Pair {
-                display: val.to_string(),
-                replacement: rest.to_string(),
-            });
-        }
-    }
-    v
-}
-
-pub fn try_complete(prefix: &str, extra_cols: &[&str]) -> Vec<Pair> {
-    let mut v = vec![];
-    for val in extra_cols.iter() {
-        if let Some(rest) = val.strip_prefix(prefix) {
-            v.push(Pair {
-                display: val.to_string(),
-                replacement: rest.to_string(),
-            });
-        }
-    }
-    v
-}
-
-macro_rules! extract_first {
-    ($map: ident) => {{
-        let mut result: [&str; $map.len()] = [""; $map.len()];
-        let mut i = 0;
-        while i < $map.len() {
-            result[i] = $map[i].0;
-            i += 1;
-        }
-        result
-    }};
-}
-
-/// convenience macro for commands that list things (pods, nodes, statefulsets, etc). this macro
-/// adds the common various sorting/showing arguments and completors and then calls the base command
-/// macro
-macro_rules! list_command {
-    ($cmd_name:ident, $name:expr, $about:expr, $cols: expr, $extra_cols:expr, $extra_args:expr,
-     $aliases:expr, $cmplters: expr, $named_cmplters: expr, $cmd_expr:expr) => {
-        mod list_sort_completers {
-            use crate::{command::try_complete_all, env::Env};
-            use rustyline::completion::Pair;
-            #[allow(non_snake_case)]
-            pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
-                try_complete_all(prefix, $cols, $extra_cols)
-            }
-        }
-
-        mod list_show_completers {
-            use crate::{command::try_complete, env::Env};
-            use rustyline::completion::Pair;
-            #[allow(non_snake_case)]
-            pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<Pair> {
-                try_complete(prefix, $extra_cols)
-            }
-        }
-
-        use rustyline::completion::Pair;
-        command!(
-            $cmd_name,
-            $name,
-            $about,
-            $extra_args,
-            $aliases,
-            $cmplters,
-            //$named_cmplters,
-            IntoIter::new([
-                (
-                    "sort".to_string(),
-                    list_sort_completers::$cmd_name as fn(&str, &Env) -> Vec<Pair>
-                ),
-                (
-                    "show".to_string(),
-                    list_show_completers::$cmd_name as fn(&str, &Env) -> Vec<Pair>
-                )
-            ])
-            .chain($named_cmplters)
-            .collect(),
-            $cmd_expr,
-            false
-        );
-    };
-}
-
-// these have to come after the macro def since they use the above macro
+#[macro_use]
+pub mod command_def;
 
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
@@ -155,6 +41,10 @@ pub mod secrets; // commands for secrets
 pub mod services; // commands for services
 pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
+
+// utility types
+type RowSpec<'a> = Vec<CellSpec<'a>>;
+type Extractor<T> = fn(&T) -> Option<CellSpec<'_>>;
 
 fn mapped_val(key: &str, map: &[(&'static str, &'static str)]) -> Option<&'static str> {
     for (map_key, val) in map.iter() {
@@ -199,20 +89,20 @@ pub fn run_list_command<T, F>(
         .value_of("sort")
         .map(|s| match s.to_lowercase().as_str() {
             "age" => {
-                let sf = crate::command::PreExtractSort {
-                    cmp: crate::command::age_cmp,
+                let sf = command_def::PreExtractSort {
+                    cmp: command_def::age_cmp,
                 };
-                SortFunc::Pre(sf)
+                command_def::SortFunc::Pre(sf)
             }
             other => {
                 if let Some(col) = mapped_val(other, col_map) {
-                    SortFunc::Post(col)
+                    command_def::SortFunc::Post(col)
                 } else if let Some(ecm) = extra_col_map {
                     let mut func = None;
                     for (flag, col) in ecm.iter() {
                         if flag.eq(&other) {
                             flags.push(flag);
-                            func = Some(SortFunc::Post(col));
+                            func = Some(command_def::SortFunc::Post(col));
                         }
                     }
                     match func {
@@ -231,7 +121,7 @@ pub fn run_list_command<T, F>(
             flags.push("namespace");
         }
 
-        add_extra_cols(&mut cols, matches.is_present("labels"), flags, ecm);
+        command_def::add_extra_cols(&mut cols, matches.is_present("labels"), flags, ecm);
     }
 
     handle_list_result(
@@ -247,24 +137,33 @@ pub fn run_list_command<T, F>(
     );
 }
 
-// /// a clap validator for duration
+/// Uppercase the first letter of the given str
+pub fn uppercase_first(s: &str) -> String {
+    let mut cs = s.chars();
+    match cs.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
+    }
+}
+
+/// a clap validator for duration
 fn valid_duration(s: String) -> Result<(), String> {
     parse_duration(s.as_str())
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
-// /// a clap validator for rfc3339 dates
+/// a clap validator for rfc3339 dates
 fn valid_date(s: String) -> Result<(), String> {
     DateTime::parse_from_rfc3339(s.as_str())
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
-// /// a clap validator for boolean
-// fn valid_bool(s: String) -> Result<(), String> {
-//     s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
-// }
+/// a clap validator for u32
+pub fn valid_u32(s: String) -> Result<(), String> {
+    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
+}
 
 // table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.
@@ -285,7 +184,7 @@ pub fn handle_list_result<'a, T, F>(
     list_opt: Option<List<T>>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     regex: Option<Regex>,
-    sort: Option<SortFunc<T>>,
+    sort: Option<command_def::SortFunc<T>>,
     reverse: bool,
     get_kobj: F,
 ) where
@@ -294,7 +193,7 @@ pub fn handle_list_result<'a, T, F>(
 {
     match list_opt {
         Some(mut list) => {
-            if let Some(SortFunc::Pre(func)) = sort.as_ref() {
+            if let Some(command_def::SortFunc::Pre(func)) = sort.as_ref() {
                 list.items.sort_by(|a, b| (func.cmp)(a, b));
             }
 
@@ -306,7 +205,7 @@ pub fn handle_list_result<'a, T, F>(
                 titles.push(Cell::new(col));
             }
 
-            if let Some(SortFunc::Post(colname)) = sort {
+            if let Some(command_def::SortFunc::Post(colname)) = sort {
                 let index = cols.iter().position(|&c| c == colname);
                 match index {
                     Some(index) => {
@@ -483,98 +382,4 @@ pub fn keyval_string(keyvals: &BTreeMap<String, String>) -> String {
         buf.push('\n');
     }
     buf
-}
-
-// utility methods for show/sort args
-
-/// Add any specified extra columns
-///
-/// cols: the vector of columes to show. Any flags to show extra columns will cause the column name
-/// to be added to this vector
-/// lables: If the --lables flag was specified (deprecated)
-/// flags: A vector of the flags that were passed by the user
-/// extra_cols: Extra cols to consider. This is a vector of (column_name, flag). If flag is in
-/// flags, then column_name is added to cols. The order in this vector is the order columns will be
-/// displayed in the output
-fn add_extra_cols<'a>(
-    cols: &mut Vec<&'a str>,
-    labels: bool,
-    flags: Vec<&str>,
-    extra_cols: &[(&'a str, &'a str)],
-) {
-    let show_all = flags.iter().any(|e| e.eq_ignore_ascii_case("all"));
-
-    for (flag, col) in extra_cols.iter() {
-        if col.eq(&"Labels") {
-            if labels || flags.iter().any(|e| e.eq_ignore_ascii_case("labels")) {
-                cols.push(col)
-            }
-        } else if show_all || flags.iter().any(|e| e.eq_ignore_ascii_case(flag)) {
-            cols.push(col)
-        }
-    }
-}
-
-pub enum SortFunc<T> {
-    Pre(PreExtractSort<T>),
-    Post(&'static str), // sort based on column index given
-}
-
-/// A function that can sort based on a column, pre extraction
-pub struct PreExtractSort<T> {
-    cmp: fn(a: &T, b: &T) -> Ordering,
-}
-
-fn age_cmp<T: Metadata<Ty = ObjectMeta>>(a: &T, b: &T) -> Ordering {
-    let ato = a.metadata().creation_timestamp.as_ref();
-    let bto = b.metadata().creation_timestamp.as_ref();
-    match (ato, bto) {
-        (None, None) => Ordering::Equal,
-        (Some(_), None) => Ordering::Greater,
-        (None, Some(_)) => Ordering::Less,
-        (Some(at), Some(bt)) => at.0.cmp(&bt.0),
-    }
-}
-
-/// get a clap arg for sorting. this takes one or two lists of possible values to allow for passing
-/// normal and extra cols
-fn sort_arg<'a>(cols: &[&'a str], extra_cols: Option<&[&'a str]>) -> Arg<'a, 'a> {
-    let arg = Arg::with_name("sort")
-        .short("s")
-        .long("sort")
-        .help(
-            "Sort by specified column (if column isn't shown by default, it will \
-             be shown)",
-        )
-        .takes_value(true)
-        .case_insensitive(true)
-        .possible_values(cols);
-    match extra_cols {
-        Some(extra) => arg.possible_values(extra),
-        None => arg,
-    }
-}
-
-static SHOW_HELP: &str =
-    "Comma separated list (case-insensitive) of extra columns to show in output. \
-     Use '--show all' to show all available columns.";
-static SHOW_HELP_WITH_LABELS: &str =
-    "Comma separated list (case-insensitive) of extra columns to show in output. \
-     Use '--show all,labels' to show all available columns. (Note that 'all' doesn't \
-     include labels due to thier size)";
-/// get a clap arg for showing extra cols.
-fn show_arg<'a>(extra_cols: &[&'a str], labels: bool) -> Arg<'a, 'a> {
-    let arg = Arg::with_name("show")
-        .short("S")
-        .long("show")
-        .takes_value(true)
-        .possible_value("all")
-        .possible_values(extra_cols)
-        .case_insensitive(true)
-        .use_delimiter(true);
-    if labels {
-        arg.help(SHOW_HELP_WITH_LABELS)
-    } else {
-        arg.help(SHOW_HELP)
-    }
 }

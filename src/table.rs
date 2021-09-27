@@ -27,7 +27,7 @@ use std::cmp::{Ordering, PartialEq, PartialOrd};
 use std::io::Write;
 
 lazy_static! {
-    static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
+    pub static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
             format::LineSeparator::new('-', '+', '+', '+')

@@ -169,7 +169,7 @@ list_command!(
     no_named_complete!(),
     |matches, env, writer| {
         let (request, _response_body) =
-            api::PersistentVolume::list_persistent_volume(Default::default()).unwrap();
+            api::PersistentVolume::list_persistent_volume(Default::default())?;
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         run_list_command(
             matches,
@@ -181,6 +181,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&PV_EXTRACTORS),
             pv_to_kobj,
-        );
+        )
     }
 );

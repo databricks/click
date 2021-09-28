@@ -272,8 +272,8 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
             .into_iter()
             .filter_map(|ns| {
                 ns.metadata.name.and_then(|name| {
-                    if name.starts_with(prefix) {
-                        let replacement = name[prefix.len()..].to_string();
+                    if let Some(rep) = name.strip_prefix(prefix) {
+                        let replacement = rep.to_string();
                         Some(Pair {
                             display: name,
                             replacement,

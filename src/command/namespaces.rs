@@ -45,6 +45,7 @@ command!(
     |matches, env, _| {
         let ns = matches.value_of("namespace");
         env.set_namespace(ns);
+        Ok(())
     }
 );
 
@@ -93,7 +94,7 @@ command!(
     no_named_complete!(),
     |matches, env, writer| {
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
-        let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
+        let (request, _response_body) = api::Namespace::list_namespace(Default::default())?;
         run_list_command(
             matches,
             env,
@@ -104,6 +105,6 @@ command!(
             None,
             Some(&NS_EXTRACTORS),
             namespace_to_kobj,
-        );
+        )
     }
 );

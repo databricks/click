@@ -26,6 +26,7 @@ command!(
     no_named_complete!(),
     |_, env, _| {
         env.clear_current();
+        Ok(())
     }
 );
 
@@ -71,7 +72,7 @@ command!(
             if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
                 if k.name == c {
                     // no-op if we're already in the specified context
-                    return;
+                    return Ok(());
                 }
             }
             env.set_context(context);
@@ -79,6 +80,7 @@ command!(
         } else {
             print_contexts(env, writer);
         }
+        Ok(())
     }
 );
 
@@ -92,6 +94,7 @@ command!(
     no_named_complete!(),
     |_, env, writer| {
         print_contexts(env, writer);
+        Ok(())
     }
 );
 
@@ -105,6 +108,7 @@ command!(
     no_named_complete!(),
     |_matches, env, writer| {
         clickwriteln!(writer, "{}", env);
+        Ok(())
     }
 );
 
@@ -118,6 +122,7 @@ command!(
     no_named_complete!(),
     |_, env, _| {
         env.quit = true;
+        Ok(())
     }
 );
 
@@ -139,8 +144,10 @@ command!(
                 obj.type_str(),
                 obj.namespace.as_deref().unwrap_or("")
             ));
-        });
+            Ok(())
+        })?;
         crate::table::print_filled_table(&mut table, writer);
+        Ok(())
     }
 );
 
@@ -232,6 +239,7 @@ Example:
         if !failed {
             clickwriteln!(writer, "Set {} to '{}'", option, value);
         }
+        Ok(())
     }
 );
 
@@ -245,5 +253,6 @@ command!(
     no_named_complete!(),
     |_, _, writer| {
         clickwriteln!(writer, "{}", Utc::now());
+        Ok(())
     }
 );

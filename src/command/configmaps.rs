@@ -80,8 +80,8 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => api::ConfigMap::list_namespaced_config_map(ns, Default::default()).unwrap(),
-            None => api::ConfigMap::list_config_map_for_all_namespaces(Default::default()).unwrap(),
+            Some(ns) => api::ConfigMap::list_namespaced_config_map(ns, Default::default())?,
+            None => api::ConfigMap::list_config_map_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
@@ -95,6 +95,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&CM_EXTRACTORS),
             cm_to_kobj,
-        );
+        )
     }
 );

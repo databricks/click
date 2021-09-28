@@ -318,7 +318,9 @@ impl CommandProcessor {
                         }
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
-                        cmd.exec(env, &mut parts, &mut writer);
+                        if let Err(e) = cmd.exec(env, &mut parts, &mut writer) {
+                            clickwriteln!(writer, "{}", e);
+                        }
                     } else if cmdstr == "help" {
                         self.show_help(&mut parts, &mut writer);
                     } else {

@@ -154,11 +154,8 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => {
-                apps_api::ReplicaSet::list_namespaced_replica_set(ns, Default::default()).unwrap()
-            }
-            None => apps_api::ReplicaSet::list_replica_set_for_all_namespaces(Default::default())
-                .unwrap(),
+            Some(ns) => apps_api::ReplicaSet::list_namespaced_replica_set(ns, Default::default())?,
+            None => apps_api::ReplicaSet::list_replica_set_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
@@ -172,6 +169,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&RS_EXTRACTORS),
             rs_to_kobj,
-        );
+        )
     }
 );

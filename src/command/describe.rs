@@ -40,6 +40,6 @@ command!(
             writer,
             Some(&env.click_config.range_separator),
             |obj, writer| obj.describe(&matches, env, writer),
-        );
+        )
     }
 );

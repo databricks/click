@@ -58,8 +58,10 @@ impl error::Error for KubeErrNo {
     }
 }
 
+// TODO: This should really be called ClickError
 #[derive(Debug)]
 pub enum KubeError {
+    CommandError(String),
     ParseErr(String),
     Kube(KubeErrNo),
     KubeServerError(String),
@@ -70,12 +72,15 @@ pub enum KubeError {
     HyperErr(hyper::error::Error),
     SerdeJson(serde_json::Error),
     SerdeYaml(serde_yaml::Error),
+    RequestError(k8s_openapi::RequestError),
+    Clap(clap::Error),
     JoinPathsError(env::JoinPathsError),
 }
 
 impl fmt::Display for KubeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            KubeError::CommandError(ref s) => write!(f, "Error running command: {}", s),
             KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
             KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
             KubeError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
@@ -86,6 +91,17 @@ impl fmt::Display for KubeError {
             KubeError::HyperErr(ref err) => write!(f, "Hyper error: {} ({:?})", err, err.source()),
             KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
             KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
+            KubeError::RequestError(ref err) => match err {
+                k8s_openapi::RequestError::Http(e) => {
+                    write!(f, "Error preparing HTTP request: {}", e)
+                }
+                k8s_openapi::RequestError::Json(e) => write!(
+                    f,
+                    "Error serializing the JSON body of the HTTP request: {}",
+                    e
+                ),
+            },
+            KubeError::Clap(ref err) => write!(f, "Error in clap: {}", err),
             KubeError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
         }
     }
@@ -94,6 +110,7 @@ impl fmt::Display for KubeError {
 impl error::Error for KubeError {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
+            KubeError::CommandError(_) => None,
             KubeError::ParseErr(_) => None,
             KubeError::Kube(ref err) => Some(err),
             KubeError::KubeServerError(_) => None,
@@ -104,6 +121,8 @@ impl error::Error for KubeError {
             KubeError::HyperErr(ref err) => Some(err),
             KubeError::SerdeJson(ref err) => Some(err),
             KubeError::SerdeYaml(ref err) => Some(err),
+            KubeError::RequestError(ref err) => Some(err),
+            KubeError::Clap(ref err) => Some(err),
             KubeError::JoinPathsError(ref err) => Some(err),
         }
     }
@@ -142,6 +161,18 @@ impl From<serde_yaml::Error> for KubeError {
 impl From<base64::DecodeError> for KubeError {
     fn from(err: base64::DecodeError) -> KubeError {
         KubeError::DecodeError(err)
+    }
+}
+
+impl From<k8s_openapi::RequestError> for KubeError {
+    fn from(err: k8s_openapi::RequestError) -> KubeError {
+        KubeError::RequestError(err)
+    }
+}
+
+impl From<clap::Error> for KubeError {
+    fn from(err: clap::Error) -> KubeError {
+        KubeError::Clap(err)
     }
 }
 

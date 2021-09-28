@@ -1,4 +1,5 @@
 use crate::config::{self, Alias, ClickConfig, Config};
+use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType};
 use crate::kube::Kluster;
 use crate::output::ClickWriter;
@@ -10,7 +11,7 @@ use tempdir::TempDir;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -288,15 +289,65 @@ impl Env {
         }
     }
 
-    // apply a function to each selected object.
-    pub fn apply_to_selection<F>(&self, writer: &mut ClickWriter, sepfmt: Option<&str>, mut f: F)
+    // the function. print its error if an error happens. return true if the loop should continue,
+    // false if it should stop
+    fn call_selection_func<F>(
+        obj: &KObj,
+        writer: &mut ClickWriter,
+        f: &mut F,
+        continue_all: &mut bool,
+    ) -> bool
     where
-        F: FnMut(&KObj, &mut ClickWriter),
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), KubeError>,
+    {
+        if let Err(e) = f(obj, writer) {
+            clickwriteln!(writer, "Error applying operation to {}: {}", obj.name, e);
+            if *continue_all {
+                return true;
+            }
+            clickwriteln!(writer, "  o = once: continue this time, ask again on error");
+            clickwriteln!(writer, "  a = all: continue over all future errors");
+            clickwriteln!(writer, "  n/N = no: abort range operation (default)");
+            clickwrite!(writer, "Continue? [o/a/N]? ");
+            io::stdout().flush().expect("Could not flush stdout");
+            let mut conf = String::new();
+            if io::stdin().read_line(&mut conf).is_ok() {
+                match conf.trim() {
+                    "o" | "once" => true,
+                    "a" | "all" => {
+                        *continue_all = true;
+                        true
+                    }
+                    _ => false,
+                }
+            } else {
+                clickwriteln!(writer, "Could not read response, stopping");
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    // apply a function to each selected object.
+    pub fn apply_to_selection<F>(
+        &self,
+        writer: &mut ClickWriter,
+        sepfmt: Option<&str>,
+        mut f: F,
+    ) -> Result<(), KubeError>
+    where
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), KubeError>,
     {
         match self.current_selection() {
             ObjectSelection::Single(obj) => f(obj, writer),
             ObjectSelection::Range(range) => {
+                let mut continue_all = false;
+                let mut go = true;
                 for obj in range.iter() {
+                    if !go {
+                        return Err(KubeError::CommandError("Aborting range action".to_string()));
+                    }
                     if let Some(fmt) = sepfmt {
                         let mut fmtvars = HashMap::new();
                         fmtvars.insert("name".to_string(), obj.name());
@@ -307,7 +358,12 @@ impl Env {
                         match strfmt(fmt, &fmtvars) {
                             Ok(sep) => {
                                 clickwriteln!(writer, "{}", sep);
-                                f(obj, writer)
+                                go = Env::call_selection_func(
+                                    obj,
+                                    writer,
+                                    &mut f,
+                                    &mut continue_all,
+                                );
                             }
                             Err(e) => {
                                 clickwriteln!(
@@ -316,17 +372,23 @@ impl Env {
                                     obj.name(),
                                     e
                                 );
-                                f(obj, writer)
+                                go = Env::call_selection_func(
+                                    obj,
+                                    writer,
+                                    &mut f,
+                                    &mut continue_all,
+                                );
                             }
                         }
                     } else {
-                        f(obj, writer);
+                        go = Env::call_selection_func(obj, writer, &mut f, &mut continue_all);
                     }
                 }
+                Ok(())
             }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "No objects currently active");
-            }
+            ObjectSelection::None => Err(KubeError::CommandError(
+                "No objects currently active".to_string(),
+            )),
         }
     }
 

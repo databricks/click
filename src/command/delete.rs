@@ -12,6 +12,7 @@ use crate::{
     command::{uppercase_first, valid_u32},
     completer,
     env::Env,
+    error::KubeError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
     values::val_str,
@@ -55,7 +56,12 @@ fn send_delete<D: DeserializeOwned + Debug>(
     }
 }
 
-fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOptional) {
+fn delete_obj(
+    env: &Env,
+    writer: &mut ClickWriter,
+    obj: &KObj,
+    options: DeleteOptional,
+) -> Result<(), KubeError> {
     match obj.namespace.as_ref() {
         Some(ns) => match obj.typ {
             ObjType::ConfigMap => {
@@ -63,8 +69,7 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
-                )
-                .unwrap()
+                )?
                 .0;
                 send_delete::<api::ConfigMap>(env, writer, req);
             }
@@ -73,15 +78,13 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
-                )
-                .unwrap()
+                )?
                 .0;
                 send_delete::<apps_api::Deployment>(env, writer, req);
             }
             ObjType::Job => {
                 let req =
-                    batch_api::Job::delete_namespaced_job(obj.name.as_str(), ns.as_str(), options)
-                        .unwrap()
+                    batch_api::Job::delete_namespaced_job(obj.name.as_str(), ns.as_str(), options)?
                         .0;
                 send_delete::<batch_api::Job>(env, writer, req);
             }
@@ -91,9 +94,7 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     "Namespace has unexpected namespace. Please file an issue on github. \
                      Deleting anyway"
                 );
-                let req = api::Namespace::delete_namespace(obj.name.as_str(), options)
-                    .unwrap()
-                    .0;
+                let req = api::Namespace::delete_namespace(obj.name.as_str(), options)?.0;
                 send_delete::<api::Namespace>(env, writer, req);
             }
             ObjType::Node => {
@@ -102,9 +103,7 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     "Node has unexpected namespace. Please file an issue on github. \
                          Deleting anyway"
                 );
-                let req = api::Node::delete_node(obj.name.as_str(), options)
-                    .unwrap()
-                    .0;
+                let req = api::Node::delete_node(obj.name.as_str(), options)?.0;
                 send_delete::<api::Node>(env, writer, req);
             }
             ObjType::PersistentVolume => {
@@ -114,15 +113,12 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                      Deleting anyway"
                 );
                 let req =
-                    api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)
-                        .unwrap()
-                        .0;
+                    api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)?.0;
                 send_delete::<api::PersistentVolume>(env, writer, req);
             }
             ObjType::Pod { .. } => {
-                let req = api::Pod::delete_namespaced_pod(obj.name.as_str(), ns.as_str(), options)
-                    .unwrap()
-                    .0;
+                let req =
+                    api::Pod::delete_namespaced_pod(obj.name.as_str(), ns.as_str(), options)?.0;
                 send_delete::<api::Pod>(env, writer, req);
             }
             ObjType::ReplicaSet => {
@@ -130,8 +126,7 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
-                )
-                .unwrap()
+                )?
                 .0;
                 send_delete::<apps_api::ReplicaSet>(env, writer, req);
             }
@@ -140,15 +135,13 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
-                )
-                .unwrap()
+                )?
                 .0;
                 send_delete::<apps_api::StatefulSet>(env, writer, req);
             }
             ObjType::Secret => {
                 let req =
-                    api::Secret::delete_namespaced_secret(obj.name.as_str(), ns.as_str(), options)
-                        .unwrap()
+                    api::Secret::delete_namespaced_secret(obj.name.as_str(), ns.as_str(), options)?
                         .0;
                 send_delete::<api::Secret>(env, writer, req);
             }
@@ -157,30 +150,23 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
-                )
-                .unwrap()
+                )?
                 .0;
                 send_delete::<api::Service>(env, writer, req);
             }
         },
         None => match obj.typ {
             ObjType::Node => {
-                let req = api::Node::delete_node(obj.name.as_str(), options)
-                    .unwrap()
-                    .0;
+                let req = api::Node::delete_node(obj.name.as_str(), options)?.0;
                 send_delete::<api::Node>(env, writer, req);
             }
             ObjType::Namespace => {
-                let req = api::Namespace::delete_namespace(obj.name.as_str(), options)
-                    .unwrap()
-                    .0;
+                let req = api::Namespace::delete_namespace(obj.name.as_str(), options)?.0;
                 send_delete::<api::Namespace>(env, writer, req);
             }
             ObjType::PersistentVolume => {
                 let req =
-                    api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)
-                        .unwrap()
-                        .0;
+                    api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)?.0;
                 send_delete::<api::PersistentVolume>(env, writer, req);
             }
             _ => {
@@ -192,22 +178,29 @@ fn delete_obj(env: &Env, writer: &mut ClickWriter, obj: &KObj, options: DeleteOp
             }
         },
     };
+    Ok(())
 }
 
-fn confirm_delete(env: &Env, obj: &KObj, options: DeleteOptional, writer: &mut ClickWriter) {
+fn confirm_delete(
+    env: &Env,
+    obj: &KObj,
+    options: DeleteOptional,
+    writer: &mut ClickWriter,
+) -> Result<(), KubeError> {
     let name = obj.name();
     clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
     io::stdout().flush().expect("Could not flush stdout");
     let mut conf = String::new();
     if io::stdin().read_line(&mut conf).is_ok() {
         if conf.trim() == "y" || conf.trim() == "yes" {
-            delete_obj(env, writer, obj, options);
+            delete_obj(env, writer, obj, options)?;
         } else {
             clickwriteln!(writer, "Not deleting");
         }
     } else {
         writeln!(stderr(), "Could not read response, not deleting.").unwrap_or(());
     }
+    Ok(())
 }
 
 command!(
@@ -284,9 +277,7 @@ command!(
         env.apply_to_selection(
             writer,
             Some(&env.click_config.range_separator),
-            |obj, writer| {
-                confirm_delete(env, obj, delete_options, writer);
-            },
-        );
+            |obj, writer| confirm_delete(env, obj, delete_options, writer),
+        )
     }
 );

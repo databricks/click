@@ -6,6 +6,7 @@ use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
     completer,
     env::Env,
+    error::KubeError,
     kobj::KObj,
     output::ClickWriter,
 };
@@ -13,7 +14,7 @@ use crate::{
 use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::{self, stderr, Write};
+use std::io::{self, Write};
 use std::process::Command;
 
 /// a clap validator for boolean
@@ -32,7 +33,7 @@ fn do_exec(
     term_opt: &Option<&str>,
     do_terminal: bool,
     writer: &mut ClickWriter,
-) {
+) -> Result<(), KubeError> {
     let ns = pod.namespace.as_ref().unwrap();
     if do_terminal {
         let terminal = if let Some(t) = term_opt {
@@ -61,9 +62,8 @@ fn do_exec(
         targs.push("--");
         targs.extend(cmd.iter());
         clickwriteln!(writer, "Starting on {} in terminal", pod.name());
-        if let Err(e) = duct::cmd(targs[0], &targs[1..]).start() {
-            clickwriteln!(writer, "Could not launch in terminal: {}", e);
-        }
+        duct::cmd(targs[0], &targs[1..]).start()?;
+        Ok(())
     } else {
         let mut command = Command::new("kubectl");
         command
@@ -81,18 +81,21 @@ fn do_exec(
         };
         match command.status() {
             Ok(s) => {
-                if !s.success() {
-                    writeln!(stderr(), "kubectl exited abnormally").unwrap_or(());
+                if s.success() {
+                    Ok(())
+                } else {
+                    Err(KubeError::CommandError(
+                        "kubectl exited abnormally".to_string(),
+                    ))
                 }
             }
             Err(e) => {
                 if let io::ErrorKind::NotFound = e.kind() {
-                    writeln!(
-                        stderr(),
-                        "Could not find kubectl binary. Is it in your PATH?"
-                    )
-                    .unwrap_or(());
-                    return;
+                    Err(KubeError::CommandError(
+                        "Could not find kubectl binary. Is it in your PATH?".to_string(),
+                    ))
+                } else {
+                    Err(KubeError::Io(e))
                 }
             }
         }
@@ -200,14 +203,18 @@ command!(
                             &matches.value_of("terminal"),
                             matches.is_present("terminal"),
                             writer,
-                        );
+                        )
                     } else {
-                        clickwriteln!(writer, "Exec only possible on pods");
+                        Err(KubeError::CommandError(
+                            "Exec only possible on pods".to_string(),
+                        ))
                     }
                 },
-            );
+            )
         } else {
-            writeln!(stderr(), "Need an active context in order to exec.").unwrap_or(());
+            Err(KubeError::CommandError(
+                "Need an active context in order to exec.".to_string(),
+            ))
         }
     },
     true // exec wants to gather up all it's training args into one big exec call

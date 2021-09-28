@@ -158,8 +158,8 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => batch_api::Job::list_namespaced_job(ns, Default::default()).unwrap(),
-            None => batch_api::Job::list_job_for_all_namespaces(Default::default()).unwrap(),
+            Some(ns) => batch_api::Job::list_namespaced_job(ns, Default::default())?,
+            None => batch_api::Job::list_job_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
@@ -173,6 +173,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&JOB_EXTRACTORS),
             job_to_kobj,
-        );
+        )
     }
 );

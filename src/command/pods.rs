@@ -11,6 +11,7 @@ use crate::{
     command::{run_list_command, Extractor},
     completer,
     env::{Env, ObjectSelection},
+    error::KubeError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
     table::CellSpec,
@@ -245,8 +246,8 @@ list_command!(
         opts.field_selector = field_sel.as_deref();
 
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => api::Pod::list_namespaced_pod(ns, opts).unwrap(),
-            None => api::Pod::list_pod_for_all_namespaces(opts).unwrap(),
+            Some(ns) => api::Pod::list_namespaced_pod(ns, opts)?,
+            None => api::Pod::list_pod_for_all_namespaces(opts)?,
         };
 
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
@@ -261,7 +262,7 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&POD_EXTRACTORS),
             pod_to_kobj,
-        );
+        )
     }
 );
 
@@ -288,23 +289,29 @@ command!(
             Some(&env.click_config.range_separator),
             |obj, writer| {
                 if obj.is_pod() {
-                    print_containers(obj, env, matches.is_present("volumes"), writer);
+                    print_containers(obj, env, matches.is_present("volumes"), writer)
                 } else {
-                    clickwriteln!(writer, "containers only possible on a Pod");
+                    Err(KubeError::CommandError(
+                        "containers only possible on a Pod".to_string(),
+                    ))
                 }
             },
-        );
+        )
     }
 );
 
 // conainer helper commands
-fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWriter) {
+fn print_containers(
+    obj: &KObj,
+    env: &Env,
+    volumes: bool,
+    writer: &mut ClickWriter,
+) -> Result<(), KubeError> {
     let (request, _) = api::Pod::read_namespaced_pod(
         obj.name(),
         obj.namespace.as_ref().unwrap(),
         Default::default(),
-    )
-    .unwrap();
+    )?;
     match env
         .run_on_context(|c| c.read::<api::ReadNamespacedPodResponse>(request))
         .unwrap()
@@ -378,14 +385,16 @@ fn print_containers(obj: &KObj, env: &Env, volumes: bool, writer: &mut ClickWrit
 
                     clickwrite!(writer, "\n");
                 }
+                Ok(())
             }
-            None => {
-                clickwrite!(writer, "No container info returned from api server\n");
-            }
+            None => Err(KubeError::CommandError(
+                "No container info returned from api server".to_string(),
+            )),
         },
-        api::ReadNamespacedPodResponse::Other(o) => {
-            clickwrite!(writer, "Error getting pod info: {:?}\n", o);
-        }
+        api::ReadNamespacedPodResponse::Other(o) => Err(KubeError::CommandError(format!(
+            "Error getting pod info: {:?}",
+            o
+        ))),
     }
 }
 

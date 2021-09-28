@@ -200,7 +200,7 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
-        let (request, _response_body) = api::Node::list_node(Default::default()).unwrap();
+        let (request, _response_body) = api::Node::list_node(Default::default())?;
 
         run_list_command(
             matches,
@@ -212,6 +212,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&NODE_EXTRACTORS),
             node_to_kobj,
-        );
+        )
     }
 );

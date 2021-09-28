@@ -90,8 +90,8 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => api::Secret::list_namespaced_secret(ns, Default::default()).unwrap(),
-            None => api::Secret::list_secret_for_all_namespaces(Default::default()).unwrap(),
+            Some(ns) => api::Secret::list_namespaced_secret(ns, Default::default())?,
+            None => api::Secret::list_secret_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
@@ -105,6 +105,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&SECRET_EXTRACTORS),
             secret_to_kobj,
-        );
+        )
     }
 );

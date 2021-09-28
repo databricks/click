@@ -77,6 +77,7 @@ Examples:
                 clickwriteln!(writer, "alias {} = '{}'", alias.alias, alias.expanded);
             }
         }
+        Ok(())
     }
 );
 
@@ -99,5 +100,6 @@ command!(
         } else {
             clickwriteln!(writer, "no such alias: {}", alias);
         }
+        Ok(())
     }
 );

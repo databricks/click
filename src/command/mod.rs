@@ -10,6 +10,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 use crate::env::Env;
+use crate::error::KubeError;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::table::CellSpec;
@@ -66,7 +67,8 @@ pub fn run_list_command<T, F>(
     extra_col_map: Option<&[(&'static str, &'static str)]>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     get_kobj: F,
-) where
+) -> Result<(), KubeError>
+where
     T: ListableResource + Metadata<Ty = ObjectMeta> + for<'de> Deserialize<'de> + Debug,
     F: Fn(&T) -> KObj,
 {
@@ -74,7 +76,7 @@ pub fn run_list_command<T, F>(
         Ok(r) => r,
         Err(s) => {
             writeln!(stderr(), "{}", s).unwrap_or(());
-            return;
+            return Ok(()); // TODO: Return the error when that does something
         }
     };
 
@@ -134,7 +136,7 @@ pub fn run_list_command<T, F>(
         sort,
         matches.is_present("reverse"),
         get_kobj,
-    );
+    )
 }
 
 /// Uppercase the first letter of the given str
@@ -187,7 +189,8 @@ pub fn handle_list_result<'a, T, F>(
     sort: Option<command_def::SortFunc<T>>,
     reverse: bool,
     get_kobj: F,
-) where
+) -> Result<(), KubeError>
+where
     T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
     F: Fn(&T) -> KObj,
 {
@@ -231,6 +234,7 @@ pub fn handle_list_result<'a, T, F>(
         }
         None => env.clear_last_objs(),
     }
+    Ok(())
 }
 
 // row building

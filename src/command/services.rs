@@ -158,8 +158,8 @@ list_command!(
     |matches, env, writer| {
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => api::Service::list_namespaced_service(ns, Default::default()).unwrap(),
-            None => api::Service::list_service_for_all_namespaces(Default::default()).unwrap(),
+            Some(ns) => api::Service::list_namespaced_service(ns, Default::default())?,
+            None => api::Service::list_service_for_all_namespaces(Default::default())?,
         };
 
         run_list_command(
@@ -172,6 +172,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&SERVICE_EXTRACTORS),
             service_to_kobj,
-        );
+        )
     }
 );

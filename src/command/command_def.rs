@@ -4,11 +4,11 @@ use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::env::Env;
+use crate::error::KubeError;
 use crate::output::ClickWriter;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::io::Write;
 
 // command definition
 /// Just return what we're given.  Useful for no-op closures in
@@ -62,7 +62,7 @@ pub trait Cmd {
         env: &mut Env,
         args: &mut dyn Iterator<Item = &str>,
         writer: &mut ClickWriter,
-    ) -> bool;
+    ) -> Result<(), KubeError>;
     fn is(&self, l: &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
@@ -106,23 +106,15 @@ pub fn exec_match<F>(
     args: &mut dyn Iterator<Item = &str>,
     writer: &mut ClickWriter,
     func: F,
-) -> bool
+) -> Result<(), KubeError>
 where
-    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter),
+    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> Result<(), KubeError>,
 {
     // TODO: Should be able to not clone and use get_matches_from_safe_borrow, but
     // that causes weird errors involving conflicting arguments being used
     // between invocations of commands
-    match clap.borrow_mut().clone().get_matches_from_safe(args) {
-        Ok(matches) => {
-            func(matches, env, writer);
-            true
-        }
-        Err(err) => {
-            clickwriteln!(writer, "{}", err.message);
-            false
-        }
-    }
+    let matches = clap.borrow_mut().clone().get_matches_from_safe(args)?;
+    func(matches, env, writer)
 }
 
 macro_rules! noop_complete {
@@ -213,7 +205,7 @@ macro_rules! command {
                 env: &mut Env,
                 args: &mut dyn Iterator<Item = &str>,
                 writer: &mut ClickWriter,
-            ) -> bool {
+            ) -> Result<(), crate::error::KubeError> {
                 exec_match(&self.clap, env, args, writer, $cmd_expr)
             }
 
@@ -260,7 +252,7 @@ macro_rules! command {
                     long_matched
                         || (opt.len() == 2
                             && match opt_builder.s.short {
-                                Some(schr) => schr == opt.chars().nth(1).unwrap(), // strip off - prefix we get passed
+                                Some(schr) => schr == opt.chars().nth(1).unwrap(), // safe, strip off - prefix we get passed
                                 None => false,
                             })
                 });
@@ -363,6 +355,40 @@ macro_rules! list_command {
         );
     };
 }
+
+// /// This macro handles creating a request from the k8s_openapi crate, and printing the error if
+// /// things fail
+// macro_rules! get_request {
+//     ($func: path, $ns: expr, $opts: expr, $writer: expr) => {
+//         match $func($ns, $opts) {
+//             Ok(req) => req,
+//             Err(e) => {
+//                 match e {
+//                     k8s_openapi::RequestError::Http(e) =>
+//                         clickwriteln!($writer, "Error preparing HTTP request: {}", e),
+//                     k8s_openapi::RequestError::Json(e) =>
+//                         clickwriteln!($writer, "Error serializing the JSON body of the HTTP request: {}", e)
+//                 }
+//                 return Ok(());
+//             }
+//         }
+//     };
+
+//     ($func: path, $opts: expr, $writer: expr) => {
+//         match $func($opts) {
+//             Ok(req) => req,
+//             Err(e) => {
+//                 match e {
+//                     k8s_openapi::RequestError::Http(e) =>
+//                         clickwriteln!($writer, "Error preparing HTTP request: {}", e),
+//                     k8s_openapi::RequestError::Json(e) =>
+//                         clickwriteln!($writer, "Error serializing the JSON body of the HTTP request: {}", e)
+//                 }
+//                 return;
+//             }
+//         }
+//     };
+// }
 
 // utility methods for show/sort args
 

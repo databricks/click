@@ -10,6 +10,7 @@ use crate::{
     command::time_since,
     completer,
     env::{Env, ObjectSelection},
+    error::KubeError,
     kobj::KObj,
     output::ClickWriter,
 };
@@ -28,7 +29,7 @@ fn event_cmp(e1: &api::Event, e2: &api::Event) -> cmp::Ordering {
     }
 }
 
-fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
+fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) -> Result<(), KubeError> {
     let mut opts: ListOptional = Default::default();
     let mut include_namespace = false;
     let (request, _body) = if let Some(ns) = obj.namespace.as_ref() {
@@ -38,30 +39,33 @@ fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) {
             ns
         );
         opts.field_selector = Some(&fs);
-        api::Event::list_namespaced_event(ns, opts).unwrap()
+        api::Event::list_namespaced_event(ns, opts)?
     } else {
         include_namespace = true;
         let fs = format!("involvedObject.name={}", obj.name(),);
         opts.field_selector = Some(&fs);
-        api::Event::list_event_for_all_namespaces(opts).unwrap()
+        api::Event::list_event_for_all_namespaces(opts)?
     };
     print_events(request, env, writer, include_namespace, false);
+    Ok(())
 }
 
-fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) {
+fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), KubeError> {
     let mut opts: ListOptional = Default::default();
     let mut include_namespace = false;
     let (request, _body) = if let Some(ns) = env.namespace.as_ref() {
         let fs = format!("involvedObject.namespace={}", ns);
         opts.field_selector = Some(&fs);
-        api::Event::list_namespaced_event(ns, opts).unwrap()
+        api::Event::list_namespaced_event(ns, opts)?
     } else {
         include_namespace = true;
-        api::Event::list_event_for_all_namespaces(opts).unwrap()
+        api::Event::list_event_for_all_namespaces(opts)?
     };
     print_events(request, env, writer, include_namespace, true);
+    Ok(())
 }
 
+// TODO: This should return an error if we fail to fetch
 fn print_events(
     request: Request<Vec<u8>>,
     env: &Env,
@@ -138,15 +142,13 @@ command!(
     no_named_complete!(),
     |_matches, env, writer| {
         if let ObjectSelection::None = env.current_selection() {
-            print_events_no_obj(env, writer);
+            print_events_no_obj(env, writer)
         } else {
             env.apply_to_selection(
                 writer,
                 Some(&env.click_config.range_separator),
-                |obj, writer| {
-                    print_events_for_obj(obj, env, writer);
-                },
-            );
+                |obj, writer| print_events_for_obj(obj, env, writer),
+            )
         }
     }
 );

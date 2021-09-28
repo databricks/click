@@ -70,13 +70,12 @@ fn do_logs<'a>(
     editor_opt: Option<&str>,
     timeout: Option<Duration>,
     writer: &mut ClickWriter,
-) {
+) -> Result<(), KubeError> {
     let cont = cont_opt.unwrap_or_else(|| pick_container(obj, writer));
     opts.container = Some(cont);
 
     let (request, _resp) =
-        api::Pod::read_namespaced_pod_log(obj.name(), obj.namespace.as_ref().unwrap(), opts)
-            .unwrap();
+        api::Pod::read_namespaced_pod_log(obj.name(), obj.namespace.as_ref().unwrap(), opts)?;
 
     let logs_reader = env.run_on_context(|c| c.execute_reader(request, timeout));
 
@@ -95,20 +94,14 @@ fn do_logs<'a>(
             match strfmt(output, &fmtvars) {
                 Ok(file_path) => {
                     let pbuf = file_path.into();
-                    match write_logs_to_file(env, &pbuf, reader) {
-                        Ok(_) => {
-                            println!("Wrote logs to {}", pbuf.to_str().unwrap());
-                        }
-                        Err(e) => {
-                            clickwriteln!(writer, "Error writing logs to file: {}", e);
-                            return;
-                        }
-                    }
+                    write_logs_to_file(env, &pbuf, reader)?;
+                    println!("Wrote logs to {}", pbuf.to_str().unwrap());
+                    Ok(())
                 }
-                Err(e) => {
-                    clickwriteln!(writer, "Can't generate output path: {}", e);
-                    return;
-                }
+                Err(e) => Err(KubeError::CommandError(format!(
+                    "Can't generate output path: {}",
+                    e
+                ))),
             }
         } else if editor {
             // We're opening in an editor, save to a temp
@@ -120,21 +113,20 @@ fn do_logs<'a>(
                 match std::env::var("EDITOR") {
                     Ok(ed) => ed,
                     Err(e) => {
-                        clickwriteln!(
-                            writer,
-                            "Could not get EDITOR environment \
-                             variable: {}",
+                        return Err(KubeError::CommandError(format!(
+                            "Could not get EDITOR environment variable: {}",
                             e
-                        );
-                        return;
+                        )));
                     }
                 }
             };
             let tmpdir = match env.tempdir {
                 Ok(ref td) => td,
                 Err(ref e) => {
-                    clickwriteln!(writer, "Failed to create tempdir: {}", e);
-                    return;
+                    return Err(KubeError::CommandError(format!(
+                        "Failed to create tempdir: {}",
+                        e
+                    )));
                 }
             };
             let file_path = tmpdir.path().join(format!(
@@ -143,10 +135,7 @@ fn do_logs<'a>(
                 cont,
                 Local::now().to_rfc3339()
             ));
-            if let Err(e) = write_logs_to_file(env, &file_path, reader) {
-                clickwriteln!(writer, "Error writing logs to file: {}", e);
-                return;
-            }
+            write_logs_to_file(env, &file_path, reader)?;
 
             clickwriteln!(writer, "Logs downloaded, starting editor");
             let expr = if editor.contains(' ') {
@@ -157,9 +146,8 @@ fn do_logs<'a>(
             } else {
                 cmd!(editor, file_path)
             };
-            if let Err(e) = expr.start() {
-                clickwriteln!(writer, "Could not start editor: {}", e);
-            }
+            expr.start()?;
+            Ok(())
         } else {
             let (sender, receiver) = channel();
             thread::spawn(move || {
@@ -191,7 +179,12 @@ fn do_logs<'a>(
                     }
                 }
             }
+            Ok(())
         }
+    } else {
+        Err(KubeError::CommandError(
+            "Could not get reader for logs".to_string(),
+        ))
     }
 }
 
@@ -331,7 +324,7 @@ command!(
                 Ok(d) => d,
                 Err(e) => {
                     clickwriteln!(writer, "Invalid duration in --since: {}", e);
-                    return;
+                    return Ok(()); // TODO: Return error
                 }
             };
             opts.since_seconds = Some(dur);
@@ -366,11 +359,13 @@ command!(
                         matches.value_of("editor"),
                         timeout,
                         writer,
-                    );
+                    )
                 } else {
-                    clickwriteln!(writer, "Logs only available on a pod");
+                    Err(KubeError::CommandError(
+                        "Logs only available on a pod".to_string(),
+                    ))
                 }
             },
-        );
+        )
     }
 );

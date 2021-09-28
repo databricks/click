@@ -155,11 +155,8 @@ list_command!(
     IntoIter::new([]),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => {
-                apps_api::Deployment::list_namespaced_deployment(ns, Default::default()).unwrap()
-            }
-            None => apps_api::Deployment::list_deployment_for_all_namespaces(Default::default())
-                .unwrap(),
+            Some(ns) => apps_api::Deployment::list_namespaced_deployment(ns, Default::default())?,
+            None => apps_api::Deployment::list_deployment_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 
@@ -173,6 +170,6 @@ list_command!(
             Some(EXTRA_COL_MAP),
             Some(&DEPLOYMENT_EXTRACTORS),
             deployment_to_kobj,
-        );
+        )
     }
 );

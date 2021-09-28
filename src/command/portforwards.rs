@@ -66,7 +66,7 @@ Examples:
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let ports: Vec<_> = matches.values_of("ports").unwrap().collect();
+        let ports: Vec<_> = matches.values_of("ports").unwrap().collect(); // unwrap safe, required
 
         let (pod, ns) = {
             let epod = env.current_pod();
@@ -77,7 +77,7 @@ Examples:
                 ),
                 None => {
                     write!(stderr(), "No active pod").unwrap_or(());
-                    return;
+                    return Ok(()); // TODO: Return error
                 }
             }
         };
@@ -86,7 +86,7 @@ Examples:
             kluster.name.clone()
         } else {
             write!(stderr(), "No active context").unwrap_or(());
-            return;
+            return Ok(()); // TODO: Return error
         };
 
         match Command::new("kubectl")
@@ -154,6 +154,7 @@ Examples:
                 }
             },
         }
+        Ok(()) // TODO: Return errors above if things fail
     }
 );
 
@@ -239,7 +240,7 @@ command!(
                 }
                 None => {
                     clickwriteln!(writer, "Invalid index (try without args to get a list)");
-                    return;
+                    return Ok(()); // TODO: Return error
                 }
             }
 
@@ -269,5 +270,6 @@ command!(
         } else {
             print_pfs(env.get_port_forwards(), writer);
         }
+        Ok(())
     }
 );

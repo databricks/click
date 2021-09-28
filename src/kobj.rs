@@ -1,4 +1,5 @@
 use crate::describe;
+use crate::error::KubeError;
 use crate::kube::Metadata;
 use crate::output::ClickWriter;
 use crate::values::val_str_opt;
@@ -253,12 +254,17 @@ impl KObj {
     }
 
     /// describe the object represented by this kobj
-    pub fn describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
+    pub fn describe(
+        &self,
+        matches: &ArgMatches,
+        env: &Env,
+        writer: &mut ClickWriter,
+    ) -> Result<(), KubeError> {
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {
             ($read_func:expr, $resp_typ:ty, $resp_ok:path, $custom_desc: expr) => {{
-                let (request, _) = $read_func(&self.name, Default::default()).unwrap();
+                let (request, _) = $read_func(&self.name, Default::default())?;
                 match env
                     .run_on_context(|c| c.read::<$resp_typ>(request))
                     .unwrap()
@@ -285,7 +291,7 @@ impl KObj {
             ($read_func: expr, $resp_typ: ty, $resp_ok: path, $custom_desc: expr) => {{
                 match self.namespace.as_ref() {
                     Some(ns) => {
-                        let (request, _) = $read_func(&self.name, ns, Default::default()).unwrap();
+                        let (request, _) = $read_func(&self.name, ns, Default::default())?;
                         match env
                             .run_on_context(|c| c.read::<$resp_typ>(request))
                             .unwrap()
@@ -403,5 +409,6 @@ impl KObj {
                 );
             }
         }
+        Ok(())
     }
 }

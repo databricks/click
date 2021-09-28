@@ -21,8 +21,8 @@ use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
-    NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, Rollout, RolloutList,
-    SecretList, Service, ServiceList, StatefulSetList,
+    NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, Rollout,
+    RolloutList, SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -1015,8 +1015,13 @@ fn print_rollouts(
 
     crate::table::print_table(&mut table, &filtered, writer);
 
-    let final_rollouts = filtered.into_iter().map(|rollout_spec| rollout_spec.0).collect();
-    RolloutList { items: final_rollouts }
+    let final_rollouts = filtered
+        .into_iter()
+        .map(|rollout_spec| rollout_spec.0)
+        .collect();
+    RolloutList {
+        items: final_rollouts,
+    }
 }
 
 // service utility functions

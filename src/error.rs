@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::convert::From;
-use std::error::Error;
 use std::{env, error, fmt, io};
 
 #[derive(Debug)]
@@ -68,8 +67,6 @@ pub enum KubeError {
     ConfigFileError(String),
     DecodeError(base64::DecodeError),
     Io(io::Error),
-    HyperParse(hyper::error::ParseError),
-    HyperErr(hyper::error::Error),
     SerdeJson(serde_json::Error),
     SerdeYaml(serde_yaml::Error),
     RequestError(k8s_openapi::RequestError),
@@ -87,8 +84,6 @@ impl fmt::Display for KubeError {
             KubeError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
             KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
             KubeError::Io(ref err) => write!(f, "IO error: {}", err),
-            KubeError::HyperParse(ref err) => write!(f, "Hyper parse error: {}", err),
-            KubeError::HyperErr(ref err) => write!(f, "Hyper error: {} ({:?})", err, err.source()),
             KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
             KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
             KubeError::RequestError(ref err) => match err {
@@ -117,8 +112,6 @@ impl error::Error for KubeError {
             KubeError::ConfigFileError(_) => None,
             KubeError::DecodeError(ref err) => Some(err),
             KubeError::Io(ref err) => Some(err),
-            KubeError::HyperParse(ref err) => Some(err),
-            KubeError::HyperErr(ref err) => Some(err),
             KubeError::SerdeJson(ref err) => Some(err),
             KubeError::SerdeYaml(ref err) => Some(err),
             KubeError::RequestError(ref err) => Some(err),
@@ -131,18 +124,6 @@ impl error::Error for KubeError {
 impl From<io::Error> for KubeError {
     fn from(err: io::Error) -> KubeError {
         KubeError::Io(err)
-    }
-}
-
-impl From<hyper::error::ParseError> for KubeError {
-    fn from(err: hyper::error::ParseError) -> KubeError {
-        KubeError::HyperParse(err)
-    }
-}
-
-impl From<hyper::error::Error> for KubeError {
-    fn from(err: hyper::error::Error) -> KubeError {
-        KubeError::HyperErr(err)
     }
 }
 

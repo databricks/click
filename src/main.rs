@@ -32,16 +32,11 @@ extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate ctrlc;
-extern crate der_parser;
 extern crate dirs;
 extern crate duct_sh;
 extern crate humantime;
-extern crate hyper;
-extern crate hyper_sync_rustls;
-extern crate log;
 extern crate os_pipe;
 extern crate regex;
-extern crate ring;
 extern crate rustls;
 extern crate rustyline;
 extern crate serde;
@@ -50,8 +45,6 @@ extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;
 extern crate term;
-extern crate untrusted;
-extern crate webpki;
 
 extern crate bytes;
 #[macro_use]

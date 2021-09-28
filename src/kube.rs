@@ -291,6 +291,35 @@ pub struct DeploymentList {
     pub items: Vec<Deployment>,
 }
 
+// Rollouts
+#[derive(Debug, Deserialize)]
+pub struct RolloutSpec {
+    #[serde(default = "replicas_one")]
+    pub replicas: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RolloutStatus {
+    #[serde(default = "replicas_none")]
+    pub replicas: u32,
+    #[serde(default = "replicas_none", rename = "availableReplicas")]
+    pub available: u32,
+    #[serde(default = "replicas_none", rename = "updatedReplicas")]
+    pub updated: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Rollout {
+    pub metadata: Metadata,
+    pub spec: RolloutSpec,
+    pub status: RolloutStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RolloutList {
+    pub items: Vec<Rollout>,
+}
+
 // Services
 fn tcp_str() -> String {
     "TCP".to_owned()

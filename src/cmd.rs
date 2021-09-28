@@ -21,8 +21,8 @@ use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType, VecWrap};
 use crate::kube::{
     ConfigMapList, ContainerState, Deployment, DeploymentList, Event, EventList, JobList, Metadata,
-    NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, SecretList,
-    Service, ServiceList, StatefulSetList,
+    NamespaceList, Node, NodeCondition, NodeList, Pod, PodList, ReplicaSetList, Rollout, RolloutList,
+    SecretList, Service, ServiceList, StatefulSetList,
 };
 use crate::output::ClickWriter;
 use crate::table::{opt_sort, CellSpec};
@@ -901,6 +901,122 @@ fn print_deployments(
 
     let final_deps = filtered.into_iter().map(|dep_spec| dep_spec.0).collect();
     DeploymentList { items: final_deps }
+}
+
+/// Print out the specified list of rollouts in a pretty format
+fn print_rollouts(
+    mut rolloutlist: RolloutList,
+    show_labels: bool,
+    regex: Option<Regex>,
+    sort: Option<&str>,
+    reverse: bool,
+    writer: &mut ClickWriter,
+) -> RolloutList {
+    let mut table = Table::new();
+    let mut title_row = row![
+        "####",
+        "Name",
+        "Desired",
+        "Current",
+        "Up To Date",
+        "Available",
+        "Age"
+    ];
+    let show_labels = show_labels
+        || sort
+            .map(|s| s == "Labels" || s == "labels")
+            .unwrap_or(false);
+    if show_labels {
+        title_row.add_cell(Cell::new("Labels"));
+    }
+    table.set_titles(title_row);
+
+    if let Some(sortcol) = sort {
+        match sortcol {
+            "Name" | "name" => rolloutlist
+                .items
+                .sort_by(|d1, d2| d1.metadata.name.partial_cmp(&d2.metadata.name).unwrap()),
+            "Desired" | "desired" => rolloutlist
+                .items
+                .sort_by(|d1, d2| d1.spec.replicas.partial_cmp(&d2.spec.replicas).unwrap()),
+            "Current" | "current" => rolloutlist
+                .items
+                .sort_by(|d1, d2| d1.status.replicas.partial_cmp(&d2.status.replicas).unwrap()),
+            "UpToDate" | "uptodate" => rolloutlist
+                .items
+                .sort_by(|d1, d2| d1.status.updated.partial_cmp(&d2.status.updated).unwrap()),
+            "Available" | "available" => rolloutlist.items.sort_by(|d1, d2| {
+                d1.status
+                    .available
+                    .partial_cmp(&d2.status.available)
+                    .unwrap()
+            }),
+            "Age" | "age" => rolloutlist.items.sort_by(|p1, p2| {
+                opt_sort(
+                    p1.metadata.creation_timestamp,
+                    p2.metadata.creation_timestamp,
+                    |a1, a2| a1.partial_cmp(a2).unwrap(),
+                )
+            }),
+            "Labels" | "labels" => rolloutlist.items.sort_by(|p1, p2| {
+                let p1s = keyval_string(&p1.metadata.labels);
+                let p2s = keyval_string(&p2.metadata.labels);
+                p1s.partial_cmp(&p2s).unwrap()
+            }),
+            _ => {
+                clickwriteln!(
+                    writer,
+                    "Invalid sort col: {}, this is a bug, please report it",
+                    sortcol
+                );
+            }
+        }
+    }
+
+    let to_map: Box<dyn Iterator<Item = Rollout>> = if reverse {
+        Box::new(rolloutlist.items.into_iter().rev())
+    } else {
+        Box::new(rolloutlist.items.into_iter())
+    };
+
+    let rollout_specs = to_map.map(|rollout| {
+        let mut specs = Vec::new();
+        specs.push(CellSpec::new_index());
+        specs.push(CellSpec::new_owned(rollout.metadata.name.clone()));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", rollout.spec.replicas),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", rollout.status.replicas),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", rollout.status.updated),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::with_align_owned(
+            format!("{}", rollout.status.available),
+            format::Alignment::CENTER,
+        ));
+        specs.push(CellSpec::new_owned(time_since(
+            rollout.metadata.creation_timestamp.unwrap(),
+        )));
+        if show_labels {
+            specs.push(CellSpec::new_owned(keyval_string(&rollout.metadata.labels)));
+        }
+        (rollout, specs)
+    });
+
+    let filtered = match regex {
+        Some(r) => crate::table::filter(rollout_specs, r),
+        None => rollout_specs.collect(),
+    };
+
+    crate::table::print_table(&mut table, &filtered, writer);
+
+    let final_rollouts = filtered.into_iter().map(|rollout_spec| rollout_spec.0).collect();
+    RolloutList { items: final_rollouts }
 }
 
 // service utility functions
@@ -2655,6 +2771,110 @@ command!(
             Some(l) => {
                 let final_list = print_replicasets(l, regex, writer);
                 env.set_last_objs(VecWrap::from(final_list));
+            }
+            None => env.clear_last_objs(),
+        }
+    }
+);
+
+command!(
+    Rollouts,
+    "rollouts",
+    "Get rollouts (in current namespace if set)",
+    |clap: App<'static, 'static>| clap
+        .arg(
+            Arg::with_name("label")
+                .short("l")
+                .long("label")
+                .help("Get rollouts with specified label selector")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("regex")
+                .short("r")
+                .long("regex")
+                .help("Filter rollouts by the specified regex")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name("showlabels")
+                .short("L")
+                .long("labels")
+                .help("Show labels as column in output")
+                .takes_value(false)
+        )
+        .arg(
+            Arg::with_name("sort")
+                .short("s")
+                .long("sort")
+                .help(
+                    "Sort by specified column (if column isn't shown by default, it will \
+                     be shown)"
+                )
+                .takes_value(true)
+                .possible_values(&[
+                    "Name",
+                    "name",
+                    "Desired",
+                    "desired",
+                    "Current",
+                    "current",
+                    "UpToDate",
+                    "uptodate",
+                    "Available",
+                    "available",
+                    "Age",
+                    "age",
+                    "Labels",
+                    "labels"
+                ])
+        )
+        .arg(
+            Arg::with_name("reverse")
+                .short("R")
+                .long("reverse")
+                .help("Reverse the order of the returned list")
+                .takes_value(false)
+        ),
+    vec!["rollouts"],
+    noop_complete!(),
+    IntoIter::new([(
+        "sort".to_string(),
+        completer::deployment_sort_values_completer as fn(&str, &Env) -> Vec<RustlinePair>
+    )])
+    .collect(),
+    |matches, env, writer| {
+        let regex = match crate::table::get_regex(&matches) {
+            Ok(r) => r,
+            Err(s) => {
+                write!(stderr(), "{}\n", s).unwrap_or(());
+                return;
+            }
+        };
+
+        let mut urlstr = if let Some(ref ns) = env.namespace {
+            format!("/apis/argoproj.io/v1alpha1/namespaces/{}/rollouts", ns)
+        } else {
+            "/apis/argoproj.io/v1alpha1/rollouts".to_owned()
+        };
+
+        if let Some(label_selector) = matches.value_of("label") {
+            urlstr.push_str("?labelSelector=");
+            urlstr.push_str(label_selector);
+        }
+
+        let dl: Option<RolloutList> = env.run_on_kluster(|k| k.get(urlstr.as_str()));
+        match dl {
+            Some(d) => {
+                let final_list = print_rollouts(
+                    d,
+                    matches.is_present("showlabels"),
+                    regex,
+                    matches.value_of("sort"),
+                    matches.is_present("reverse"),
+                    writer,
+                );
+                env.set_last_objs(final_list);
             }
             None => env.clear_last_objs(),
         }

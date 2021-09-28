@@ -187,6 +187,7 @@ impl CommandProcessor {
             Box::new(crate::cmd::Jobs::new()),
             Box::new(crate::cmd::Alias::new()),
             Box::new(crate::cmd::Unalias::new()),
+            Box::new(crate::cmd::Rollouts::new()),
         ];
         commands
     }

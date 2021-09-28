@@ -64,19 +64,14 @@ extern crate yasna;
 mod command;
 #[macro_use]
 mod completer;
-
-mod certs;
 mod command_processor;
 mod config;
-mod connector;
 mod describe;
 mod env;
 mod error;
 mod k8s;
 mod kobj;
-mod kube;
 mod parser;
-mod subjaltnames;
 mod table;
 mod values;
 

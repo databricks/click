@@ -1,6 +1,5 @@
 use crate::describe;
 use crate::error::KubeError;
-use crate::kube::Metadata;
 use crate::output::ClickWriter;
 use crate::values::val_str_opt;
 use crate::Env;
@@ -38,72 +37,8 @@ pub struct KObj {
     pub typ: ObjType,
 }
 
-impl From<crate::kube::PodList> for Vec<KObj> {
-    fn from(podlist: crate::kube::PodList) -> Self {
-        podlist
-            .items
-            .iter()
-            .map(|pod| {
-                let containers = pod
-                    .spec
-                    .containers
-                    .iter()
-                    .map(|cspec| cspec.name.clone())
-                    .collect();
-                KObj::from_metadata(&pod.metadata, ObjType::Pod { containers })
-            })
-            .collect()
-    }
-}
-
-impl From<crate::kube::NodeList> for Vec<KObj> {
-    fn from(nodelist: crate::kube::NodeList) -> Self {
-        nodelist
-            .items
-            .iter()
-            .map(|node| KObj {
-                name: node.metadata.name.clone(),
-                namespace: None,
-                typ: ObjType::Node,
-            })
-            .collect()
-    }
-}
-
-impl From<crate::kube::DeploymentList> for Vec<KObj> {
-    fn from(deplist: crate::kube::DeploymentList) -> Self {
-        deplist
-            .items
-            .iter()
-            .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment))
-            .collect()
-    }
-}
-
-impl From<crate::kube::ServiceList> for Vec<KObj> {
-    fn from(deplist: crate::kube::ServiceList) -> Self {
-        deplist
-            .items
-            .iter()
-            .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Service))
-            .collect()
-    }
-}
-
 pub struct VecWrap {
     items: Vec<KObj>,
-}
-
-impl<T: crate::kube::ValueList> From<T> for VecWrap {
-    fn from(vlist: T) -> Self {
-        let typ = vlist.typ();
-        let items = vlist
-            .values()
-            .iter()
-            .map(|val| KObj::from_value(val, typ.clone()).unwrap())
-            .collect();
-        VecWrap { items }
-    }
 }
 
 impl From<VecWrap> for Vec<KObj> {
@@ -134,14 +69,6 @@ where
 static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 impl KObj {
-    pub fn from_metadata(metadata: &Metadata, typ: ObjType) -> KObj {
-        KObj {
-            name: metadata.name.clone(),
-            namespace: metadata.namespace.clone(),
-            typ,
-        }
-    }
-
     pub fn from_value(value: &Value, typ: ObjType) -> Option<KObj> {
         val_str_opt("/metadata/name", value).map(|name| KObj {
             name,

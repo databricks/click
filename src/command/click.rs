@@ -69,9 +69,9 @@ command!(
     |matches, env, writer| {
         if matches.is_present("context") {
             let context = matches.value_of("context");
-            if let (&Some(ref k), Some(c)) = (&env.kluster, context) {
-                if k.name == c {
-                    // no-op if we're already in the specified context
+            if let (&Some(ref cur), Some(c)) = (&env.context, context) {
+                if cur.name == c {
+                    // no-op if we're already in the specified context1
                     return Ok(());
                 }
             }

@@ -7,6 +7,7 @@ use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
     completer,
     env::{self, Env},
+    error::KubeError,
     output::ClickWriter,
 };
 
@@ -82,11 +83,10 @@ Examples:
             }
         };
 
-        let context = if let Some(ref kluster) = env.kluster {
-            kluster.name.clone()
+        let context = if let Some(ref context) = env.context {
+            context.name.clone()
         } else {
-            write!(stderr(), "No active context").unwrap_or(());
-            return Ok(()); // TODO: Return error
+            return Err(KubeError::CommandError("No active context".to_string()));
         };
 
         match Command::new("kubectl")

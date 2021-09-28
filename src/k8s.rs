@@ -61,6 +61,21 @@ impl UserAuth {
         let id = get_id_from_paths(key_buf, cert_buf, pkcs12);
         UserAuth::Ident(id)
     }
+
+    // same as above, but use already read data
+    pub fn from_key_cert_data(key: String, cert: String, endpoint: &Url) -> UserAuth {
+        let pkcs12 = Context::use_pkcs12(endpoint);
+        let id = get_id_from_data(key, cert, pkcs12);
+        UserAuth::Ident(id)
+    }
+}
+
+fn print_token_err() {
+    println!(
+        "Couldn't get an authentication token. You can try exiting Click and \
+         running a kubectl command against the cluster to refresh it. \
+         Also please report this error on the Click github page."
+    );
 }
 
 // convert a pkcs1 der to pkcs8 format
@@ -275,7 +290,7 @@ impl Context {
                 UserAuth::AuthProvider(provider) => match provider.ensure_token() {
                     Some(token) => req.bearer_auth(token),
                     None => {
-                        crate::kube::print_token_err();
+                        print_token_err();
                         req
                     }
                 },
@@ -330,7 +345,7 @@ impl Context {
                 UserAuth::AuthProvider(provider) => match provider.ensure_token() {
                     Some(token) => req.bearer_auth(token),
                     None => {
-                        crate::kube::print_token_err();
+                        print_token_err();
                         req
                     }
                 },

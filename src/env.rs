@@ -1,7 +1,6 @@
 use crate::config::{self, Alias, ClickConfig, Config};
 use crate::error::KubeError;
 use crate::kobj::{KObj, ObjType};
-use crate::kube::Kluster;
 use crate::output::ClickWriter;
 
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
@@ -47,7 +46,6 @@ pub struct Env {
     click_config_path: PathBuf,
     pub quit: bool,
     pub need_new_editor: bool,
-    pub kluster: Option<Kluster>,
     pub context: Option<super::k8s::Context>,
     pub namespace: Option<String>,
     current_selection: ObjectSelection,
@@ -81,7 +79,6 @@ impl Env {
             click_config_path,
             quit: false,
             need_new_editor: false,
-            kluster: None,
             context: None,
             namespace,
             current_selection: ObjectSelection::None,
@@ -107,7 +104,7 @@ impl Env {
 
     pub fn save_click_config(&mut self) {
         self.click_config.namespace = self.namespace.clone();
-        self.click_config.context = self.kluster.as_ref().map(|k| k.name.clone());
+        self.click_config.context = self.context.as_ref().map(|c| c.name.clone());
         self.click_config
             .save_to_file(self.click_config_path.as_path().to_str().unwrap())
             .unwrap();
@@ -117,8 +114,8 @@ impl Env {
     fn set_prompt(&mut self) {
         self.prompt = format!(
             "[{}] [{}] [{}] > ",
-            if let Some(ref k) = self.kluster {
-                Red.bold().paint(k.name.as_str())
+            if let Some(ref c) = self.context {
+                Red.bold().paint(c.name.as_str())
             } else {
                 Red.paint("none")
             },
@@ -145,22 +142,11 @@ impl Env {
 
     pub fn set_context(&mut self, ctx: Option<&str>) {
         if let Some(cname) = ctx {
-            self.kluster = match self.config.cluster_for_context(cname, &self.click_config) {
-                Ok(k) => Some(k),
-                Err(e) => {
-                    println!(
-                        "[WARN] Couldn't find/load context {}, now no current context. \
-                         Error: {}",
-                        cname, e
-                    );
-                    None
-                }
-            };
             self.context = match self.config.get_context(cname, &self.click_config) {
                 Ok(context) => Some(context),
                 Err(e) => {
                     println!(
-                        "[WARN] Couldn't find/load new style context {}, now no current context. \
+                        "[WARN] Couldn't find/load context {}, now no current context. \
                          Error: {}",
                         cname, e
                     );
@@ -486,8 +472,8 @@ impl fmt::Display for Env {
   Terminal: {}
   Range Separator: {}
 }}",
-            if let Some(ref k) = self.kluster {
-                Green.bold().paint(k.name.as_str())
+            if let Some(ref c) = self.context {
+                Green.bold().paint(c.name.as_str())
             } else {
                 Green.paint("none")
             },

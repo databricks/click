@@ -19,6 +19,7 @@ pub enum ObjType {
     Deployment,
     Service,
     ReplicaSet,
+    Rollout,
     StatefulSet,
     ConfigMap,
     Secret,
@@ -71,6 +72,16 @@ impl From<crate::kube::DeploymentList> for Vec<KObj> {
             .items
             .iter()
             .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Deployment))
+            .collect()
+    }
+}
+
+impl From<crate::kube::RolloutList> for Vec<KObj> {
+    fn from(rolloutlist: crate::kube::RolloutList) -> Self {
+        rolloutlist
+            .items
+            .iter()
+            .map(|dep| KObj::from_metadata(&dep.metadata, ObjType::Rollout))
             .collect()
     }
 }
@@ -156,6 +167,7 @@ impl KObj {
             ObjType::Deployment => "Deployment",
             ObjType::Service => "Service",
             ObjType::ReplicaSet => "ReplicaSet",
+            ObjType::Rollout => "Rollout",
             ObjType::StatefulSet => "StatefulSet",
             ObjType::ConfigMap => "ConfigMap",
             ObjType::Secret => "Secret",
@@ -170,6 +182,7 @@ impl KObj {
             ObjType::Deployment => Purple.bold().paint(self.name.as_str()),
             ObjType::Service => Cyan.bold().paint(self.name.as_str()),
             ObjType::ReplicaSet => Green.bold().paint(self.name.as_str()),
+            ObjType::Rollout => Purple.bold().paint(self.name.as_str()),
             ObjType::StatefulSet => Green.bold().paint(self.name.as_str()),
             ObjType::ConfigMap => Purple.bold().paint(self.name.as_str()),
             ObjType::Secret => Red.bold().paint(self.name.as_str()),
@@ -197,6 +210,10 @@ impl KObj {
             ObjType::Service => format!("/api/v1/namespaces/{}/services/{}", namespace, self.name),
             ObjType::ReplicaSet => format!(
                 "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
+                namespace, self.name
+            ),
+            ObjType::Rollout => format!(
+                "/apis/argoproj.io/v1alpha1/namespaces/{}/rollouts/{}",
                 namespace, self.name
             ),
             ObjType::StatefulSet => format!(
@@ -236,6 +253,9 @@ impl KObj {
                         }
                         ObjType::Deployment => {
                             clickwriteln!(writer, "{}", describe::describe_format_deployment(val))
+                        }
+                        ObjType::Rollout => {
+                            clickwriteln!(writer, "{}", describe::describe_format_rollout(val))
                         }
                         ObjType::Secret => {
                             clickwriteln!(writer, "{}", describe::describe_format_secret(val))

@@ -649,7 +649,7 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let nodelist = vec!( make_node_kobj("ns1") );
+        let nodelist = vec![make_node_kobj("ns1")];
         env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,

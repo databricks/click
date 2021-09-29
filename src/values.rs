@@ -13,7 +13,8 @@
 // limitations under the License.
 
 /// Helper functions to deal with Values
-use serde_json::value::Value;
+use k8s_openapi::{http, Response, ResponseError};
+use serde_json::{error::Error, value::Value};
 
 use crate::error::KubeError;
 
@@ -71,5 +72,42 @@ where
     match value.pointer(pointer) {
         Some(p) => serde::Deserialize::deserialize(p).map_err(KubeError::from),
         None => Err(KubeError::ParseErr("Can't deserialize".to_owned())),
+    }
+}
+
+/// A response that just contains a serde_json::Value. This is useful for implementing methods on
+/// arbitrary custom types
+pub enum ValueResponse {
+    Ok(Value),
+    Other(Result<Option<Value>, Error>),
+}
+
+impl Response for ValueResponse {
+    fn try_from_parts(
+        status_code: http::StatusCode,
+        buf: &[u8],
+    ) -> Result<(Self, usize), ResponseError> {
+        match status_code {
+            http::StatusCode::OK => {
+                let result = match serde_json::from_slice(buf) {
+                    Ok(value) => value,
+                    Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
+                    Err(err) => return Err(ResponseError::Json(err)),
+                };
+                Ok((ValueResponse::Ok(result), buf.len()))
+            }
+            _ => {
+                let (result, read) = if buf.is_empty() {
+                    (Ok(None), 0)
+                } else {
+                    match serde_json::from_slice(buf) {
+                        Ok(value) => (Ok(Some(value)), buf.len()),
+                        Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
+                        Err(err) => (Err(err), 0),
+                    }
+                };
+                Ok((ValueResponse::Other(result), read))
+            }
+        }
     }
 }

@@ -503,6 +503,7 @@ mod tests {
     use super::*;
     use crate::config::{get_test_config, Alias, ClickConfig};
     use crate::env::ObjectSelection;
+    use crate::error::KubeError;
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
@@ -517,12 +518,12 @@ mod tests {
             _env: &mut Env,
             args: &mut dyn Iterator<Item = &str>,
             writer: &mut ClickWriter,
-        ) -> bool {
+        ) -> Result<(), KubeError> {
             match args.next() {
                 Some(arg) => clickwrite!(writer, "Called with {}", arg),
                 None => clickwrite!(writer, "Called with no args"),
             }
-            true
+            Ok(())
         }
 
         fn is(&self, l: &str) -> bool {
@@ -572,18 +573,6 @@ mod tests {
             PathBuf::from("/tmp/click.test.hist"),
             commands,
         )
-    }
-
-    fn make_node(name: &str) -> crate::kube::Node {
-        crate::kube::Node {
-            metadata: crate::kube::Metadata::with_name(name),
-            spec: crate::kube::NodeSpec {
-                unschedulable: Some(false),
-            },
-            status: crate::kube::NodeStatus {
-                conditions: Vec::new(),
-            },
-        }
     }
 
     fn make_node_kobj(name: &str) -> KObj {
@@ -660,8 +649,7 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let node = make_node("ns1");
-        let nodelist = crate::kube::NodeList { items: vec![node] };
+        let nodelist = vec!( make_node_kobj("ns1") );
         env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
@@ -690,12 +678,11 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let node1 = make_node("ns1");
-        let node2 = make_node("ns2");
-        let node3 = make_node("ns3");
-        let nodelist = crate::kube::NodeList {
-            items: vec![node1, node2, node3],
-        };
+        let node1 = make_node_kobj("ns1");
+        let node2 = make_node_kobj("ns2");
+        let node3 = make_node_kobj("ns3");
+        let nodelist = vec![node1, node2, node3];
+
         env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,

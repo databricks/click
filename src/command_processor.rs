@@ -187,6 +187,7 @@ impl CommandProcessor {
             Box::new(crate::command::secrets::Secrets::new()),
             Box::new(crate::command::services::Services::new()),
             Box::new(crate::command::statefulsets::StatefulSets::new()),
+            Box::new(crate::command::storage::StorageClasses::new()),
             Box::new(crate::command::volumes::PersistentVolumes::new()),
             #[cfg(feature = "argorollouts")]
             Box::new(crate::command::rollouts::Rollouts::new()),

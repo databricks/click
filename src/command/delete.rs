@@ -1,8 +1,8 @@
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
 use k8s_openapi::{
-    api::apps::v1 as apps_api, api::batch::v1 as batch_api, api::core::v1 as api, http::Request,
-    DeleteOptional, DeleteResponse,
+    api::apps::v1 as api_apps, api::batch::v1 as api_batch, api::core::v1 as api,
+    api::storage::v1 as api_storage, http::Request, DeleteOptional, DeleteResponse,
 };
 use rustyline::completion::Pair as RustlinePair;
 use serde::de::DeserializeOwned;
@@ -74,19 +74,19 @@ fn delete_obj(
                 send_delete::<api::ConfigMap>(env, writer, req);
             }
             ObjType::Deployment => {
-                let req = apps_api::Deployment::delete_namespaced_deployment(
+                let req = api_apps::Deployment::delete_namespaced_deployment(
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
                 )?
                 .0;
-                send_delete::<apps_api::Deployment>(env, writer, req);
+                send_delete::<api_apps::Deployment>(env, writer, req);
             }
             ObjType::Job => {
                 let req =
-                    batch_api::Job::delete_namespaced_job(obj.name.as_str(), ns.as_str(), options)?
+                    api_batch::Job::delete_namespaced_job(obj.name.as_str(), ns.as_str(), options)?
                         .0;
-                send_delete::<batch_api::Job>(env, writer, req);
+                send_delete::<api_batch::Job>(env, writer, req);
             }
             ObjType::Namespace => {
                 clickwriteln!(
@@ -122,22 +122,22 @@ fn delete_obj(
                 send_delete::<api::Pod>(env, writer, req);
             }
             ObjType::ReplicaSet => {
-                let req = apps_api::ReplicaSet::delete_namespaced_replica_set(
+                let req = api_apps::ReplicaSet::delete_namespaced_replica_set(
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
                 )?
                 .0;
-                send_delete::<apps_api::ReplicaSet>(env, writer, req);
+                send_delete::<api_apps::ReplicaSet>(env, writer, req);
             }
             ObjType::StatefulSet => {
-                let req = apps_api::StatefulSet::delete_namespaced_stateful_set(
+                let req = api_apps::StatefulSet::delete_namespaced_stateful_set(
                     obj.name.as_str(),
                     ns.as_str(),
                     options,
                 )?
                 .0;
-                send_delete::<apps_api::StatefulSet>(env, writer, req);
+                send_delete::<api_apps::StatefulSet>(env, writer, req);
             }
             ObjType::Secret => {
                 let req =
@@ -153,6 +153,16 @@ fn delete_obj(
                 )?
                 .0;
                 send_delete::<api::Service>(env, writer, req);
+            }
+            ObjType::StorageClass => {
+                clickwriteln!(
+                    writer,
+                    "StorageClass has unexpected namespace. Please file an issue on github. \
+                         Deleting anyway"
+                );
+                let req =
+                    api_storage::StorageClass::delete_storage_class(obj.name.as_str(), options)?.0;
+                send_delete::<api_storage::StorageClass>(env, writer, req);
             }
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => {
@@ -174,6 +184,11 @@ fn delete_obj(
                 let req =
                     api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)?.0;
                 send_delete::<api::PersistentVolume>(env, writer, req);
+            }
+            ObjType::StorageClass => {
+                let req =
+                    api_storage::StorageClass::delete_storage_class(obj.name.as_str(), options)?.0;
+                send_delete::<api_storage::StorageClass>(env, writer, req);
             }
             _ => {
                 clickwriteln!(

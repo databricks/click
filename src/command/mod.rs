@@ -43,6 +43,7 @@ pub mod replicasets; // commands relating to relicasets
 pub mod secrets; // commands for secrets
 pub mod services; // commands for services
 pub mod statefulsets; // commands for statefulsets
+pub mod storage; // commands relating to storage objects (like storageclass)
 pub mod volumes; // commands relating to volumes
 
 #[cfg(feature = "argorollouts")]

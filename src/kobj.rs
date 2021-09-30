@@ -7,7 +7,9 @@ use crate::Env;
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
-use k8s_openapi::api::{apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api};
+use k8s_openapi::api::{
+    apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api, storage::v1 as api_storage,
+};
 
 use serde::ser::Serialize;
 use serde_json::Value;
@@ -29,6 +31,7 @@ pub enum ObjType {
     Job,
     Namespace,
     PersistentVolume,
+    StorageClass,
     #[cfg(feature = "argorollouts")]
     Rollout,
 }
@@ -98,6 +101,7 @@ impl KObj {
             ObjType::Job => "Job",
             ObjType::Namespace => "Namespace",
             ObjType::PersistentVolume => "PersistentVolume",
+            ObjType::StorageClass => "StorageClass",
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => "Rollout",
         }
@@ -116,6 +120,7 @@ impl KObj {
             ObjType::Job => Purple.bold().paint(self.name.as_str()),
             ObjType::Namespace => Green.bold().paint(self.name.as_str()),
             ObjType::PersistentVolume => Blue.bold().paint(self.name.as_str()),
+            ObjType::StorageClass => Red.bold().paint(self.name.as_str()),
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => Purple.bold().paint(self.name.as_str()),
         }
@@ -313,6 +318,14 @@ impl KObj {
                     api_apps::StatefulSet::read_namespaced_stateful_set,
                     api_apps::ReadNamespacedStatefulSetResponse,
                     api_apps::ReadNamespacedStatefulSetResponse::Ok,
+                    None
+                );
+            }
+            ObjType::StorageClass => {
+                do_describe!(
+                    api_storage::StorageClass::read_storage_class,
+                    api_storage::ReadStorageClassResponse,
+                    api_storage::ReadStorageClassResponse::Ok,
                     None
                 );
             }

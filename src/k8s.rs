@@ -48,9 +48,9 @@ impl UserAuth {
         Ok(UserAuth::UserPass(user, pass))
     }
 
-    // construct an identity from a key and cert. need the endpoint to deceide which kind of
-    // identity to use since rustls wants something different from nativetls, and we use rustls for
-    // dns name hosts and native for ip hosts
+    /// construct an identity from a key and cert. need the endpoint to deceide which kind of
+    /// identity to use since rustls wants something different from nativetls, and we use rustls for
+    /// dns name hosts and native for ip hosts
     pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> Result<UserAuth, KubeError>
     where
         PathBuf: From<P>,
@@ -62,14 +62,16 @@ impl UserAuth {
         Ok(UserAuth::Ident(id))
     }
 
-    // same as above, but use already read data
+    /// same as above, but use already read data. The data should be base64 encoded pems
     pub fn from_key_cert_data(
         key: String,
         cert: String,
         endpoint: &Url,
     ) -> Result<UserAuth, KubeError> {
+        let key_decoded = ::base64::decode(&key)?;
+        let cert_decoded = ::base64::decode(&cert)?;
         let pkcs12 = Context::use_pkcs12(endpoint);
-        let id = get_id_from_data(key, cert, pkcs12)?;
+        let id = get_id_from_data(key_decoded, cert_decoded, pkcs12)?;
         Ok(UserAuth::Ident(id))
     }
 }
@@ -97,13 +99,6 @@ fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
     })
 }
 
-// fn get_id_pem(keycert: Vec<u8>, cert: PathBuf) -> Identity {
-//     let mut buf = Vec::new();
-//     File::open(key).unwrap().read_to_end(&mut buf).unwrap();
-//     File::open(cert).unwrap().read_to_end(&mut buf).unwrap();
-//     Identity::from_pem(&buf).unwrap()
-// }
-
 // get the right kind of id
 fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError> {
     let key_pem = pem::parse(&key)?;
@@ -118,13 +113,18 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError
             key_pem.contents
         }
         _ => {
-            panic!("Unknown key type: {}", key_pem.tag);
+            return Err(KubeError::ConfigFileError(format!(
+                "Unknown key type: {}",
+                key_pem.tag
+            )));
         }
     };
 
-    let cert_pem = pem::parse(&cert).unwrap();
+    let cert_pem = pem::parse(&cert)?;
 
-    let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "").unwrap();
+    let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "").ok_or(
+        KubeError::ConfigFileError("Could not parse pkcs12 data".to_string()),
+    )?;
 
     let pkcs12der = pfx.to_der();
 
@@ -133,28 +133,28 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError
 
 fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Result<Identity, KubeError> {
     let mut key_buf = Vec::new();
-    File::open(key).unwrap().read_to_end(&mut key_buf)?;
+    File::open(key)?.read_to_end(&mut key_buf)?;
     if pkcs12 {
         let mut cert_buf = Vec::new();
-        File::open(cert)
-            .unwrap()
-            .read_to_end(&mut cert_buf)
-            .unwrap();
+        File::open(cert)?.read_to_end(&mut cert_buf)?;
         get_id_from_pkcs12(key_buf, cert_buf)
     } else {
         // for from_pem key and cert are in same buffer
-        File::open(cert).unwrap().read_to_end(&mut key_buf).unwrap();
+        File::open(cert)?.read_to_end(&mut key_buf)?;
         Identity::from_pem(&key_buf).map_err(|e| e.into())
     }
 }
 
-fn get_id_from_data(key: String, cert: String, pkcs12: bool) -> Result<Identity, KubeError> {
+fn get_id_from_data(
+    mut key: Vec<u8>,
+    mut cert: Vec<u8>,
+    pkcs12: bool,
+) -> Result<Identity, KubeError> {
     if pkcs12 {
-        get_id_from_pkcs12(key.into_bytes(), cert.into_bytes())
+        get_id_from_pkcs12(key, cert)
     } else {
-        let mut buf = key.into_bytes();
-        buf.append(&mut cert.into_bytes());
-        Identity::from_pem(&buf).map_err(|e| e.into())
+        key.append(&mut cert);
+        Identity::from_pem(&key).map_err(|e| e.into())
     }
 }
 
@@ -252,7 +252,9 @@ impl Context {
             } => {
                 if was_expired {
                     let pkcs12 = Context::use_pkcs12(&self.endpoint);
-                    let id = get_id_from_data(key_data, cert_data, pkcs12).unwrap(); // TODO: Handle error
+                    let id =
+                        get_id_from_data(key_data.into_bytes(), cert_data.into_bytes(), pkcs12)
+                            .unwrap(); // TODO: Handle error
                     let auth = self.auth.take();
                     let (new_client, new_auth) = Context::get_client(
                         &self.endpoint,

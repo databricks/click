@@ -9,6 +9,7 @@ use crate::output::ClickWriter;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::io::Write;
 
 // command definition
 /// Just return what we're given.  Useful for no-op closures in
@@ -98,8 +99,7 @@ pub fn start_clap(
     }
 }
 
-/// Run specified closure with the given matches, or print error.  Return true if execed,
-/// false on err
+/// Run specified closure with given matches. Returns () on success, or an Err if an error occurs
 pub fn exec_match<F>(
     clap: &RefCell<App<'static, 'static>>,
     env: &mut Env,
@@ -110,11 +110,20 @@ pub fn exec_match<F>(
 where
     F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> Result<(), KubeError>,
 {
-    // TODO: Should be able to not clone and use get_matches_from_safe_borrow, but
-    // that causes weird errors involving conflicting arguments being used
-    // between invocations of commands
-    let matches = clap.borrow_mut().clone().get_matches_from_safe(args)?;
-    func(matches, env, writer)
+    let matches = clap.borrow_mut().get_matches_from_safe_borrow(args);
+    match matches {
+        Ok(matches) => func(matches, env, writer),
+        Err(e) => {
+            if e.kind == clap::ErrorKind::HelpDisplayed
+                || e.kind == clap::ErrorKind::VersionDisplayed
+            {
+                clickwriteln!(writer, "{}", e.message);
+                Ok(())
+            } else {
+                Err(KubeError::Clap(e))
+            }
+        }
+    }
 }
 
 macro_rules! noop_complete {
@@ -355,40 +364,6 @@ macro_rules! list_command {
         );
     };
 }
-
-// /// This macro handles creating a request from the k8s_openapi crate, and printing the error if
-// /// things fail
-// macro_rules! get_request {
-//     ($func: path, $ns: expr, $opts: expr, $writer: expr) => {
-//         match $func($ns, $opts) {
-//             Ok(req) => req,
-//             Err(e) => {
-//                 match e {
-//                     k8s_openapi::RequestError::Http(e) =>
-//                         clickwriteln!($writer, "Error preparing HTTP request: {}", e),
-//                     k8s_openapi::RequestError::Json(e) =>
-//                         clickwriteln!($writer, "Error serializing the JSON body of the HTTP request: {}", e)
-//                 }
-//                 return Ok(());
-//             }
-//         }
-//     };
-
-//     ($func: path, $opts: expr, $writer: expr) => {
-//         match $func($opts) {
-//             Ok(req) => req,
-//             Err(e) => {
-//                 match e {
-//                     k8s_openapi::RequestError::Http(e) =>
-//                         clickwriteln!($writer, "Error preparing HTTP request: {}", e),
-//                     k8s_openapi::RequestError::Json(e) =>
-//                         clickwriteln!($writer, "Error serializing the JSON body of the HTTP request: {}", e)
-//                 }
-//                 return;
-//             }
-//         }
-//     };
-// }
 
 // utility methods for show/sort args
 

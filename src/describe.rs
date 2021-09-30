@@ -706,3 +706,84 @@ pub fn describe_format_deployment(v: Value) -> String {
     ];
     describe_object(&v, fields.into_iter())
 }
+
+/// Utility function to describe a rollout
+#[cfg(feature = "argorollouts")]
+pub fn describe_format_rollout(v: Value) -> String {
+    let fields = vec![
+        (
+            "Name:\t\t",
+            DescItem::MetadataValStr {
+                path: "/name",
+                default: "<No Name>",
+            },
+        ),
+        (
+            "Namespace:\t",
+            DescItem::MetadataValStr {
+                path: "/namespace",
+                default: "<No Name>",
+            },
+        ),
+        ("Created at:\t", DescItem::ObjectCreated),
+        (
+            "Generation:\t",
+            DescItem::Valu64 {
+                path: "/metadata/generation",
+                default: 0,
+            },
+        ),
+        (
+            "Labels:\t",
+            DescItem::KeyValStr {
+                parent: "/metadata/labels",
+                secret_vals: false,
+            },
+        ),
+        (
+            "Desired Replicas:\t",
+            DescItem::Valu64 {
+                path: "/spec/replicas",
+                default: 0,
+            },
+        ),
+        (
+            "Current Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/replicas",
+                default: 0,
+            },
+        ),
+        (
+            "Up To Date Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/updatedReplicas",
+                default: 0,
+            },
+        ),
+        (
+            "Available Replicas:\t",
+            DescItem::Valu64 {
+                path: "/status/availableReplicas",
+                default: 0,
+            },
+        ),
+        (
+            "\nContainers:\n",
+            DescItem::CustomFunc {
+                path: Some("/spec/template/spec/containers"),
+                func: &get_container_str,
+                default: "<No Containers>",
+            },
+        ),
+        (
+            "Messages:\n",
+            DescItem::CustomFunc {
+                path: Some("/status/conditions"),
+                func: &get_message_str,
+                default: "<No Messages>",
+            },
+        ),
+    ];
+    describe_object(&v, fields.into_iter())
+}

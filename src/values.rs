@@ -13,8 +13,7 @@
 // limitations under the License.
 
 /// Helper functions to deal with Values
-use k8s_openapi::{http, Response, ResponseError};
-use serde_json::{error::Error, value::Value};
+use serde_json::value::Value;
 
 use crate::error::KubeError;
 
@@ -24,6 +23,18 @@ pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a,
     match value.pointer(pointer) {
         Some(p) => match p.as_str() {
             Some(s) => s.into(),
+            None => default.into(),
+        },
+        None => default.into(),
+    }
+}
+
+/// Get the item at specified pointer, assuming it's a Number, and format it as a string
+#[allow(dead_code)] // used by features, so without them isn't used
+pub fn val_num(pointer: &str, value: &Value, default: &str) -> String {
+    match value.pointer(pointer) {
+        Some(p) => match p.as_i64() {
+            Some(i) => format!("{}", i),
             None => default.into(),
         },
         None => default.into(),
@@ -75,39 +86,39 @@ where
     }
 }
 
-/// A response that just contains a serde_json::Value. This is useful for implementing methods on
-/// arbitrary custom types
-pub enum ValueResponse {
-    Ok(Value),
-    Other(Result<Option<Value>, Error>),
-}
+// /// A response that just contains a serde_json::Value. This is useful for implementing methods on
+// /// arbitrary custom types
+// pub enum ValueResponse {
+//     Ok(Value),
+//     Other(Result<Option<Value>, Error>),
+// }
 
-impl Response for ValueResponse {
-    fn try_from_parts(
-        status_code: http::StatusCode,
-        buf: &[u8],
-    ) -> Result<(Self, usize), ResponseError> {
-        match status_code {
-            http::StatusCode::OK => {
-                let result = match serde_json::from_slice(buf) {
-                    Ok(value) => value,
-                    Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
-                    Err(err) => return Err(ResponseError::Json(err)),
-                };
-                Ok((ValueResponse::Ok(result), buf.len()))
-            }
-            _ => {
-                let (result, read) = if buf.is_empty() {
-                    (Ok(None), 0)
-                } else {
-                    match serde_json::from_slice(buf) {
-                        Ok(value) => (Ok(Some(value)), buf.len()),
-                        Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
-                        Err(err) => (Err(err), 0),
-                    }
-                };
-                Ok((ValueResponse::Other(result), read))
-            }
-        }
-    }
-}
+// impl Response for ValueResponse {
+//     fn try_from_parts(
+//         status_code: http::StatusCode,
+//         buf: &[u8],
+//     ) -> Result<(Self, usize), ResponseError> {
+//         match status_code {
+//             http::StatusCode::OK => {
+//                 let result = match serde_json::from_slice(buf) {
+//                     Ok(value) => value,
+//                     Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
+//                     Err(err) => return Err(ResponseError::Json(err)),
+//                 };
+//                 Ok((ValueResponse::Ok(result), buf.len()))
+//             }
+//             _ => {
+//                 let (result, read) = if buf.is_empty() {
+//                     (Ok(None), 0)
+//                 } else {
+//                     match serde_json::from_slice(buf) {
+//                         Ok(value) => (Ok(Some(value)), buf.len()),
+//                         Err(err) if err.is_eof() => return Err(ResponseError::NeedMoreData),
+//                         Err(err) => (Err(err), 0),
+//                     }
+//                 };
+//                 Ok((ValueResponse::Other(result), read))
+//             }
+//         }
+//     }
+// }

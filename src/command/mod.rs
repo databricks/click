@@ -3,7 +3,9 @@ use chrono::{DateTime, Duration};
 use clap::ArgMatches;
 use humantime::parse_duration;
 use k8s_openapi::{
-    apimachinery::pkg::apis::meta::v1::ObjectMeta, http::Request, List, ListableResource, Metadata,
+    apimachinery::pkg::apis::meta::v1::ObjectMeta,
+    http::{self, Request},
+    List, ListOptional, ListResponse, ListableResource, Metadata, RequestError, ResponseBody,
 };
 use prettytable::{Cell, Row};
 use regex::Regex;
@@ -42,6 +44,9 @@ pub mod secrets; // commands for secrets
 pub mod services; // commands for services
 pub mod statefulsets; // commands for statefulsets
 pub mod volumes; // commands relating to volumes
+
+#[cfg(feature = "argorollouts")]
+pub mod rollouts;
 
 // utility types
 type RowSpec<'a> = Vec<CellSpec<'a>>;
@@ -386,4 +391,46 @@ pub fn keyval_string(keyvals: &BTreeMap<String, String>) -> String {
         buf.push('\n');
     }
     buf
+}
+
+// utils for getting custom requests
+
+/// Get a read request for a custom url
+// used by features, so without them isn't used
+// type is from k8s_openapi, so we can't change it
+#[allow(dead_code, clippy::type_complexity)]
+pub fn get_read_request_for_url<T: k8s_openapi::Response>(
+    url: String,
+) -> Result<(Request<Vec<u8>>, fn(_: http::StatusCode) -> ResponseBody<T>), RequestError> {
+    let request = http::Request::get(url);
+    let body = vec![];
+    match request.body(body) {
+        Ok(request) => Ok((request, ResponseBody::new)),
+        Err(err) => Err(RequestError::Http(err)),
+    }
+}
+
+/// Get a request for a custom url. The item must be listable.
+// used by features, so without them isn't used
+// type is from k8s_openapi, so we can't change it
+#[allow(dead_code, clippy::type_complexity)]
+pub fn get_list_request_for_url<T: ListableResource + for<'de> serde::Deserialize<'de>>(
+    url: String,
+    optional: ListOptional<'_>,
+) -> Result<
+    (
+        Request<Vec<u8>>,
+        fn(_: http::StatusCode) -> ResponseBody<ListResponse<T>>,
+    ),
+    RequestError,
+> {
+    let mut query_pairs = url::form_urlencoded::Serializer::new(url);
+    optional.__serialize(&mut query_pairs);
+    let __url = query_pairs.finish();
+    let __request = Request::get(__url);
+    let __body = vec![];
+    match __request.body(__body) {
+        Ok(request) => Ok((request, ResponseBody::new)),
+        Err(err) => Err(RequestError::Http(err)),
+    }
 }

@@ -16,7 +16,9 @@ use std::io::Write;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjType {
-    Pod { containers: Vec<String> },
+    Pod {
+        containers: Vec<String>,
+    },
     Node,
     Deployment,
     Service,
@@ -27,6 +29,8 @@ pub enum ObjType {
     Job,
     Namespace,
     PersistentVolume,
+    #[cfg(feature = "argorollouts")]
+    Rollout,
 }
 
 /// An object we can have as a "current" thing
@@ -94,6 +98,8 @@ impl KObj {
             ObjType::Job => "Job",
             ObjType::Namespace => "Namespace",
             ObjType::PersistentVolume => "PersistentVolume",
+            #[cfg(feature = "argorollouts")]
+            ObjType::Rollout => "Rollout",
         }
     }
 
@@ -110,6 +116,8 @@ impl KObj {
             ObjType::Job => Purple.bold().paint(self.name.as_str()),
             ObjType::Namespace => Green.bold().paint(self.name.as_str()),
             ObjType::PersistentVolume => Blue.bold().paint(self.name.as_str()),
+            #[cfg(feature = "argorollouts")]
+            ObjType::Rollout => Purple.bold().paint(self.name.as_str()),
         }
     }
 
@@ -120,33 +128,6 @@ impl KObj {
     // TODO: Move containers elsewhere so this isn't needed
     pub fn is_pod(&self) -> bool {
         matches!(self.typ, ObjType::Pod { .. })
-    }
-
-    pub fn url(&self, namespace: &str) -> String {
-        match self.typ {
-            ObjType::Pod { .. } => format!("/api/v1/namespaces/{}/pods/{}", namespace, self.name),
-            ObjType::Node => format!("/api/v1/nodes/{}", self.name),
-            ObjType::Deployment => format!(
-                "/apis/extensions/v1beta1/namespaces/{}/deployments/{}",
-                namespace, self.name
-            ),
-            ObjType::Service => format!("/api/v1/namespaces/{}/services/{}", namespace, self.name),
-            ObjType::ReplicaSet => format!(
-                "/apis/extensions/v1beta1/namespaces/{}/replicasets/{}",
-                namespace, self.name
-            ),
-            ObjType::StatefulSet => format!(
-                "/apis/apps/v1beta1/namespaces/{}/statefulsets/{}",
-                namespace, self.name
-            ),
-            ObjType::ConfigMap => {
-                format!("/api/v1/namespaces/{}/configmaps/{}", namespace, self.name)
-            }
-            ObjType::Secret => format!("/api/v1/namespaces/{}/secrets/{}", namespace, self.name),
-            ObjType::Job => format!("/apis/batch/v1/namespaces/{}/jobs/{}", namespace, self.name),
-            ObjType::Namespace => format!("/apis/v1/namespaces/{}", self.name),
-            ObjType::PersistentVolume => format!("/api/v1/persistentvolumes/{}", self.name),
-        }
     }
 
     // service is a bit more complex, so handle it here
@@ -333,6 +314,16 @@ impl KObj {
                     api_apps::ReadNamespacedStatefulSetResponse,
                     api_apps::ReadNamespacedStatefulSetResponse::Ok,
                     None
+                );
+            }
+            #[cfg(feature = "argorollouts")]
+            ObjType::Rollout => {
+                use crate::command::rollouts;
+                do_describe_with_namespace!(
+                    rollouts::RolloutValue::read_namespaced_rollout,
+                    rollouts::ReadNamespacedRolloutValueResponse,
+                    rollouts::ReadNamespacedRolloutValueResponse::Ok,
+                    Some(describe::describe_format_rollout)
                 );
             }
         }

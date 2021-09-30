@@ -154,6 +154,12 @@ fn delete_obj(
                 .0;
                 send_delete::<api::Service>(env, writer, req);
             }
+            #[cfg(feature = "argorollouts")]
+            ObjType::Rollout => {
+                return Err(KubeError::CommandError(
+                    "Cannot delete rollouts".to_string(),
+                ));
+            }
         },
         None => match obj.typ {
             ObjType::Node => {

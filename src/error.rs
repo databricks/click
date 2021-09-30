@@ -72,6 +72,8 @@ pub enum KubeError {
     RequestError(k8s_openapi::RequestError),
     Clap(clap::Error),
     JoinPathsError(env::JoinPathsError),
+    Pem(pem::PemError),
+    Reqwest(reqwest::Error),
 }
 
 impl fmt::Display for KubeError {
@@ -98,6 +100,8 @@ impl fmt::Display for KubeError {
             },
             KubeError::Clap(ref err) => write!(f, "Error in clap: {}", err),
             KubeError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
+            KubeError::Pem(ref err) => write!(f, "Pem error: {}", err),
+            KubeError::Reqwest(ref err) => write!(f, "Reqwest error: {}", err),
         }
     }
 }
@@ -117,6 +121,8 @@ impl error::Error for KubeError {
             KubeError::RequestError(ref err) => Some(err),
             KubeError::Clap(ref err) => Some(err),
             KubeError::JoinPathsError(ref err) => Some(err),
+            KubeError::Pem(ref err) => Some(err),
+            KubeError::Reqwest(ref err) => Some(err),
         }
     }
 }
@@ -160,5 +166,17 @@ impl From<clap::Error> for KubeError {
 impl From<env::JoinPathsError> for KubeError {
     fn from(err: env::JoinPathsError) -> KubeError {
         KubeError::JoinPathsError(err)
+    }
+}
+
+impl From<pem::PemError> for KubeError {
+    fn from(err: pem::PemError) -> KubeError {
+        KubeError::Pem(err)
+    }
+}
+
+impl From<reqwest::Error> for KubeError {
+    fn from(err: reqwest::Error) -> KubeError {
+        KubeError::Reqwest(err)
     }
 }

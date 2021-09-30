@@ -23,11 +23,10 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 
 //use crate::certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
+use super::kubefile::{AuthProvider, ExecProvider};
 use crate::config::ClickConfig;
 use crate::error::{KubeErrNo, KubeError};
-//use crate::kube::{ClientCertKey, Kluster, KlusterAuth};
-
-use super::kubefile::{AuthProvider, ExecProvider};
+use crate::k8s::UserAuth as K8SUserAuth;
 
 #[derive(Debug)]
 pub struct ClusterConf {
@@ -399,62 +398,55 @@ impl Config {
         let endpoint = reqwest::Url::parse(&cluster.server).unwrap();
         let ca_cert = cluster.cert.as_ref().map(|c| get_reqwest_cert(c));
 
-        let mut k8suser = None;
+        let mut k8suser = Err(KubeError::ConfigFileError(
+            "[WARN]: Context {} has no client certificate and key, nor does it specify \
+             any auth method (user/pass, token, auth-provider).  You will likely not be \
+             able to authenticate to this cluster.  Please check your kube config."
+                .to_string(),
+        ));
         //let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
                 UserAuth::Token(token) => {
-                    k8suser = Some(crate::k8s::UserAuth::with_token(token.to_string()));
+                    k8suser = K8SUserAuth::with_token(token.to_string());
                 }
                 UserAuth::UserPass(username, password) => {
-                    k8suser = Some(crate::k8s::UserAuth::with_user_pass(
-                        username.to_string(),
-                        password.to_string(),
-                    ));
+                    k8suser =
+                        K8SUserAuth::with_user_pass(username.to_string(), password.to_string());
                 }
                 UserAuth::AuthProvider(provider) => {
                     provider.copy_up();
-                    k8suser = Some(crate::k8s::UserAuth::with_auth_provider(*provider.clone()))
+                    k8suser = K8SUserAuth::with_auth_provider(*provider.clone());
                 }
                 UserAuth::ExecProvider(provider) => {
-                    k8suser = Some(crate::k8s::UserAuth::with_exec_provider(provider.clone()))
+                    k8suser = K8SUserAuth::with_exec_provider(provider.clone());
                 }
                 UserAuth::KeyCertData(cert_data, key_data) => {
-                    k8suser = Some(crate::k8s::UserAuth::from_key_cert_data(
+                    k8suser = K8SUserAuth::from_key_cert_data(
                         key_data.clone(),
                         cert_data.clone(),
                         &endpoint,
-                    ))
+                    );
                 }
                 UserAuth::KeyCertPath(cert_path, key_path) => {
                     let cert_full_path = get_full_path(cert_path.clone())?;
                     let key_full_path = get_full_path(key_path.clone())?;
-                    k8suser = Some(crate::k8s::UserAuth::from_key_cert(
-                        &key_full_path,
-                        &cert_full_path,
-                        &endpoint,
-                    ))
+                    k8suser =
+                        K8SUserAuth::from_key_cert(&key_full_path, &cert_full_path, &endpoint);
                 }
             };
         }
 
-        if k8suser.is_none() {
-            println!(
-                "[WARN]: Context {} has no client certificate and key, nor does it specify \
-                 any auth method (user/pass, token, auth-provider).  You will likely not be \
-                 able to authenticate to this cluster.  Please check your kube config.",
-                context_name
+        k8suser.map(|user| {
+            crate::k8s::Context::new(
+                context_name,
+                endpoint,
+                ca_cert,
+                Some(user),
+                click_conf.connect_timeout_secs,
+                click_conf.read_timeout_secs,
             )
-        }
-
-        Ok(crate::k8s::Context::new(
-            context_name,
-            endpoint,
-            ca_cert,
-            k8suser,
-            click_conf.connect_timeout_secs,
-            click_conf.read_timeout_secs,
-        ))
+        })
     }
 }
 

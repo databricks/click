@@ -28,45 +28,49 @@ pub enum UserAuth {
 }
 
 impl UserAuth {
-    pub fn _from_identity(id: Identity) -> UserAuth {
-        UserAuth::Ident(id)
+    pub fn _from_identity(id: Identity) -> Result<UserAuth, KubeError> {
+        Ok(UserAuth::Ident(id))
     }
 
-    pub fn with_auth_provider(auth_provider: AuthProvider) -> UserAuth {
-        UserAuth::AuthProvider(Box::new(auth_provider))
+    pub fn with_auth_provider(auth_provider: AuthProvider) -> Result<UserAuth, KubeError> {
+        Ok(UserAuth::AuthProvider(Box::new(auth_provider)))
     }
 
-    pub fn with_exec_provider(exec_provider: ExecProvider) -> UserAuth {
-        UserAuth::ExecProvider(Box::new(exec_provider))
+    pub fn with_exec_provider(exec_provider: ExecProvider) -> Result<UserAuth, KubeError> {
+        Ok(UserAuth::ExecProvider(Box::new(exec_provider)))
     }
 
-    pub fn with_token(token: String) -> UserAuth {
-        UserAuth::Token(token)
+    pub fn with_token(token: String) -> Result<UserAuth, KubeError> {
+        Ok(UserAuth::Token(token))
     }
 
-    pub fn with_user_pass(user: String, pass: String) -> UserAuth {
-        UserAuth::UserPass(user, pass)
+    pub fn with_user_pass(user: String, pass: String) -> Result<UserAuth, KubeError> {
+        Ok(UserAuth::UserPass(user, pass))
     }
 
     // construct an identity from a key and cert. need the endpoint to deceide which kind of
     // identity to use since rustls wants something different from nativetls, and we use rustls for
     // dns name hosts and native for ip hosts
-    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> UserAuth
+    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> Result<UserAuth, KubeError>
     where
         PathBuf: From<P>,
     {
         let key_buf = PathBuf::from(key);
         let cert_buf = PathBuf::from(cert);
         let pkcs12 = Context::use_pkcs12(endpoint);
-        let id = get_id_from_paths(key_buf, cert_buf, pkcs12);
-        UserAuth::Ident(id)
+        let id = get_id_from_paths(key_buf, cert_buf, pkcs12)?;
+        Ok(UserAuth::Ident(id))
     }
 
     // same as above, but use already read data
-    pub fn from_key_cert_data(key: String, cert: String, endpoint: &Url) -> UserAuth {
+    pub fn from_key_cert_data(
+        key: String,
+        cert: String,
+        endpoint: &Url,
+    ) -> Result<UserAuth, KubeError> {
         let pkcs12 = Context::use_pkcs12(endpoint);
-        let id = get_id_from_data(key, cert, pkcs12);
-        UserAuth::Ident(id)
+        let id = get_id_from_data(key, cert, pkcs12)?;
+        Ok(UserAuth::Ident(id))
     }
 }
 
@@ -101,8 +105,8 @@ fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
 // }
 
 // get the right kind of id
-fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Identity {
-    let key_pem = pem::parse(&key).unwrap();
+fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError> {
+    let key_pem = pem::parse(&key)?;
 
     let key_der = match key_pem.tag.as_str() {
         "RSA PRIVATE KEY" => {
@@ -124,12 +128,12 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Identity {
 
     let pkcs12der = pfx.to_der();
 
-    Identity::from_pkcs12_der(&pkcs12der, "").unwrap()
+    Identity::from_pkcs12_der(&pkcs12der, "").map_err(|e| e.into())
 }
 
-fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Identity {
+fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Result<Identity, KubeError> {
     let mut key_buf = Vec::new();
-    File::open(key).unwrap().read_to_end(&mut key_buf).unwrap();
+    File::open(key).unwrap().read_to_end(&mut key_buf)?;
     if pkcs12 {
         let mut cert_buf = Vec::new();
         File::open(cert)
@@ -140,17 +144,17 @@ fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Identity {
     } else {
         // for from_pem key and cert are in same buffer
         File::open(cert).unwrap().read_to_end(&mut key_buf).unwrap();
-        Identity::from_pem(&key_buf).unwrap()
+        Identity::from_pem(&key_buf).map_err(|e| e.into())
     }
 }
 
-fn get_id_from_data(key: String, cert: String, pkcs12: bool) -> Identity {
+fn get_id_from_data(key: String, cert: String, pkcs12: bool) -> Result<Identity, KubeError> {
     if pkcs12 {
         get_id_from_pkcs12(key.into_bytes(), cert.into_bytes())
     } else {
         let mut buf = key.into_bytes();
         buf.append(&mut cert.into_bytes());
-        Identity::from_pem(&buf).unwrap()
+        Identity::from_pem(&buf).map_err(|e| e.into())
     }
 }
 
@@ -248,7 +252,7 @@ impl Context {
             } => {
                 if was_expired {
                     let pkcs12 = Context::use_pkcs12(&self.endpoint);
-                    let id = get_id_from_data(key_data, cert_data, pkcs12);
+                    let id = get_id_from_data(key_data, cert_data, pkcs12).unwrap(); // TODO: Handle error
                     let auth = self.auth.take();
                     let (new_client, new_auth) = Context::get_client(
                         &self.endpoint,

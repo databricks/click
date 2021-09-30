@@ -122,9 +122,8 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError
 
     let cert_pem = pem::parse(&cert)?;
 
-    let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "").ok_or_else(||
-        KubeError::ConfigFileError("Could not parse pkcs12 data".to_string()),
-    )?;
+    let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "")
+        .ok_or_else(|| KubeError::ConfigFileError("Could not parse pkcs12 data".to_string()))?;
 
     let pkcs12der = pfx.to_der();
 

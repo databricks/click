@@ -142,7 +142,7 @@ fn volume_reason(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
 
 list_command!(
     PersistentVolumes,
-    "pvs",
+    "persistentvolumes",
     "Get persistent volumes in current context",
     super::COL_FLAGS,
     super::EXTRA_COL_FLAGS,

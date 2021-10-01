@@ -14,11 +14,11 @@
 
 use k8s_openapi::{api::core::v1 as api, List};
 use rustyline::{
-    Context, Helper, Result,
     completion::{Completer, Pair},
     highlight::Highlighter,
     hint::Hinter,
-    validate::Validator
+    validate::Validator,
+    Context, Helper, Result,
 };
 
 use crate::command::command_def::Cmd;

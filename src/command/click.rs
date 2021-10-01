@@ -33,8 +33,6 @@ command!(
 fn print_contexts(env: &Env, writer: &mut ClickWriter) {
     let mut contexts: Vec<&String> = env.config.contexts.keys().collect();
     contexts.sort();
-    let mut table = Table::new();
-    table.set_titles(row!["Context", "Api Server Address"]);
     let ctxs = contexts
         .iter()
         .map(|context| {
@@ -45,11 +43,10 @@ fn print_contexts(env: &Env, writer: &mut ClickWriter) {
             };
             row.push(CellSpec::with_style((*context).clone().into(), "FR"));
             row.push(cluster.into());
-            (context, row)
+            row
         })
         .collect();
-    table.set_format(*crate::table::TBLFMT);
-    crate::table::print_table(&mut table, &ctxs, writer);
+    crate::table::print_table(row!["Context", "Api Server Address"], ctxs, writer);
 }
 
 command!(

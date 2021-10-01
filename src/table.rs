@@ -207,23 +207,7 @@ pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
 }
 
 #[allow(clippy::ptr_arg)]
-pub fn print_table<'a, T>(
-    table: &mut Table,
-    specs: &Vec<(T, Vec<CellSpec<'a>>)>,
-    writer: &mut ClickWriter,
-) {
-    for (index, t_spec) in specs.iter().enumerate() {
-        let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
-        table.add_row(Row::new(row_vec));
-    }
-    table.set_format(*TBLFMT);
-    if !term_print_table(table, writer) {
-        table.print(writer).unwrap_or(0);
-    }
-}
-
-#[allow(clippy::ptr_arg)]
-pub fn print_table_kapi(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut ClickWriter) {
+pub fn print_table(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut ClickWriter) {
     let mut table = Table::new();
     table.set_titles(titles);
     for (index, t_spec) in specs.iter().enumerate() {

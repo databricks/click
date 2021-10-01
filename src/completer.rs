@@ -13,10 +13,13 @@
 // limitations under the License.
 
 use k8s_openapi::{api::core::v1 as api, List};
-use rustyline::completion::{Completer, Pair};
-use rustyline::highlight::Highlighter;
-use rustyline::hint::Hinter;
-use rustyline::{Context, Helper, Result};
+use rustyline::{
+    Context, Helper, Result,
+    completion::{Completer, Pair},
+    highlight::Highlighter,
+    hint::Hinter,
+    validate::Validator
+};
 
 use crate::command::command_def::Cmd;
 use crate::env::Env;
@@ -35,7 +38,10 @@ impl Helper for ClickHelper {}
 
 impl Highlighter for ClickHelper {}
 
+impl Validator for ClickHelper {}
+
 impl Hinter for ClickHelper {
+    type Hint = String;
     fn hint(&self, _line: &str, _pos: usize, _context: &Context) -> Option<String> {
         None
     }

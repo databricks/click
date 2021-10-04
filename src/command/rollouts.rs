@@ -220,6 +220,7 @@ impl Response for ReadNamespacedRolloutValueResponse {
 }
 
 impl RolloutValue {
+    #[allow(clippy::type_complexity)] // type is from k8s_openapi
     pub fn list_namespaced_rollout(
         namespace: &str,
         optional: ListOptional<'_>,
@@ -237,6 +238,7 @@ impl RolloutValue {
         get_list_request_for_url(url, optional)
     }
 
+    #[allow(clippy::type_complexity)] // type is from k8s_openapi
     pub fn list_rollout_for_all_namespaces(
         optional: ListOptional<'_>,
     ) -> Result<
@@ -250,6 +252,7 @@ impl RolloutValue {
         get_list_request_for_url(url, optional)
     }
 
+    //#[allow(clippy::type_complexity)] // type is from k8s_openapi
     pub fn read_namespaced_rollout(
         name: &str,
         namespace: &str,

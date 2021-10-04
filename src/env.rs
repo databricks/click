@@ -332,7 +332,9 @@ impl Env {
                 let mut go = true;
                 for obj in range.iter() {
                     if !go {
-                        return Err(ClickError::CommandError("Aborting range action".to_string()));
+                        return Err(ClickError::CommandError(
+                            "Aborting range action".to_string(),
+                        ));
                     }
                     if let Some(fmt) = sepfmt {
                         let mut fmtvars = HashMap::new();

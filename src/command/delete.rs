@@ -12,7 +12,7 @@ use crate::{
     command::{uppercase_first, valid_u32},
     completer,
     env::Env,
-    error::KubeError,
+    error::ClickError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
     values::val_str,
@@ -61,7 +61,7 @@ fn delete_obj(
     writer: &mut ClickWriter,
     obj: &KObj,
     options: DeleteOptional,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     match obj.namespace.as_ref() {
         Some(ns) => match obj.typ {
             ObjType::ConfigMap => {
@@ -166,7 +166,7 @@ fn delete_obj(
             }
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => {
-                return Err(KubeError::CommandError(
+                return Err(ClickError::CommandError(
                     "Cannot delete rollouts".to_string(),
                 ));
             }
@@ -207,7 +207,7 @@ fn confirm_delete(
     obj: &KObj,
     options: DeleteOptional,
     writer: &mut ClickWriter,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     let name = obj.name();
     clickwrite!(writer, "Delete {} {} [y/N]? ", obj.type_str(), name);
     io::stdout().flush().expect("Could not flush stdout");

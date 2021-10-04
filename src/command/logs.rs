@@ -13,7 +13,7 @@ use crate::{
     command::{parse_duration, valid_date, valid_duration, valid_u32},
     completer,
     env::Env,
-    error::KubeError,
+    error::ClickError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
 };
@@ -46,7 +46,7 @@ fn write_logs_to_file(
     env: &Env,
     path: &PathBuf,
     mut reader: BufReader<Response>,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     let mut file = std::fs::File::create(path)?;
     let mut buffer = [0; 1024];
     while !env.ctrlcbool.load(Ordering::SeqCst) {
@@ -56,7 +56,7 @@ fn write_logs_to_file(
         }
         file.write_all(&buffer[0..amt])?;
     }
-    file.flush().map_err(KubeError::from)
+    file.flush().map_err(ClickError::from)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -70,7 +70,7 @@ fn do_logs<'a>(
     editor_opt: Option<&str>,
     timeout: Option<Duration>,
     writer: &mut ClickWriter,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     let cont = cont_opt.unwrap_or_else(|| pick_container(obj, writer));
     opts.container = Some(cont);
 
@@ -98,7 +98,7 @@ fn do_logs<'a>(
                     println!("Wrote logs to {}", pbuf.to_str().unwrap());
                     Ok(())
                 }
-                Err(e) => Err(KubeError::CommandError(format!(
+                Err(e) => Err(ClickError::CommandError(format!(
                     "Can't generate output path: {}",
                     e
                 ))),
@@ -113,7 +113,7 @@ fn do_logs<'a>(
                 match std::env::var("EDITOR") {
                     Ok(ed) => ed,
                     Err(e) => {
-                        return Err(KubeError::CommandError(format!(
+                        return Err(ClickError::CommandError(format!(
                             "Could not get EDITOR environment variable: {}",
                             e
                         )));
@@ -123,7 +123,7 @@ fn do_logs<'a>(
             let tmpdir = match env.tempdir {
                 Ok(ref td) => td,
                 Err(ref e) => {
-                    return Err(KubeError::CommandError(format!(
+                    return Err(ClickError::CommandError(format!(
                         "Failed to create tempdir: {}",
                         e
                     )));
@@ -182,7 +182,7 @@ fn do_logs<'a>(
             Ok(())
         }
     } else {
-        Err(KubeError::CommandError(
+        Err(ClickError::CommandError(
             "Could not get reader for logs".to_string(),
         ))
     }
@@ -361,7 +361,7 @@ command!(
                         writer,
                     )
                 } else {
-                    Err(KubeError::CommandError(
+                    Err(ClickError::CommandError(
                         "Logs only available on a pod".to_string(),
                     ))
                 }

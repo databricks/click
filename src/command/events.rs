@@ -10,7 +10,7 @@ use crate::{
     command::time_since,
     completer,
     env::{Env, ObjectSelection},
-    error::KubeError,
+    error::ClickError,
     kobj::KObj,
     output::ClickWriter,
 };
@@ -29,7 +29,7 @@ fn event_cmp(e1: &api::Event, e2: &api::Event) -> cmp::Ordering {
     }
 }
 
-fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) -> Result<(), KubeError> {
+fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) -> Result<(), ClickError> {
     let mut opts: ListOptional = Default::default();
     let mut include_namespace = false;
     let (request, _body) = if let Some(ns) = obj.namespace.as_ref() {
@@ -50,7 +50,7 @@ fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) -> Resu
     Ok(())
 }
 
-fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), KubeError> {
+fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), ClickError> {
     let mut opts: ListOptional = Default::default();
     let mut include_namespace = false;
     let (request, _body) = if let Some(ns) = env.namespace.as_ref() {

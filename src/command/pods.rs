@@ -11,7 +11,7 @@ use crate::{
     command::{run_list_command, Extractor},
     completer,
     env::{Env, ObjectSelection},
-    error::KubeError,
+    error::ClickError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
     table::CellSpec,
@@ -291,7 +291,7 @@ command!(
                 if obj.is_pod() {
                     print_containers(obj, env, matches.is_present("volumes"), writer)
                 } else {
-                    Err(KubeError::CommandError(
+                    Err(ClickError::CommandError(
                         "containers only possible on a Pod".to_string(),
                     ))
                 }
@@ -306,7 +306,7 @@ fn print_containers(
     env: &Env,
     volumes: bool,
     writer: &mut ClickWriter,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     let (request, _) = api::Pod::read_namespaced_pod(
         obj.name(),
         obj.namespace.as_ref().unwrap(),
@@ -387,11 +387,11 @@ fn print_containers(
                 }
                 Ok(())
             }
-            None => Err(KubeError::CommandError(
+            None => Err(ClickError::CommandError(
                 "No container info returned from api server".to_string(),
             )),
         },
-        api::ReadNamespacedPodResponse::Other(o) => Err(KubeError::CommandError(format!(
+        api::ReadNamespacedPodResponse::Other(o) => Err(ClickError::CommandError(format!(
             "Error getting pod info: {:?}",
             o
         ))),

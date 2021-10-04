@@ -16,7 +16,7 @@ use std::convert::From;
 use std::{env, error, fmt, io};
 
 #[derive(Debug)]
-pub enum KubeErrNo {
+pub enum ClickErrNo {
     InvalidContextName,
     InvalidCluster,
     InvalidUser,
@@ -24,31 +24,31 @@ pub enum KubeErrNo {
     Unknown,
 }
 
-impl fmt::Display for KubeErrNo {
+impl fmt::Display for ClickErrNo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            KubeErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
-            KubeErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
-            KubeErrNo::InvalidUser => write!(f, "Invalid User Name"),
-            KubeErrNo::Unauthorized => write!(
+            ClickErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
+            ClickErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
+            ClickErrNo::InvalidUser => write!(f, "Invalid User Name"),
+            ClickErrNo::Unauthorized => write!(
                 f,
                 "Not authorized to talk to cluster, check credentials in config"
             ),
-            KubeErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
+            ClickErrNo::Unknown => write!(f, "Unknown error talking to cluster"),
         }
     }
 }
 
-impl error::Error for KubeErrNo {
+impl error::Error for ClickErrNo {
     fn description(&self) -> &str {
         match self {
-            KubeErrNo::InvalidContextName => "Invalid Context Name",
-            KubeErrNo::InvalidCluster => "Invalid Cluster Name",
-            KubeErrNo::InvalidUser => "Invalid User Name",
-            KubeErrNo::Unauthorized => {
+            ClickErrNo::InvalidContextName => "Invalid Context Name",
+            ClickErrNo::InvalidCluster => "Invalid Cluster Name",
+            ClickErrNo::InvalidUser => "Invalid User Name",
+            ClickErrNo::Unauthorized => {
                 "Not authorized to talk to cluster, check credentials in config"
             }
-            KubeErrNo::Unknown => "Unknown error talking to cluster",
+            ClickErrNo::Unknown => "Unknown error talking to cluster",
         }
     }
 
@@ -57,12 +57,11 @@ impl error::Error for KubeErrNo {
     }
 }
 
-// TODO: This should really be called ClickError
 #[derive(Debug)]
-pub enum KubeError {
+pub enum ClickError {
     CommandError(String),
     ParseErr(String),
-    Kube(KubeErrNo),
+    Kube(ClickErrNo),
     KubeServerError(String),
     ConfigFileError(String),
     DecodeError(base64::DecodeError),
@@ -76,19 +75,19 @@ pub enum KubeError {
     Reqwest(reqwest::Error),
 }
 
-impl fmt::Display for KubeError {
+impl fmt::Display for ClickError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            KubeError::CommandError(ref s) => write!(f, "Error running command: {}", s),
-            KubeError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
-            KubeError::Kube(ref err) => write!(f, "Kube Error: {}", err),
-            KubeError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
-            KubeError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
-            KubeError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
-            KubeError::Io(ref err) => write!(f, "IO error: {}", err),
-            KubeError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
-            KubeError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
-            KubeError::RequestError(ref err) => match err {
+            ClickError::CommandError(ref s) => write!(f, "Error running command: {}", s),
+            ClickError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
+            ClickError::Kube(ref err) => write!(f, "Kube Error: {}", err),
+            ClickError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
+            ClickError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
+            ClickError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
+            ClickError::Io(ref err) => write!(f, "IO error: {}", err),
+            ClickError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
+            ClickError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
+            ClickError::RequestError(ref err) => match err {
                 k8s_openapi::RequestError::Http(e) => {
                     write!(f, "Error preparing HTTP request: {}", e)
                 }
@@ -98,85 +97,85 @@ impl fmt::Display for KubeError {
                     e
                 ),
             },
-            KubeError::Clap(ref err) => write!(f, "Error in clap: {}", err),
-            KubeError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
-            KubeError::Pem(ref err) => write!(f, "Pem error: {}", err),
-            KubeError::Reqwest(ref err) => write!(f, "Reqwest error: {}", err),
+            ClickError::Clap(ref err) => write!(f, "Error in clap: {}", err),
+            ClickError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
+            ClickError::Pem(ref err) => write!(f, "Pem error: {}", err),
+            ClickError::Reqwest(ref err) => write!(f, "Reqwest error: {}", err),
         }
     }
 }
 
-impl error::Error for KubeError {
+impl error::Error for ClickError {
     fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
-            KubeError::CommandError(_) => None,
-            KubeError::ParseErr(_) => None,
-            KubeError::Kube(ref err) => Some(err),
-            KubeError::KubeServerError(_) => None,
-            KubeError::ConfigFileError(_) => None,
-            KubeError::DecodeError(ref err) => Some(err),
-            KubeError::Io(ref err) => Some(err),
-            KubeError::SerdeJson(ref err) => Some(err),
-            KubeError::SerdeYaml(ref err) => Some(err),
-            KubeError::RequestError(ref err) => Some(err),
-            KubeError::Clap(ref err) => Some(err),
-            KubeError::JoinPathsError(ref err) => Some(err),
-            KubeError::Pem(ref err) => Some(err),
-            KubeError::Reqwest(ref err) => Some(err),
+            ClickError::CommandError(_) => None,
+            ClickError::ParseErr(_) => None,
+            ClickError::Kube(ref err) => Some(err),
+            ClickError::KubeServerError(_) => None,
+            ClickError::ConfigFileError(_) => None,
+            ClickError::DecodeError(ref err) => Some(err),
+            ClickError::Io(ref err) => Some(err),
+            ClickError::SerdeJson(ref err) => Some(err),
+            ClickError::SerdeYaml(ref err) => Some(err),
+            ClickError::RequestError(ref err) => Some(err),
+            ClickError::Clap(ref err) => Some(err),
+            ClickError::JoinPathsError(ref err) => Some(err),
+            ClickError::Pem(ref err) => Some(err),
+            ClickError::Reqwest(ref err) => Some(err),
         }
     }
 }
 
-impl From<io::Error> for KubeError {
-    fn from(err: io::Error) -> KubeError {
-        KubeError::Io(err)
+impl From<io::Error> for ClickError {
+    fn from(err: io::Error) -> ClickError {
+        ClickError::Io(err)
     }
 }
 
-impl From<serde_json::Error> for KubeError {
-    fn from(err: serde_json::Error) -> KubeError {
-        KubeError::SerdeJson(err)
+impl From<serde_json::Error> for ClickError {
+    fn from(err: serde_json::Error) -> ClickError {
+        ClickError::SerdeJson(err)
     }
 }
 
-impl From<serde_yaml::Error> for KubeError {
-    fn from(err: serde_yaml::Error) -> KubeError {
-        KubeError::SerdeYaml(err)
+impl From<serde_yaml::Error> for ClickError {
+    fn from(err: serde_yaml::Error) -> ClickError {
+        ClickError::SerdeYaml(err)
     }
 }
 
-impl From<base64::DecodeError> for KubeError {
-    fn from(err: base64::DecodeError) -> KubeError {
-        KubeError::DecodeError(err)
+impl From<base64::DecodeError> for ClickError {
+    fn from(err: base64::DecodeError) -> ClickError {
+        ClickError::DecodeError(err)
     }
 }
 
-impl From<k8s_openapi::RequestError> for KubeError {
-    fn from(err: k8s_openapi::RequestError) -> KubeError {
-        KubeError::RequestError(err)
+impl From<k8s_openapi::RequestError> for ClickError {
+    fn from(err: k8s_openapi::RequestError) -> ClickError {
+        ClickError::RequestError(err)
     }
 }
 
-impl From<clap::Error> for KubeError {
-    fn from(err: clap::Error) -> KubeError {
-        KubeError::Clap(err)
+impl From<clap::Error> for ClickError {
+    fn from(err: clap::Error) -> ClickError {
+        ClickError::Clap(err)
     }
 }
 
-impl From<env::JoinPathsError> for KubeError {
-    fn from(err: env::JoinPathsError) -> KubeError {
-        KubeError::JoinPathsError(err)
+impl From<env::JoinPathsError> for ClickError {
+    fn from(err: env::JoinPathsError) -> ClickError {
+        ClickError::JoinPathsError(err)
     }
 }
 
-impl From<pem::PemError> for KubeError {
-    fn from(err: pem::PemError) -> KubeError {
-        KubeError::Pem(err)
+impl From<pem::PemError> for ClickError {
+    fn from(err: pem::PemError) -> ClickError {
+        ClickError::Pem(err)
     }
 }
 
-impl From<reqwest::Error> for KubeError {
-    fn from(err: reqwest::Error) -> KubeError {
-        KubeError::Reqwest(err)
+impl From<reqwest::Error> for ClickError {
+    fn from(err: reqwest::Error) -> ClickError {
+        ClickError::Reqwest(err)
     }
 }

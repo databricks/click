@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use crate::{
     config::{AuthProvider, ExecAuth, ExecProvider},
-    error::{KubeErrNo, KubeError},
+    error::{ClickErrNo, ClickError},
 };
 
 pub enum UserAuth {
@@ -28,30 +28,30 @@ pub enum UserAuth {
 }
 
 impl UserAuth {
-    pub fn _from_identity(id: Identity) -> Result<UserAuth, KubeError> {
+    pub fn _from_identity(id: Identity) -> Result<UserAuth, ClickError> {
         Ok(UserAuth::Ident(id))
     }
 
-    pub fn with_auth_provider(auth_provider: AuthProvider) -> Result<UserAuth, KubeError> {
+    pub fn with_auth_provider(auth_provider: AuthProvider) -> Result<UserAuth, ClickError> {
         Ok(UserAuth::AuthProvider(Box::new(auth_provider)))
     }
 
-    pub fn with_exec_provider(exec_provider: ExecProvider) -> Result<UserAuth, KubeError> {
+    pub fn with_exec_provider(exec_provider: ExecProvider) -> Result<UserAuth, ClickError> {
         Ok(UserAuth::ExecProvider(Box::new(exec_provider)))
     }
 
-    pub fn with_token(token: String) -> Result<UserAuth, KubeError> {
+    pub fn with_token(token: String) -> Result<UserAuth, ClickError> {
         Ok(UserAuth::Token(token))
     }
 
-    pub fn with_user_pass(user: String, pass: String) -> Result<UserAuth, KubeError> {
+    pub fn with_user_pass(user: String, pass: String) -> Result<UserAuth, ClickError> {
         Ok(UserAuth::UserPass(user, pass))
     }
 
     /// construct an identity from a key and cert. need the endpoint to deceide which kind of
     /// identity to use since rustls wants something different from nativetls, and we use rustls for
     /// dns name hosts and native for ip hosts
-    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> Result<UserAuth, KubeError>
+    pub fn from_key_cert<P>(key: P, cert: P, endpoint: &Url) -> Result<UserAuth, ClickError>
     where
         PathBuf: From<P>,
     {
@@ -67,7 +67,7 @@ impl UserAuth {
         key: String,
         cert: String,
         endpoint: &Url,
-    ) -> Result<UserAuth, KubeError> {
+    ) -> Result<UserAuth, ClickError> {
         let key_decoded = ::base64::decode(&key)?;
         let cert_decoded = ::base64::decode(&cert)?;
         let pkcs12 = Context::use_pkcs12(endpoint);
@@ -100,7 +100,7 @@ fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
 }
 
 // get the right kind of id
-fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError> {
+fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, ClickError> {
     let key_pem = pem::parse(&key)?;
 
     let key_der = match key_pem.tag.as_str() {
@@ -113,7 +113,7 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError
             key_pem.contents
         }
         _ => {
-            return Err(KubeError::ConfigFileError(format!(
+            return Err(ClickError::ConfigFileError(format!(
                 "Unknown key type: {}",
                 key_pem.tag
             )));
@@ -123,14 +123,14 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, KubeError
     let cert_pem = pem::parse(&cert)?;
 
     let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "")
-        .ok_or_else(|| KubeError::ConfigFileError("Could not parse pkcs12 data".to_string()))?;
+        .ok_or_else(|| ClickError::ConfigFileError("Could not parse pkcs12 data".to_string()))?;
 
     let pkcs12der = pfx.to_der();
 
     Identity::from_pkcs12_der(&pkcs12der, "").map_err(|e| e.into())
 }
 
-fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Result<Identity, KubeError> {
+fn get_id_from_paths(key: PathBuf, cert: PathBuf, pkcs12: bool) -> Result<Identity, ClickError> {
     let mut key_buf = Vec::new();
     File::open(key)?.read_to_end(&mut key_buf)?;
     if pkcs12 {
@@ -148,7 +148,7 @@ fn get_id_from_data(
     mut key: Vec<u8>,
     mut cert: Vec<u8>,
     pkcs12: bool,
-) -> Result<Identity, KubeError> {
+) -> Result<Identity, ClickError> {
     if pkcs12 {
         get_id_from_pkcs12(key, cert)
     } else {
@@ -415,7 +415,7 @@ impl Context {
                 // (not HTTP 200, but still parsed successfully)
                 Ok(other) => {
                     if status_code == http::StatusCode::UNAUTHORIZED {
-                        return Err(Box::new(KubeError::Kube(KubeErrNo::Unauthorized)));
+                        return Err(Box::new(ClickError::Kube(ClickErrNo::Unauthorized)));
                     } else {
                         return Err(
                             format!("Got unexpected status {} {:?}", status_code, other).into()

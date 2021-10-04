@@ -25,7 +25,7 @@ use std::io::{BufReader, Read};
 //use crate::certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 use super::kubefile::{AuthProvider, ExecProvider};
 use crate::config::ClickConfig;
-use crate::error::{KubeErrNo, KubeError};
+use crate::error::{ClickErrNo, ClickError};
 use crate::k8s::UserAuth as K8SUserAuth;
 
 #[derive(Debug)]
@@ -111,9 +111,9 @@ pub struct Config {
 }
 
 // some utility functions
-fn get_full_path(path: String) -> Result<String, KubeError> {
+fn get_full_path(path: String) -> Result<String, ClickError> {
     if path.is_empty() {
-        return Err(KubeError::ConfigFileError(
+        return Err(ClickError::ConfigFileError(
             "Empty certificate/key path".to_owned(),
         ));
     }
@@ -123,7 +123,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     } else if let Some(home_dir) = dirs::home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
-        Err(KubeError::ConfigFileError(
+        Err(ClickError::ConfigFileError(
             "Could not get path kubernetes \
              certificates/keys (not fully specified, and \
              your home directory is not known."
@@ -133,7 +133,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
 }
 
 impl Config {
-    pub fn from_files(paths: &[String]) -> Result<Config, KubeError> {
+    pub fn from_files(paths: &[String]) -> Result<Config, ClickError> {
         let iconfs = paths
             .iter()
             .map(|config_path| super::kubefile::Config::from_file(config_path))
@@ -181,7 +181,7 @@ impl Config {
                         Ok(mut cert) => {
                             cert.retain(|&i| i != 0);
                             let cert_pem = String::from_utf8(cert).map_err(|e| {
-                                KubeError::ConfigFileError(format!(
+                                ClickError::ConfigFileError(format!(
                                     "Invalid utf8 data in certificate: {}",
                                     e
                                 ))
@@ -240,24 +240,24 @@ impl Config {
         &self,
         context_name: &str,
         click_conf: &ClickConfig,
-    ) -> Result<crate::k8s::Context, KubeError> {
+    ) -> Result<crate::k8s::Context, ClickError> {
         let context = self
             .contexts
             .get(context_name)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidContextName))?;
         let cluster = self
             .clusters
             .get(&context.cluster)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidCluster))?;
         let user = self
             .users
             .get(&context.user)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
         let endpoint = reqwest::Url::parse(&cluster.server).unwrap();
         let ca_cert = cluster.cert.as_ref().map(|c| get_reqwest_cert(c));
 
-        let mut k8suser = Err(KubeError::ConfigFileError(
+        let mut k8suser = Err(ClickError::ConfigFileError(
             "[WARN]: Context {} has no client certificate and key, nor does it specify \
              any auth method (user/pass, token, auth-provider).  You will likely not be \
              able to authenticate to this cluster.  Please check your kube config."

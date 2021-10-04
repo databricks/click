@@ -15,7 +15,7 @@
 /// Helper functions to deal with Values
 use serde_json::value::Value;
 
-use crate::error::KubeError;
+use crate::error::ClickError;
 
 use std::borrow::Cow;
 
@@ -76,12 +76,12 @@ pub fn _val_item_count(pointer: &str, value: &Value) -> usize {
     }
 }
 
-pub fn _get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
+pub fn _get_val_as<T>(pointer: &str, value: &Value) -> Result<T, ClickError>
 where
     for<'de> T: serde::Deserialize<'de>,
 {
     match value.pointer(pointer) {
-        Some(p) => serde::Deserialize::deserialize(p).map_err(KubeError::from),
-        None => Err(KubeError::ParseErr("Can't deserialize".to_owned())),
+        Some(p) => serde::Deserialize::deserialize(p).map_err(ClickError::from),
+        None => Err(ClickError::ParseErr("Can't deserialize".to_owned())),
     }
 }

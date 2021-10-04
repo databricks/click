@@ -21,7 +21,7 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::Read;
 
-use crate::error::KubeError;
+use crate::error::ClickError;
 
 // During testing we use a mock clock to be time independent.
 #[cfg(test)]
@@ -38,14 +38,14 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_reader<R>(r: R) -> Result<Config, KubeError>
+    pub fn from_reader<R>(r: R) -> Result<Config, ClickError>
     where
         R: Read,
     {
-        serde_yaml::from_reader(r).map_err(KubeError::from)
+        serde_yaml::from_reader(r).map_err(ClickError::from)
     }
 
-    pub fn from_file(path: &str) -> Result<Config, KubeError> {
+    pub fn from_file(path: &str) -> Result<Config, ClickError> {
         let f = File::open(path)?;
         Config::from_reader(f)
     }
@@ -161,7 +161,7 @@ impl AuthProvider {
         }
     }
 
-    fn parse_expiry(expiry_str: &str) -> Result<DateTime<Local>, KubeError> {
+    fn parse_expiry(expiry_str: &str) -> Result<DateTime<Local>, ClickError> {
         // Somehow google sometimes puts a date like "2018-03-31 22:22:01" in the config
         // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
         if let Ok(expiry) = DateTime::parse_from_rfc3339(expiry_str) {
@@ -169,7 +169,7 @@ impl AuthProvider {
         } else if let Ok(expiry) = Local.datetime_from_str(expiry_str, "%Y-%m-%d %H:%M:%S") {
             Ok(expiry)
         } else {
-            Err(KubeError::ParseErr(format!(
+            Err(ClickError::ParseErr(format!(
                 "Cannot parse expiry: {}",
                 expiry_str
             )))
@@ -329,7 +329,7 @@ struct ExecResultStatus {
 }
 
 impl ExecConfig {
-    fn exec(&self) -> Result<ExecResult, KubeError> {
+    fn exec(&self) -> Result<ExecResult, ClickError> {
         match self.command {
             Some(ref command) => {
                 let expr = if let Some(args) = &self.args {
@@ -345,9 +345,9 @@ impl ExecConfig {
                     expr
                 };
 
-                serde_json::from_reader(expr.reader()?).map_err(KubeError::from)
+                serde_json::from_reader(expr.reader()?).map_err(ClickError::from)
             }
-            None => Err(KubeError::ConfigFileError(
+            None => Err(ClickError::ConfigFileError(
                 "No command specified in exec config".to_string(),
             )),
         }

@@ -4,7 +4,7 @@ use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::env::Env;
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::output::ClickWriter;
 
 use std::cell::RefCell;
@@ -63,7 +63,7 @@ pub trait Cmd {
         env: &mut Env,
         args: &mut dyn Iterator<Item = &str>,
         writer: &mut ClickWriter,
-    ) -> Result<(), KubeError>;
+    ) -> Result<(), ClickError>;
     fn is(&self, l: &str) -> bool;
     fn get_name(&self) -> &'static str;
     fn try_complete(&self, index: usize, prefix: &str, env: &Env) -> Vec<RustlinePair>;
@@ -106,9 +106,9 @@ pub fn exec_match<F>(
     args: &mut dyn Iterator<Item = &str>,
     writer: &mut ClickWriter,
     func: F,
-) -> Result<(), KubeError>
+) -> Result<(), ClickError>
 where
-    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> Result<(), KubeError>,
+    F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> Result<(), ClickError>,
 {
     let matches = clap.borrow_mut().get_matches_from_safe_borrow(args);
     match matches {
@@ -120,7 +120,7 @@ where
                 clickwriteln!(writer, "{}", e.message);
                 Ok(())
             } else {
-                Err(KubeError::Clap(e))
+                Err(ClickError::Clap(e))
             }
         }
     }
@@ -214,7 +214,7 @@ macro_rules! command {
                 env: &mut Env,
                 args: &mut dyn Iterator<Item = &str>,
                 writer: &mut ClickWriter,
-            ) -> Result<(), crate::error::KubeError> {
+            ) -> Result<(), crate::error::ClickError> {
                 exec_match(&self.clap, env, args, writer, $cmd_expr)
             }
 

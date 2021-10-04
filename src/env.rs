@@ -1,5 +1,5 @@
 use crate::config::{self, Alias, ClickConfig, Config};
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::kobj::{KObj, ObjType};
 use crate::output::ClickWriter;
 
@@ -284,7 +284,7 @@ impl Env {
         continue_all: &mut bool,
     ) -> bool
     where
-        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), KubeError>,
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), ClickError>,
     {
         if let Err(e) = f(obj, writer) {
             clickwriteln!(writer, "Error applying operation to {}: {}", obj.name, e);
@@ -321,9 +321,9 @@ impl Env {
         writer: &mut ClickWriter,
         sepfmt: Option<&str>,
         mut f: F,
-    ) -> Result<(), KubeError>
+    ) -> Result<(), ClickError>
     where
-        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), KubeError>,
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), ClickError>,
     {
         match self.current_selection() {
             ObjectSelection::Single(obj) => f(obj, writer),
@@ -332,7 +332,7 @@ impl Env {
                 let mut go = true;
                 for obj in range.iter() {
                     if !go {
-                        return Err(KubeError::CommandError("Aborting range action".to_string()));
+                        return Err(ClickError::CommandError("Aborting range action".to_string()));
                     }
                     if let Some(fmt) = sepfmt {
                         let mut fmtvars = HashMap::new();
@@ -372,7 +372,7 @@ impl Env {
                 }
                 Ok(())
             }
-            ObjectSelection::None => Err(KubeError::CommandError(
+            ObjectSelection::None => Err(ClickError::CommandError(
                 "No objects currently active".to_string(),
             )),
         }

@@ -1,5 +1,5 @@
 use crate::describe;
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::output::ClickWriter;
 use crate::values::val_str_opt;
 use crate::Env;
@@ -172,7 +172,7 @@ impl KObj {
         matches: &ArgMatches,
         env: &Env,
         writer: &mut ClickWriter,
-    ) -> Result<(), KubeError> {
+    ) -> Result<(), ClickError> {
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {

@@ -12,7 +12,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 use crate::env::Env;
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::table::CellSpec;
@@ -73,7 +73,7 @@ pub fn run_list_command<T, F>(
     extra_col_map: Option<&[(&'static str, &'static str)]>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     get_kobj: F,
-) -> Result<(), KubeError>
+) -> Result<(), ClickError>
 where
     T: ListableResource + Metadata<Ty = ObjectMeta> + for<'de> Deserialize<'de> + Debug,
     F: Fn(&T) -> KObj,
@@ -195,7 +195,7 @@ pub fn handle_list_result<'a, T, F>(
     sort: Option<command_def::SortFunc<T>>,
     reverse: bool,
     get_kobj: F,
-) -> Result<(), KubeError>
+) -> Result<(), ClickError>
 where
     T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
     F: Fn(&T) -> KObj,

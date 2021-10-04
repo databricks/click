@@ -6,7 +6,7 @@ use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
     completer,
     env::Env,
-    error::KubeError,
+    error::ClickError,
     kobj::KObj,
     output::ClickWriter,
 };
@@ -33,7 +33,7 @@ fn do_exec(
     term_opt: &Option<&str>,
     do_terminal: bool,
     writer: &mut ClickWriter,
-) -> Result<(), KubeError> {
+) -> Result<(), ClickError> {
     let ns = pod.namespace.as_ref().unwrap();
     if do_terminal {
         let terminal = if let Some(t) = term_opt {
@@ -84,18 +84,18 @@ fn do_exec(
                 if s.success() {
                     Ok(())
                 } else {
-                    Err(KubeError::CommandError(
+                    Err(ClickError::CommandError(
                         "kubectl exited abnormally".to_string(),
                     ))
                 }
             }
             Err(e) => {
                 if let io::ErrorKind::NotFound = e.kind() {
-                    Err(KubeError::CommandError(
+                    Err(ClickError::CommandError(
                         "Could not find kubectl binary. Is it in your PATH?".to_string(),
                     ))
                 } else {
-                    Err(KubeError::Io(e))
+                    Err(ClickError::Io(e))
                 }
             }
         }
@@ -205,14 +205,14 @@ command!(
                             writer,
                         )
                     } else {
-                        Err(KubeError::CommandError(
+                        Err(ClickError::CommandError(
                             "Exec only possible on pods".to_string(),
                         ))
                     }
                 },
             )
         } else {
-            Err(KubeError::CommandError(
+            Err(ClickError::CommandError(
                 "Need an active context in order to exec.".to_string(),
             ))
         }

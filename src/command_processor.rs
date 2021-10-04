@@ -1,6 +1,6 @@
 use crate::command::command_def::Cmd;
 use crate::completer::ClickHelper;
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::parser::{try_parse_csl, try_parse_range, Parser};
@@ -29,7 +29,7 @@ enum RightExpr<'a> {
     Append(&'a str),
 }
 
-fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), KubeError> {
+fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), ClickError> {
     let (click_cmd, rest) = line.split_at(range.start);
 
     let rbytes = rest.as_bytes();
@@ -41,12 +41,12 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
     }
 
     if sep == b'|' && sepcnt > 1 {
-        Err(KubeError::ParseErr(format!(
+        Err(ClickError::ParseErr(format!(
             "Parse error at {}: unexpected ||",
             range.start
         )))
     } else if sep == b'>' && sepcnt > 2 {
-        Err(KubeError::ParseErr(format!(
+        Err(ClickError::ParseErr(format!(
             "Parse error at {}: unexpected >>",
             range.start
         )))
@@ -61,7 +61,7 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
                 }
             }
             _ => {
-                return Err(KubeError::ParseErr(format!(
+                return Err(ClickError::ParseErr(format!(
                     "Parse error at {}: unexpected separator",
                     range.start
                 )))
@@ -91,7 +91,7 @@ pub fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
@@ -506,7 +506,7 @@ mod tests {
     use super::*;
     use crate::config::{get_test_config, Alias, ClickConfig};
     use crate::env::ObjectSelection;
-    use crate::error::KubeError;
+    use crate::error::ClickError;
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
@@ -521,7 +521,7 @@ mod tests {
             _env: &mut Env,
             args: &mut dyn Iterator<Item = &str>,
             writer: &mut ClickWriter,
-        ) -> Result<(), KubeError> {
+        ) -> Result<(), ClickError> {
             match args.next() {
                 Some(arg) => clickwrite!(writer, "Called with {}", arg),
                 None => clickwrite!(writer, "Called with no args"),

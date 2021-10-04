@@ -20,7 +20,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 
-use crate::error::KubeError;
+use crate::error::ClickError;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Alias {
@@ -141,14 +141,14 @@ impl Default for ClickConfig {
 }
 
 impl ClickConfig {
-    pub fn from_reader<R>(r: R) -> Result<ClickConfig, KubeError>
+    pub fn from_reader<R>(r: R) -> Result<ClickConfig, ClickError>
     where
         R: Read,
     {
-        serde_yaml::from_reader(r).map_err(KubeError::from)
+        serde_yaml::from_reader(r).map_err(ClickError::from)
     }
 
-    pub fn from_file(path: &str) -> Result<ClickConfig, KubeError> {
+    pub fn from_file(path: &str) -> Result<ClickConfig, ClickError> {
         let f = File::open(path)?;
         ClickConfig::from_reader(f)
     }
@@ -170,11 +170,11 @@ impl ClickConfig {
 
     /// Save this config to specified path.  It's safe to call this from multiple running instances
     /// of Click, since we use an AtomicFile
-    pub fn save_to_file(&self, path: &str) -> Result<(), KubeError> {
+    pub fn save_to_file(&self, path: &str) -> Result<(), ClickError> {
         let af = AtomicFile::new(path, AllowOverwrite);
         af.write(|mut f| serde_yaml::to_writer(&mut f, &self))
             .map_err(|e| {
-                KubeError::ConfigFileError(format!("Failed to write config file: {}", e))
+                ClickError::ConfigFileError(format!("Failed to write config file: {}", e))
             })?;
         Ok(())
     }

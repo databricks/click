@@ -22,12 +22,11 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use crate::certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
-use crate::config::ClickConfig;
-use crate::error::{KubeErrNo, KubeError};
-use crate::kube::{ClientCertKey, Kluster, KlusterAuth};
-
+//use crate::certs::{get_cert, get_cert_from_pem, get_key_from_str, get_private_key};
 use super::kubefile::{AuthProvider, ExecProvider};
+use crate::config::ClickConfig;
+use crate::error::{ClickErrNo, ClickError};
+use crate::k8s::UserAuth as K8SUserAuth;
 
 #[derive(Debug)]
 pub struct ClusterConf {
@@ -112,9 +111,9 @@ pub struct Config {
 }
 
 // some utility functions
-fn get_full_path(path: String) -> Result<String, KubeError> {
+fn get_full_path(path: String) -> Result<String, ClickError> {
     if path.is_empty() {
-        return Err(KubeError::ConfigFileError(
+        return Err(ClickError::ConfigFileError(
             "Empty certificate/key path".to_owned(),
         ));
     }
@@ -124,7 +123,7 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     } else if let Some(home_dir) = dirs::home_dir() {
         Ok(format!("{}/.kube/{}", home_dir.as_path().display(), path))
     } else {
-        Err(KubeError::ConfigFileError(
+        Err(ClickError::ConfigFileError(
             "Could not get path kubernetes \
              certificates/keys (not fully specified, and \
              your home directory is not known."
@@ -133,78 +132,8 @@ fn get_full_path(path: String) -> Result<String, KubeError> {
     }
 }
 
-fn cert_key_from_paths(
-    client_cert_path: String,
-    key_path: String,
-    context: &str,
-) -> Result<ClientCertKey, KubeError> {
-    if client_cert_path.is_empty() {
-        return Err(KubeError::ConfigFileError(format!(
-            "Empty client certificate path for {}, can't continue",
-            context
-        )));
-    }
-    if key_path.is_empty() {
-        return Err(KubeError::ConfigFileError(format!(
-            "Empty client key path for {}, can't continue",
-            context
-        )));
-    }
-
-    let cert_full_path = get_full_path(client_cert_path)?;
-    let key_full_path = get_full_path(key_path)?;
-    if let (Some(cert), Some(private_key)) = (
-        get_cert(cert_full_path.as_str()),
-        get_private_key(key_full_path.as_str()),
-    ) {
-        Ok(ClientCertKey::with_cert_and_key(cert, private_key))
-    } else {
-        Err(KubeError::ConfigFileError(format!(
-            "Can't read/convert cert or private key for {}",
-            context
-        )))
-    }
-}
-
-fn cert_key_from_data(
-    client_cert_data: &str,
-    key_data: &str,
-    context: &str,
-) -> Result<ClientCertKey, KubeError> {
-    if client_cert_data.is_empty() {
-        Err(KubeError::ConfigFileError(format!(
-            "Empty client certificate data for {}, can't continue",
-            context
-        )))
-    } else if key_data.is_empty() {
-        Err(KubeError::ConfigFileError(format!(
-            "Empty client key data for {}, can't continue",
-            context
-        )))
-    } else {
-        let mut cert_enc = ::base64::decode(client_cert_data)?;
-        cert_enc.retain(|&i| i != 0);
-        let cert_pem = String::from_utf8(cert_enc).map_err(|e| {
-            KubeError::ConfigFileError(format!("Invalid utf8 data in certificate: {}", e))
-        })?;
-        let cert = get_cert_from_pem(cert_pem.as_str());
-        let mut key_enc = ::base64::decode(key_data)?;
-        key_enc.retain(|&i| i != 0);
-        let key_str = String::from_utf8(key_enc)
-            .map_err(|e| KubeError::ConfigFileError(format!("Invalid utf8 data in key: {}", e)))?;
-        let key = get_key_from_str(key_str.as_str());
-        match (cert, key) {
-            (Some(c), Some(k)) => Ok(ClientCertKey::with_cert_and_key(c, k)),
-            _ => Err(KubeError::ConfigFileError(format!(
-                "Invalid certificate or key data for context: {}",
-                context
-            ))),
-        }
-    }
-}
-
 impl Config {
-    pub fn from_files(paths: &[String]) -> Result<Config, KubeError> {
+    pub fn from_files(paths: &[String]) -> Result<Config, ClickError> {
         let iconfs = paths
             .iter()
             .map(|config_path| super::kubefile::Config::from_file(config_path))
@@ -252,7 +181,7 @@ impl Config {
                         Ok(mut cert) => {
                             cert.retain(|&i| i != 0);
                             let cert_pem = String::from_utf8(cert).map_err(|e| {
-                                KubeError::ConfigFileError(format!(
+                                ClickError::ConfigFileError(format!(
                                     "Invalid utf8 data in certificate: {}",
                                     e
                                 ))
@@ -307,76 +236,81 @@ impl Config {
         })
     }
 
-    pub fn cluster_for_context(
+    pub fn get_context(
         &self,
         context_name: &str,
         click_conf: &ClickConfig,
-    ) -> Result<Kluster, KubeError> {
+    ) -> Result<crate::k8s::Context, ClickError> {
         let context = self
             .contexts
             .get(context_name)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidContextName))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidContextName))?;
         let cluster = self
             .clusters
             .get(&context.cluster)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidCluster))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidCluster))?;
         let user = self
             .users
             .get(&context.user)
-            .ok_or(KubeError::Kube(KubeErrNo::InvalidUser))?;
+            .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
-        let mut client_cert_key = None;
-        let mut auth = None;
+        let endpoint = reqwest::Url::parse(&cluster.server).unwrap();
+        let ca_cert = cluster.cert.as_ref().map(|c| get_reqwest_cert(c));
+
+        let mut k8suser = Err(ClickError::ConfigFileError(
+            "[WARN]: Context {} has no client certificate and key, nor does it specify \
+             any auth method (user/pass, token, auth-provider).  You will likely not be \
+             able to authenticate to this cluster.  Please check your kube config."
+                .to_string(),
+        ));
+        //let mut auth = None;
         for user_auth in user.auths.iter().rev() {
             match user_auth {
-                UserAuth::Token(ref token) => auth = Some(KlusterAuth::with_token(token.as_str())),
-                UserAuth::UserPass(ref username, ref password) => {
-                    auth = Some(KlusterAuth::with_userpass(username, password))
+                UserAuth::Token(token) => {
+                    k8suser = K8SUserAuth::with_token(token.to_string());
                 }
-                UserAuth::AuthProvider(ref provider) => {
+                UserAuth::UserPass(username, password) => {
+                    k8suser =
+                        K8SUserAuth::with_user_pass(username.to_string(), password.to_string());
+                }
+                UserAuth::AuthProvider(provider) => {
                     provider.copy_up();
-                    auth = Some(KlusterAuth::with_auth_provider(*provider.clone()))
+                    k8suser = K8SUserAuth::with_auth_provider(*provider.clone());
                 }
-                UserAuth::ExecProvider(ref provider) => {
-                    auth = Some(KlusterAuth::with_exec_provider(provider.clone()))
+                UserAuth::ExecProvider(provider) => {
+                    k8suser = K8SUserAuth::with_exec_provider(provider.clone());
                 }
-                UserAuth::KeyCertData(ref cert_data, ref key_data) => {
-                    client_cert_key = Some(cert_key_from_data(cert_data, key_data, context_name))
+                UserAuth::KeyCertData(cert_data, key_data) => {
+                    k8suser = K8SUserAuth::from_key_cert_data(
+                        key_data.clone(),
+                        cert_data.clone(),
+                        &endpoint,
+                    );
                 }
-                UserAuth::KeyCertPath(ref cert_path, ref key_path) => {
-                    client_cert_key = Some(cert_key_from_paths(
-                        cert_path.clone(),
-                        key_path.clone(),
-                        context_name,
-                    ))
+                UserAuth::KeyCertPath(cert_path, key_path) => {
+                    let cert_full_path = get_full_path(cert_path.clone())?;
+                    let key_full_path = get_full_path(key_path.clone())?;
+                    k8suser =
+                        K8SUserAuth::from_key_cert(&key_full_path, &cert_full_path, &endpoint);
                 }
             };
         }
 
-        // Turns the Option<Result> into a Result<Option>, then extracts the Option
-        // or early returns if error
-        let client_cert_key = client_cert_key.map_or(Ok(None), |r| r.map(Some))?;
-
-        if auth.is_none() && client_cert_key.is_none() {
-            println!(
-                "[WARN]: Context {} has no client certificate and key, nor does it specify \
-                 any auth method (user/pass, token, auth-provider).  You will likely not be \
-                 able to authenticate to this cluster.  Please check your kube config.",
-                context_name
+        k8suser.map(|user| {
+            crate::k8s::Context::new(
+                context_name,
+                endpoint,
+                ca_cert,
+                Some(user),
+                click_conf.connect_timeout_secs,
+                click_conf.read_timeout_secs,
             )
-        }
-
-        Kluster::new(
-            context_name,
-            cluster.cert.clone(),
-            cluster.server.as_str(),
-            auth,
-            client_cert_key,
-            cluster.insecure_skip_tls_verify,
-            click_conf.connect_timeout_secs,
-            click_conf.read_timeout_secs,
-        )
+        })
     }
+}
+
+fn get_reqwest_cert(data: &str) -> reqwest::Certificate {
+    reqwest::Certificate::from_pem(data.as_bytes()).unwrap()
 }
 
 #[cfg(test)]

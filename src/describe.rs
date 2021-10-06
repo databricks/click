@@ -708,6 +708,7 @@ pub fn describe_format_deployment(v: Value) -> String {
 }
 
 /// Utility function to describe a rollout
+#[cfg(feature = "argorollouts")]
 pub fn describe_format_rollout(v: Value) -> String {
     let fields = vec![
         (

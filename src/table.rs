@@ -22,11 +22,12 @@ use prettytable::Row;
 use prettytable::{format, Table};
 use regex::Regex;
 
-use std::cmp::Ordering;
+use std::borrow::Cow;
+use std::cmp::{Ordering, PartialEq, PartialOrd};
 use std::io::Write;
 
 lazy_static! {
-    static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
+    pub static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
         .separators(
             &[format::LinePosition::Title, format::LinePosition::Bottom],
             format::LineSeparator::new('-', '+', '+', '+')
@@ -35,10 +36,10 @@ lazy_static! {
         .build();
 }
 
+#[derive(Debug)]
 enum CellSpecTxt<'a> {
     Index,
-    Str(&'a str),
-    String(String),
+    Str(Cow<'a, str>),
 }
 
 /// Holds a specification for a prettytable cell
@@ -49,22 +50,6 @@ pub struct CellSpec<'a> {
 }
 
 impl<'a> CellSpec<'a> {
-    pub fn new(txt: &'a str) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::Str(txt),
-            style: None,
-            align: None,
-        }
-    }
-
-    pub fn new_owned(txt: String) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::String(txt),
-            style: None,
-            align: None,
-        }
-    }
-
     pub fn new_index() -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Index,
@@ -73,7 +58,7 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_style(txt: &'a str, style: &'a str) -> CellSpec<'a> {
+    pub fn with_style(txt: Cow<'a, str>, style: &'a str) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
             style: Some(style),
@@ -81,17 +66,9 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_style_owned(txt: String, style: &'a str) -> CellSpec<'a> {
+    pub fn _with_align(txt: Cow<'a, str>, align: format::Alignment) -> CellSpec<'a> {
         CellSpec {
-            txt: CellSpecTxt::String(txt),
-            style: Some(style),
-            align: None,
-        }
-    }
-
-    pub fn with_align_owned(txt: String, align: format::Alignment) -> CellSpec<'a> {
-        CellSpec {
-            txt: CellSpecTxt::String(txt),
+            txt: CellSpecTxt::Str(txt),
             style: None,
             align: Some(align),
         }
@@ -105,7 +82,6 @@ impl<'a> CellSpec<'a> {
                 c
             }
             CellSpecTxt::Str(s) => Cell::new(s),
-            CellSpecTxt::String(s) => Cell::new(s.as_str()),
         };
 
         if let Some(a) = self.align {
@@ -120,10 +96,82 @@ impl<'a> CellSpec<'a> {
     }
 
     pub fn matches(&self, regex: &Regex) -> bool {
-        match self.txt {
+        match &self.txt {
             CellSpecTxt::Index => false,
             CellSpecTxt::Str(s) => regex.is_match(s),
-            CellSpecTxt::String(ref s) => regex.is_match(s),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for CellSpec<'a> {
+    fn from(s: &'a str) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(Cow::Borrowed(s)),
+            style: None,
+            align: None,
+        }
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for CellSpec<'a> {
+    fn from(c: Cow<'a, str>) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(c),
+            style: None,
+            align: None,
+        }
+    }
+}
+
+impl<'a> From<String> for CellSpec<'a> {
+    fn from(s: String) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Str(Cow::Owned(s)),
+            style: None,
+            align: None,
+        }
+    }
+}
+
+impl<'a, T> From<Option<T>> for CellSpec<'a>
+where
+    T: Into<CellSpec<'a>>,
+{
+    fn from(opt: Option<T>) -> Self {
+        match opt {
+            Some(v) => v.into(),
+            None => "Unknown".into(),
+        }
+    }
+}
+impl<'a> PartialEq for CellSpec<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.txt, &other.txt) {
+            (CellSpecTxt::Index, CellSpecTxt::Index) => true,
+            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => false,
+            (CellSpecTxt::Str(_), CellSpecTxt::Index) => false,
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
+        }
+    }
+}
+impl<'a> Eq for CellSpec<'a> {}
+
+impl<'a> PartialOrd for CellSpec<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (&self.txt, &other.txt) {
+            (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
+            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => None,
+            (CellSpecTxt::Str(_), CellSpecTxt::Index) => None,
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
+        }
+    }
+}
+
+impl<'a> Ord for CellSpec<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.partial_cmp(other) {
+            Some(o) => o,
+            None => Ordering::Equal,
         }
     }
 }
@@ -138,35 +186,6 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
             }
         }
         None => Ok(None),
-    }
-}
-
-pub fn filter<'a, T, I>(things: I, regex: Regex) -> Vec<(T, Vec<CellSpec<'a>>)>
-where
-    I: Iterator<Item = (T, Vec<CellSpec<'a>>)>,
-{
-    things
-        .filter(|thing| {
-            let mut has_match = false;
-            for cell_spec in thing.1.iter() {
-                if !has_match {
-                    has_match = cell_spec.matches(&regex);
-                }
-            }
-            has_match
-        })
-        .collect()
-}
-
-pub fn opt_sort<T, F>(o1: Option<T>, o2: Option<T>, f: F) -> Ordering
-where
-    F: Fn(&T, &T) -> Ordering,
-{
-    match (o1, o2) {
-        (Some(ref v1), Some(ref v2)) => f(v1, v2),
-        (None, Some(_)) => Ordering::Less,
-        (Some(_), None) => Ordering::Greater,
-        (None, None) => Ordering::Equal,
     }
 }
 
@@ -188,17 +207,15 @@ pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
 }
 
 #[allow(clippy::ptr_arg)]
-pub fn print_table<'a, T>(
-    table: &mut Table,
-    specs: &Vec<(T, Vec<CellSpec<'a>>)>,
-    writer: &mut ClickWriter,
-) {
+pub fn print_table(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut ClickWriter) {
+    let mut table = Table::new();
+    table.set_titles(titles);
     for (index, t_spec) in specs.iter().enumerate() {
-        let row_vec: Vec<Cell> = t_spec.1.iter().map(|spec| spec.to_cell(index)).collect();
+        let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index)).collect();
         table.add_row(Row::new(row_vec));
     }
     table.set_format(*TBLFMT);
-    if !term_print_table(table, writer) {
+    if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(0);
     }
 }

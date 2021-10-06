@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::cmd::Cmd;
-//use config::Alias;
+use k8s_openapi::{api::core::v1 as api, List};
+use rustyline::{
+    completion::{Completer, Pair},
+    highlight::Highlighter,
+    hint::Hinter,
+    validate::Validator,
+    Context, Helper, Result,
+};
+
+use crate::command::command_def::Cmd;
 use crate::env::Env;
 use crate::kobj::ObjType;
-
-use rustyline::completion::{Completer, Pair};
-use rustyline::highlight::Highlighter;
-use rustyline::hint::Hinter;
-use rustyline::{Context, Helper, Result};
 
 use std::rc::Rc;
 
@@ -35,7 +38,10 @@ impl Helper for ClickHelper {}
 
 impl Highlighter for ClickHelper {}
 
+impl Validator for ClickHelper {}
+
 impl Hinter for ClickHelper {
+    type Hint = String;
     fn hint(&self, _line: &str, _pos: usize, _context: &Context) -> Option<String> {
         None
     }
@@ -264,13 +270,24 @@ pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
 }
 
 pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
-    match env.run_on_kluster(|k| k.namespaces_for_context()) {
-        Some(v) => v
-            .iter()
-            .filter(|ns| ns.starts_with(prefix))
-            .map(|ns| Pair {
-                display: ns.clone(),
-                replacement: ns[prefix.len()..].to_string(),
+    let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
+    let ns_opt: Option<List<api::Namespace>> = env.run_on_context(|c| c.execute_list(request));
+    match ns_opt {
+        Some(nslist) => nslist
+            .items
+            .into_iter()
+            .filter_map(|ns| {
+                ns.metadata.name.and_then(|name| {
+                    if let Some(rep) = name.strip_prefix(prefix) {
+                        let replacement = rep.to_string();
+                        Some(Pair {
+                            display: name,
+                            replacement,
+                        })
+                    } else {
+                        None
+                    }
+                })
             })
             .collect(),
         None => vec![],
@@ -311,78 +328,9 @@ macro_rules! possible_values_completer {
     };
 }
 
-possible_values_completer!(setoptions_values_completer, crate::cmd::SET_OPTS);
+possible_values_completer!(setoptions_values_completer, crate::command::click::SET_OPTS);
 
 possible_values_completer!(
     portforwardaction_values_completer,
     ["list", "output", "stop"]
-);
-
-possible_values_completer!(
-    deployment_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "Desired",
-        "desired",
-        "Current",
-        "current",
-        "UpToDate",
-        "uptodate",
-        "Available",
-        "available",
-        "Age",
-        "age",
-        "Labels",
-        "labels"
-    ]
-);
-
-possible_values_completer!(
-    node_sort_values_completer,
-    ["Name", "name", "State", "state", "Age", "age", "Labels", "labels"]
-);
-
-possible_values_completer!(
-    pod_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "Ready",
-        "ready",
-        "Phase",
-        "phase",
-        "Age",
-        "age",
-        "Restarts",
-        "restarts",
-        "Labels",
-        "labels",
-        "Annotations",
-        "annotations",
-        "Node",
-        "node",
-        "Namespace",
-        "namespace"
-    ]
-);
-
-possible_values_completer!(
-    service_sort_values_completer,
-    [
-        "Name",
-        "name",
-        "ClusterIP",
-        "clusterip",
-        "ExternalIP",
-        "externalip",
-        "Age",
-        "age",
-        "Ports",
-        "ports",
-        "Labels",
-        "labels",
-        "Namespace",
-        "namespace"
-    ]
 );

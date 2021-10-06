@@ -15,7 +15,7 @@
 /// Helper functions to deal with Values
 use serde_json::value::Value;
 
-use crate::error::KubeError;
+use crate::error::ClickError;
 
 use std::borrow::Cow;
 
@@ -23,6 +23,18 @@ pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a,
     match value.pointer(pointer) {
         Some(p) => match p.as_str() {
             Some(s) => s.into(),
+            None => default.into(),
+        },
+        None => default.into(),
+    }
+}
+
+/// Get the item at specified pointer, assuming it's a Number, and format it as a string
+#[allow(dead_code)] // used by features, so without them isn't used
+pub fn val_num(pointer: &str, value: &Value, default: &str) -> String {
+    match value.pointer(pointer) {
+        Some(p) => match p.as_i64() {
+            Some(i) => format!("{}", i),
             None => default.into(),
         },
         None => default.into(),
@@ -49,7 +61,7 @@ pub fn val_u64(pointer: &str, value: &Value, default: u64) -> u64 {
 
 /// Return the count of the number of items in the item at the
 /// specified path.  Returns 0 if the the item there isn't an Array or Object
-pub fn val_item_count(pointer: &str, value: &Value) -> usize {
+pub fn _val_item_count(pointer: &str, value: &Value) -> usize {
     match value.pointer(pointer) {
         Some(p) => {
             if p.is_array() {
@@ -64,12 +76,12 @@ pub fn val_item_count(pointer: &str, value: &Value) -> usize {
     }
 }
 
-pub fn get_val_as<T>(pointer: &str, value: &Value) -> Result<T, KubeError>
+pub fn _get_val_as<T>(pointer: &str, value: &Value) -> Result<T, ClickError>
 where
     for<'de> T: serde::Deserialize<'de>,
 {
     match value.pointer(pointer) {
-        Some(p) => serde::Deserialize::deserialize(p).map_err(KubeError::from),
-        None => Err(KubeError::ParseErr("Can't deserialize".to_owned())),
+        Some(p) => serde::Deserialize::deserialize(p).map_err(ClickError::from),
+        None => Err(ClickError::ParseErr("Can't deserialize".to_owned())),
     }
 }

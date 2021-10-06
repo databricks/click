@@ -23,8 +23,6 @@ extern crate prettytable;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
-extern crate serde_json;
-#[macro_use]
 mod output;
 
 extern crate ansi_term;
@@ -34,39 +32,39 @@ extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate ctrlc;
-extern crate der_parser;
 extern crate dirs;
 extern crate duct_sh;
 extern crate humantime;
-extern crate hyper;
-extern crate hyper_sync_rustls;
-extern crate log;
 extern crate os_pipe;
 extern crate regex;
-extern crate ring;
 extern crate rustls;
 extern crate rustyline;
 extern crate serde;
+extern crate serde_json;
 extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;
 extern crate term;
-extern crate untrusted;
-extern crate webpki;
 
-mod certs;
-mod cmd;
-mod command_processor;
+extern crate bytes;
+#[macro_use]
+extern crate k8s_openapi;
+extern crate reqwest;
+extern crate url;
+extern crate yasna;
+
+#[macro_use]
+mod command;
+#[macro_use]
 mod completer;
+mod command_processor;
 mod config;
-mod connector;
 mod describe;
 mod env;
 mod error;
+mod k8s;
 mod kobj;
-mod kube;
 mod parser;
-mod subjaltnames;
 mod table;
 mod values;
 

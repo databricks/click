@@ -1,6 +1,20 @@
-use crate::cmd::Cmd;
+// Copyright 2021 Databricks, Inc.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use crate::command::command_def::Cmd;
 use crate::completer::ClickHelper;
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::parser::{try_parse_csl, try_parse_range, Parser};
@@ -29,7 +43,7 @@ enum RightExpr<'a> {
     Append(&'a str),
 }
 
-fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), KubeError> {
+fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr<'_>), ClickError> {
     let (click_cmd, rest) = line.split_at(range.start);
 
     let rbytes = rest.as_bytes();
@@ -41,12 +55,12 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
     }
 
     if sep == b'|' && sepcnt > 1 {
-        Err(KubeError::ParseErr(format!(
+        Err(ClickError::ParseErr(format!(
             "Parse error at {}: unexpected ||",
             range.start
         )))
     } else if sep == b'>' && sepcnt > 2 {
-        Err(KubeError::ParseErr(format!(
+        Err(ClickError::ParseErr(format!(
             "Parse error at {}: unexpected >>",
             range.start
         )))
@@ -61,7 +75,7 @@ fn build_parser_expr(line: &str, range: Range<usize>) -> Result<(&str, RightExpr
                 }
             }
             _ => {
-                return Err(KubeError::ParseErr(format!(
+                return Err(ClickError::ParseErr(format!(
                     "Parse error at {}: unexpected separator",
                     range.start
                 )))
@@ -91,7 +105,7 @@ pub fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line(line: &str) -> Result<(&str, RightExpr), KubeError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
@@ -158,36 +172,39 @@ impl CommandProcessor {
 
     fn get_command_vec() -> Vec<Box<dyn Cmd>> {
         let commands: Vec<Box<dyn Cmd>> = vec![
-            Box::new(crate::cmd::Quit::new()),
-            Box::new(crate::cmd::Context::new()),
-            Box::new(crate::cmd::Contexts::new()),
-            Box::new(crate::cmd::Range::new()),
-            Box::new(crate::cmd::Pods::new()),
-            Box::new(crate::cmd::Nodes::new()),
-            Box::new(crate::cmd::Deployments::new()),
-            Box::new(crate::cmd::Services::new()),
-            Box::new(crate::cmd::ReplicaSets::new()),
-            Box::new(crate::cmd::StatefulSets::new()),
-            Box::new(crate::cmd::ConfigMaps::new()),
-            Box::new(crate::cmd::Namespace::new()),
-            Box::new(crate::cmd::Logs::new()),
-            Box::new(crate::cmd::Describe::new()),
-            Box::new(crate::cmd::Exec::new()),
-            Box::new(crate::cmd::Containers::new()),
-            Box::new(crate::cmd::Events::new()),
-            Box::new(crate::cmd::Clear::new()),
-            Box::new(crate::cmd::EnvCmd::new()),
-            Box::new(crate::cmd::SetCmd::new()),
-            Box::new(crate::cmd::Delete::new()),
-            Box::new(crate::cmd::UtcCmd::new()),
-            Box::new(crate::cmd::Namespaces::new()),
-            Box::new(crate::cmd::Secrets::new()),
-            Box::new(crate::cmd::PortForward::new()),
-            Box::new(crate::cmd::PortForwards::new()),
-            Box::new(crate::cmd::Jobs::new()),
-            Box::new(crate::cmd::Alias::new()),
-            Box::new(crate::cmd::Unalias::new()),
-            Box::new(crate::cmd::Rollouts::new()),
+            Box::new(crate::command::alias::Alias::new()),
+            Box::new(crate::command::alias::Unalias::new()),
+            Box::new(crate::command::click::Clear::new()),
+            Box::new(crate::command::click::Context::new()),
+            Box::new(crate::command::click::Contexts::new()),
+            Box::new(crate::command::click::EnvCmd::new()),
+            Box::new(crate::command::click::Quit::new()),
+            Box::new(crate::command::click::Range::new()),
+            Box::new(crate::command::click::SetCmd::new()),
+            Box::new(crate::command::click::UtcCmd::new()),
+            Box::new(crate::command::configmaps::ConfigMaps::new()),
+            Box::new(crate::command::delete::Delete::new()),
+            Box::new(crate::command::deployments::Deployments::new()),
+            Box::new(crate::command::describe::Describe::new()),
+            Box::new(crate::command::events::Events::new()),
+            Box::new(crate::command::exec::Exec::new()),
+            Box::new(crate::command::jobs::Jobs::new()),
+            Box::new(crate::command::logs::Logs::new()),
+            Box::new(crate::command::namespaces::Namespace::new()),
+            Box::new(crate::command::namespaces::Namespaces::new()),
+            Box::new(crate::command::nodes::Nodes::new()),
+            Box::new(crate::command::pods::Containers::new()),
+            Box::new(crate::command::pods::Pods::new()),
+            Box::new(crate::command::portforwards::PortForward::new()),
+            Box::new(crate::command::portforwards::PortForwards::new()),
+            Box::new(crate::command::replicasets::ReplicaSets::new()),
+            Box::new(crate::command::secrets::Secrets::new()),
+            Box::new(crate::command::services::Services::new()),
+            Box::new(crate::command::statefulsets::StatefulSets::new()),
+            Box::new(crate::command::storage::StorageClasses::new()),
+            Box::new(crate::command::volumes::PersistentVolumes::new()),
+            #[cfg(feature = "argorollouts")]
+            Box::new(crate::command::rollouts::Rollouts::new()),
         ];
         commands
     }
@@ -318,7 +335,9 @@ impl CommandProcessor {
                         }
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
-                        cmd.exec(env, &mut parts, &mut writer);
+                        if let Err(e) = cmd.exec(env, &mut parts, &mut writer) {
+                            clickwriteln!(writer, "{}", e);
+                        }
                     } else if cmdstr == "help" {
                         self.show_help(&mut parts, &mut writer);
                     } else {
@@ -501,6 +520,7 @@ mod tests {
     use super::*;
     use crate::config::{get_test_config, Alias, ClickConfig};
     use crate::env::ObjectSelection;
+    use crate::error::ClickError;
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
@@ -515,12 +535,12 @@ mod tests {
             _env: &mut Env,
             args: &mut dyn Iterator<Item = &str>,
             writer: &mut ClickWriter,
-        ) -> bool {
+        ) -> Result<(), ClickError> {
             match args.next() {
                 Some(arg) => clickwrite!(writer, "Called with {}", arg),
                 None => clickwrite!(writer, "Called with no args"),
             }
-            true
+            Ok(())
         }
 
         fn is(&self, l: &str) -> bool {
@@ -570,18 +590,6 @@ mod tests {
             PathBuf::from("/tmp/click.test.hist"),
             commands,
         )
-    }
-
-    fn make_node(name: &str) -> crate::kube::Node {
-        crate::kube::Node {
-            metadata: crate::kube::Metadata::with_name(name),
-            spec: crate::kube::NodeSpec {
-                unschedulable: Some(false),
-            },
-            status: crate::kube::NodeStatus {
-                conditions: Vec::new(),
-            },
-        }
     }
 
     fn make_node_kobj(name: &str) -> KObj {
@@ -658,8 +666,7 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let node = make_node("ns1");
-        let nodelist = crate::kube::NodeList { items: vec![node] };
+        let nodelist = vec![make_node_kobj("ns1")];
         env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,
@@ -688,12 +695,11 @@ Other help topics (type 'help [TOPIC]' for details)
             ClickConfig::default(),
             PathBuf::from("/tmp/click.conf"),
         );
-        let node1 = make_node("ns1");
-        let node2 = make_node("ns2");
-        let node3 = make_node("ns3");
-        let nodelist = crate::kube::NodeList {
-            items: vec![node1, node2, node3],
-        };
+        let node1 = make_node_kobj("ns1");
+        let node2 = make_node_kobj("ns2");
+        let node3 = make_node_kobj("ns3");
+        let nodelist = vec![node1, node2, node3];
+
         env.set_last_objs(nodelist);
         let mut p = CommandProcessor::new_with_commands(
             env,

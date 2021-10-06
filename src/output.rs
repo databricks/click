@@ -26,7 +26,7 @@ use std::fs::File;
 use std::io;
 use std::io::{Stdout, Write};
 
-use crate::error::KubeError;
+use crate::error::ClickError;
 
 /// Ignore write errors (for now) TODO: What to do with them?
 macro_rules! clickwrite {
@@ -106,7 +106,7 @@ impl ClickWriter {
         self.output = WriterOutput::File(file);
     }
 
-    pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), KubeError> {
+    pub fn setup_pipe(&mut self, cmd: &str) -> Result<(), ClickError> {
         let expr = sh_dangerous(cmd);
         let (pipe_read, pipe_write) = pipe()?;
         let handle = expr.stdin_file(pipe_read).start()?;

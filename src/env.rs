@@ -1,7 +1,20 @@
+// Copyright 2021 Databricks, Inc.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+// http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::config::{self, Alias, ClickConfig, Config};
-use crate::error::KubeError;
+use crate::error::ClickError;
 use crate::kobj::{KObj, ObjType};
-use crate::kube::Kluster;
 use crate::output::ClickWriter;
 
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
@@ -11,7 +24,7 @@ use tempdir::TempDir;
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,7 +60,7 @@ pub struct Env {
     click_config_path: PathBuf,
     pub quit: bool,
     pub need_new_editor: bool,
-    pub kluster: Option<Kluster>,
+    pub context: Option<super::k8s::Context>,
     pub namespace: Option<String>,
     current_selection: ObjectSelection,
     last_objs: Option<Vec<KObj>>,
@@ -80,7 +93,7 @@ impl Env {
             click_config_path,
             quit: false,
             need_new_editor: false,
-            kluster: None,
+            context: None,
             namespace,
             current_selection: ObjectSelection::None,
             last_objs: None,
@@ -105,7 +118,7 @@ impl Env {
 
     pub fn save_click_config(&mut self) {
         self.click_config.namespace = self.namespace.clone();
-        self.click_config.context = self.kluster.as_ref().map(|k| k.name.clone());
+        self.click_config.context = self.context.as_ref().map(|c| c.name.clone());
         self.click_config
             .save_to_file(self.click_config_path.as_path().to_str().unwrap())
             .unwrap();
@@ -115,8 +128,8 @@ impl Env {
     fn set_prompt(&mut self) {
         self.prompt = format!(
             "[{}] [{}] [{}] > ",
-            if let Some(ref k) = self.kluster {
-                Red.bold().paint(k.name.as_str())
+            if let Some(ref c) = self.context {
+                Red.bold().paint(c.name.as_str())
             } else {
                 Red.paint("none")
             },
@@ -143,8 +156,8 @@ impl Env {
 
     pub fn set_context(&mut self, ctx: Option<&str>) {
         if let Some(cname) = ctx {
-            self.kluster = match self.config.cluster_for_context(cname, &self.click_config) {
-                Ok(k) => Some(k),
+            self.context = match self.config.get_context(cname, &self.click_config) {
+                Ok(context) => Some(context),
                 Err(e) => {
                     println!(
                         "[WARN] Couldn't find/load context {}, now no current context. \
@@ -276,15 +289,67 @@ impl Env {
         }
     }
 
-    // apply a function to each selected object.
-    pub fn apply_to_selection<F>(&self, writer: &mut ClickWriter, sepfmt: Option<&str>, mut f: F)
+    // the function. print its error if an error happens. return true if the loop should continue,
+    // false if it should stop
+    fn call_selection_func<F>(
+        obj: &KObj,
+        writer: &mut ClickWriter,
+        f: &mut F,
+        continue_all: &mut bool,
+    ) -> bool
     where
-        F: FnMut(&KObj, &mut ClickWriter),
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), ClickError>,
+    {
+        if let Err(e) = f(obj, writer) {
+            clickwriteln!(writer, "Error applying operation to {}: {}", obj.name, e);
+            if *continue_all {
+                return true;
+            }
+            clickwriteln!(writer, "  o = once: continue this time, ask again on error");
+            clickwriteln!(writer, "  a = all: continue over all future errors");
+            clickwriteln!(writer, "  n/N = no: abort range operation (default)");
+            clickwrite!(writer, "Continue? [o/a/N]? ");
+            io::stdout().flush().expect("Could not flush stdout");
+            let mut conf = String::new();
+            if io::stdin().read_line(&mut conf).is_ok() {
+                match conf.trim() {
+                    "o" | "once" => true,
+                    "a" | "all" => {
+                        *continue_all = true;
+                        true
+                    }
+                    _ => false,
+                }
+            } else {
+                clickwriteln!(writer, "Could not read response, stopping");
+                false
+            }
+        } else {
+            true
+        }
+    }
+
+    // apply a function to each selected object.
+    pub fn apply_to_selection<F>(
+        &self,
+        writer: &mut ClickWriter,
+        sepfmt: Option<&str>,
+        mut f: F,
+    ) -> Result<(), ClickError>
+    where
+        F: FnMut(&KObj, &mut ClickWriter) -> Result<(), ClickError>,
     {
         match self.current_selection() {
             ObjectSelection::Single(obj) => f(obj, writer),
             ObjectSelection::Range(range) => {
+                let mut continue_all = false;
+                let mut go = true;
                 for obj in range.iter() {
+                    if !go {
+                        return Err(ClickError::CommandError(
+                            "Aborting range action".to_string(),
+                        ));
+                    }
                     if let Some(fmt) = sepfmt {
                         let mut fmtvars = HashMap::new();
                         fmtvars.insert("name".to_string(), obj.name());
@@ -295,7 +360,12 @@ impl Env {
                         match strfmt(fmt, &fmtvars) {
                             Ok(sep) => {
                                 clickwriteln!(writer, "{}", sep);
-                                f(obj, writer)
+                                go = Env::call_selection_func(
+                                    obj,
+                                    writer,
+                                    &mut f,
+                                    &mut continue_all,
+                                );
                             }
                             Err(e) => {
                                 clickwriteln!(
@@ -304,26 +374,32 @@ impl Env {
                                     obj.name(),
                                     e
                                 );
-                                f(obj, writer)
+                                go = Env::call_selection_func(
+                                    obj,
+                                    writer,
+                                    &mut f,
+                                    &mut continue_all,
+                                );
                             }
                         }
                     } else {
-                        f(obj, writer);
+                        go = Env::call_selection_func(obj, writer, &mut f, &mut continue_all);
                     }
                 }
+                Ok(())
             }
-            ObjectSelection::None => {
-                clickwriteln!(writer, "No objects currently active");
-            }
+            ObjectSelection::None => Err(ClickError::CommandError(
+                "No objects currently active".to_string(),
+            )),
         }
     }
 
-    pub fn run_on_kluster<F, R>(&self, f: F) -> Option<R>
+    pub fn run_on_context<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(&Kluster) -> Result<R, KubeError>,
+        F: FnOnce(&crate::k8s::Context) -> Result<R, Box<dyn std::error::Error>>,
     {
-        match self.kluster {
-            Some(ref k) => match f(k) {
+        match self.context {
+            Some(ref c) => match f(c) {
                 Ok(r) => Some(r),
                 Err(e) => {
                     println!("{}", e);
@@ -342,8 +418,8 @@ impl Env {
         self.port_forwards.push(pf);
     }
 
-    pub fn get_port_forwards(&self) -> std::slice::Iter<PortForward> {
-        self.port_forwards.iter()
+    pub fn get_port_forwards(&mut self) -> std::slice::IterMut<PortForward> {
+        self.port_forwards.iter_mut()
     }
 
     pub fn get_port_forward(&mut self, i: usize) -> Option<&mut PortForward> {
@@ -412,8 +488,8 @@ impl fmt::Display for Env {
   Terminal: {}
   Range Separator: {}
 }}",
-            if let Some(ref k) = self.kluster {
-                Green.bold().paint(k.name.as_str())
+            if let Some(ref c) = self.context {
+                Green.bold().paint(c.name.as_str())
             } else {
                 Green.paint("none")
             },

@@ -271,9 +271,8 @@ pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
-    let ns_opt: Option<List<api::Namespace>> = env.run_on_context(|c| c.execute_list(request));
-    match ns_opt {
-        Some(nslist) => nslist
+    match env.run_on_context::<_, List<api::Namespace>>(|c| c.execute_list(request)) {
+        Ok(nslist) => nslist
             .items
             .into_iter()
             .filter_map(|ns| {
@@ -290,7 +289,7 @@ pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
                 })
             })
             .collect(),
-        None => vec![],
+        Err(_) => vec![],
     }
 }
 

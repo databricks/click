@@ -41,32 +41,35 @@ fn send_delete<D: DeserializeOwned + Debug>(
     env: &Env,
     writer: &mut ClickWriter,
     request: Request<Vec<u8>>,
-) {
-    let res: Option<DeleteResponse<D>> = env.run_on_context(|c| c.read(request));
-    if let Some(r) = res {
-        match r {
-            DeleteResponse::OkStatus(_) | DeleteResponse::OkValue(_) => {
-                clickwriteln!(writer, "Deleted")
-            }
-            DeleteResponse::Accepted(_) => clickwriteln!(writer, "Delete request accepted"),
-            DeleteResponse::Other(res) => match res {
-                Ok(valopt) => match valopt {
-                    Some(val) => {
-                        clickwriteln!(
-                            writer,
-                            "Delete request failed. Message: {}",
-                            val_str("/message", &val, "<No message>")
-                        )
-                    }
-                    None => {
-                        clickwriteln!(writer, "Delete request failed with no reason given");
-                    }
-                },
-                Err(e) => {
-                    clickwriteln!(writer, "Delete request failed with an error: {}", e);
-                }
-            },
+) -> Result<(), ClickError> {
+    let r = env.run_on_context::<_, DeleteResponse<D>>(|c| c.read(request))?;
+    match r {
+        DeleteResponse::OkStatus(_) | DeleteResponse::OkValue(_) => {
+            clickwriteln!(writer, "Deleted");
+            Ok(())
         }
+        DeleteResponse::Accepted(_) => {
+            clickwriteln!(writer, "Delete request accepted");
+            Ok(())
+        }
+        DeleteResponse::Other(res) => match res {
+            Ok(valopt) => match valopt {
+                Some(val) => {
+                    let msg = format!(
+                        "Delete request failed. Message: {}",
+                        val_str("/message", &val, "<No message>")
+                    );
+                    Err(ClickError::CommandError(msg))
+                }
+                None => Err(ClickError::CommandError(
+                    "Delete request failed with no reason given".to_string(),
+                )),
+            },
+            Err(e) => Err(ClickError::CommandError(format!(
+                "Delete request failed with an error: {}",
+                e
+            ))),
+        },
     }
 }
 
@@ -85,7 +88,7 @@ fn delete_obj(
                     options,
                 )?
                 .0;
-                send_delete::<api::ConfigMap>(env, writer, req);
+                send_delete::<api::ConfigMap>(env, writer, req)
             }
             ObjType::Deployment => {
                 let req = api_apps::Deployment::delete_namespaced_deployment(
@@ -94,13 +97,13 @@ fn delete_obj(
                     options,
                 )?
                 .0;
-                send_delete::<api_apps::Deployment>(env, writer, req);
+                send_delete::<api_apps::Deployment>(env, writer, req)
             }
             ObjType::Job => {
                 let req =
                     api_batch::Job::delete_namespaced_job(obj.name.as_str(), ns.as_str(), options)?
                         .0;
-                send_delete::<api_batch::Job>(env, writer, req);
+                send_delete::<api_batch::Job>(env, writer, req)
             }
             ObjType::Namespace => {
                 clickwriteln!(
@@ -109,7 +112,7 @@ fn delete_obj(
                      Deleting anyway"
                 );
                 let req = api::Namespace::delete_namespace(obj.name.as_str(), options)?.0;
-                send_delete::<api::Namespace>(env, writer, req);
+                send_delete::<api::Namespace>(env, writer, req)
             }
             ObjType::Node => {
                 clickwriteln!(
@@ -118,7 +121,7 @@ fn delete_obj(
                          Deleting anyway"
                 );
                 let req = api::Node::delete_node(obj.name.as_str(), options)?.0;
-                send_delete::<api::Node>(env, writer, req);
+                send_delete::<api::Node>(env, writer, req)
             }
             ObjType::PersistentVolume => {
                 clickwriteln!(
@@ -128,12 +131,12 @@ fn delete_obj(
                 );
                 let req =
                     api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)?.0;
-                send_delete::<api::PersistentVolume>(env, writer, req);
+                send_delete::<api::PersistentVolume>(env, writer, req)
             }
             ObjType::Pod { .. } => {
                 let req =
                     api::Pod::delete_namespaced_pod(obj.name.as_str(), ns.as_str(), options)?.0;
-                send_delete::<api::Pod>(env, writer, req);
+                send_delete::<api::Pod>(env, writer, req)
             }
             ObjType::ReplicaSet => {
                 let req = api_apps::ReplicaSet::delete_namespaced_replica_set(
@@ -142,7 +145,7 @@ fn delete_obj(
                     options,
                 )?
                 .0;
-                send_delete::<api_apps::ReplicaSet>(env, writer, req);
+                send_delete::<api_apps::ReplicaSet>(env, writer, req)
             }
             ObjType::StatefulSet => {
                 let req = api_apps::StatefulSet::delete_namespaced_stateful_set(
@@ -151,13 +154,13 @@ fn delete_obj(
                     options,
                 )?
                 .0;
-                send_delete::<api_apps::StatefulSet>(env, writer, req);
+                send_delete::<api_apps::StatefulSet>(env, writer, req)
             }
             ObjType::Secret => {
                 let req =
                     api::Secret::delete_namespaced_secret(obj.name.as_str(), ns.as_str(), options)?
                         .0;
-                send_delete::<api::Secret>(env, writer, req);
+                send_delete::<api::Secret>(env, writer, req)
             }
             ObjType::Service => {
                 let req = api::Service::delete_namespaced_service(
@@ -166,7 +169,7 @@ fn delete_obj(
                     options,
                 )?
                 .0;
-                send_delete::<api::Service>(env, writer, req);
+                send_delete::<api::Service>(env, writer, req)
             }
             ObjType::StorageClass => {
                 clickwriteln!(
@@ -176,44 +179,38 @@ fn delete_obj(
                 );
                 let req =
                     api_storage::StorageClass::delete_storage_class(obj.name.as_str(), options)?.0;
-                send_delete::<api_storage::StorageClass>(env, writer, req);
+                send_delete::<api_storage::StorageClass>(env, writer, req)
             }
             #[cfg(feature = "argorollouts")]
-            ObjType::Rollout => {
-                return Err(ClickError::CommandError(
-                    "Cannot delete rollouts".to_string(),
-                ));
-            }
+            ObjType::Rollout => Err(ClickError::CommandError(
+                "Cannot delete rollouts".to_string(),
+            )),
         },
         None => match obj.typ {
             ObjType::Node => {
                 let req = api::Node::delete_node(obj.name.as_str(), options)?.0;
-                send_delete::<api::Node>(env, writer, req);
+                send_delete::<api::Node>(env, writer, req)
             }
             ObjType::Namespace => {
                 let req = api::Namespace::delete_namespace(obj.name.as_str(), options)?.0;
-                send_delete::<api::Namespace>(env, writer, req);
+                send_delete::<api::Namespace>(env, writer, req)
             }
             ObjType::PersistentVolume => {
                 let req =
                     api::PersistentVolume::delete_persistent_volume(obj.name.as_str(), options)?.0;
-                send_delete::<api::PersistentVolume>(env, writer, req);
+                send_delete::<api::PersistentVolume>(env, writer, req)
             }
             ObjType::StorageClass => {
                 let req =
                     api_storage::StorageClass::delete_storage_class(obj.name.as_str(), options)?.0;
-                send_delete::<api_storage::StorageClass>(env, writer, req);
+                send_delete::<api_storage::StorageClass>(env, writer, req)
             }
             _ => {
-                clickwriteln!(
-                    writer,
-                    "Object {} has no namespace. Cannot delete",
-                    obj.name()
-                );
+                let msg = format!("Object {} has no namespace. Cannot delete", obj.name());
+                Err(ClickError::CommandError(msg))
             }
         },
-    };
-    Ok(())
+    }
 }
 
 fn confirm_delete(

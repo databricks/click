@@ -394,22 +394,13 @@ impl Env {
         }
     }
 
-    pub fn run_on_context<F, R>(&self, f: F) -> Option<R>
+    pub fn run_on_context<F, R>(&self, f: F) -> Result<R, ClickError>
     where
-        F: FnOnce(&crate::k8s::Context) -> Result<R, Box<dyn std::error::Error>>,
+        F: FnOnce(&crate::k8s::Context) -> Result<R, ClickError>,
     {
         match self.context {
-            Some(ref c) => match f(c) {
-                Ok(r) => Some(r),
-                Err(e) => {
-                    println!("{}", e);
-                    None
-                }
-            },
-            None => {
-                println!("Need to have an active context");
-                None
-            }
+            Some(ref c) => f(c),
+            None => Err(ClickError::CommandError("No active context".to_string())),
         }
     }
 

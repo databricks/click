@@ -91,114 +91,112 @@ fn do_logs<'a>(
     let (request, _resp) =
         api::Pod::read_namespaced_pod_log(obj.name(), obj.namespace.as_ref().unwrap(), opts)?;
 
-    let logs_reader = env.run_on_context(|c| c.execute_reader(request, timeout));
-
-    if let Some(lreader) = logs_reader {
-        let mut reader = BufReader::new(lreader);
-        env.ctrlcbool.store(false, Ordering::SeqCst);
-        if let Some(output) = output_opt {
-            let mut fmtvars = HashMap::new();
-            fmtvars.insert("name".to_string(), obj.name());
-            fmtvars.insert(
-                "namespace".to_string(),
-                obj.namespace.as_deref().unwrap_or("[none]"),
-            );
-            let ltime = Local::now().to_rfc3339();
-            fmtvars.insert("time".to_string(), &ltime);
-            match strfmt(output, &fmtvars) {
-                Ok(file_path) => {
-                    let pbuf = file_path.into();
-                    write_logs_to_file(env, &pbuf, reader)?;
-                    println!("Wrote logs to {}", pbuf.to_str().unwrap());
-                    Ok(())
+    let logs_reader_res = env.run_on_context(|c| c.execute_reader(request, timeout));
+    match logs_reader_res {
+        Ok(lreader) => {
+            let mut reader = BufReader::new(lreader);
+            env.ctrlcbool.store(false, Ordering::SeqCst);
+            if let Some(output) = output_opt {
+                let mut fmtvars = HashMap::new();
+                fmtvars.insert("name".to_string(), obj.name());
+                fmtvars.insert(
+                    "namespace".to_string(),
+                    obj.namespace.as_deref().unwrap_or("[none]"),
+                );
+                let ltime = Local::now().to_rfc3339();
+                fmtvars.insert("time".to_string(), &ltime);
+                match strfmt(output, &fmtvars) {
+                    Ok(file_path) => {
+                        let pbuf = file_path.into();
+                        write_logs_to_file(env, &pbuf, reader)?;
+                        println!("Wrote logs to {}", pbuf.to_str().unwrap());
+                        Ok(())
+                    }
+                    Err(e) => Err(ClickError::CommandError(format!(
+                        "Can't generate output path: {}",
+                        e
+                    ))),
                 }
-                Err(e) => Err(ClickError::CommandError(format!(
-                    "Can't generate output path: {}",
-                    e
-                ))),
-            }
-        } else if editor {
-            // We're opening in an editor, save to a temp
-            let editor = if let Some(v) = editor_opt {
-                v.to_owned()
-            } else if let Some(ref e) = env.click_config.editor {
-                e.clone()
-            } else {
-                match std::env::var("EDITOR") {
-                    Ok(ed) => ed,
-                    Err(e) => {
+            } else if editor {
+                // We're opening in an editor, save to a temp
+                let editor = if let Some(v) = editor_opt {
+                    v.to_owned()
+                } else if let Some(ref e) = env.click_config.editor {
+                    e.clone()
+                } else {
+                    match std::env::var("EDITOR") {
+                        Ok(ed) => ed,
+                        Err(e) => {
+                            return Err(ClickError::CommandError(format!(
+                                "Could not get EDITOR environment variable: {}",
+                                e
+                            )));
+                        }
+                    }
+                };
+                let tmpdir = match env.tempdir {
+                    Ok(ref td) => td,
+                    Err(ref e) => {
                         return Err(ClickError::CommandError(format!(
-                            "Could not get EDITOR environment variable: {}",
+                            "Failed to create tempdir: {}",
                             e
                         )));
                     }
-                }
-            };
-            let tmpdir = match env.tempdir {
-                Ok(ref td) => td,
-                Err(ref e) => {
-                    return Err(ClickError::CommandError(format!(
-                        "Failed to create tempdir: {}",
-                        e
-                    )));
-                }
-            };
-            let file_path = tmpdir.path().join(format!(
-                "{}_{}_{}.log",
-                obj.name(),
-                cont,
-                Local::now().to_rfc3339()
-            ));
-            write_logs_to_file(env, &file_path, reader)?;
+                };
+                let file_path = tmpdir.path().join(format!(
+                    "{}_{}_{}.log",
+                    obj.name(),
+                    cont,
+                    Local::now().to_rfc3339()
+                ));
+                write_logs_to_file(env, &file_path, reader)?;
 
-            clickwriteln!(writer, "Logs downloaded, starting editor");
-            let expr = if editor.contains(' ') {
-                // split the whitespace
-                let mut eargs: Vec<&str> = editor.split_whitespace().collect();
-                eargs.push(file_path.to_str().unwrap());
-                duct::cmd(eargs[0], &eargs[1..])
+                clickwriteln!(writer, "Logs downloaded, starting editor");
+                let expr = if editor.contains(' ') {
+                    // split the whitespace
+                    let mut eargs: Vec<&str> = editor.split_whitespace().collect();
+                    eargs.push(file_path.to_str().unwrap());
+                    duct::cmd(eargs[0], &eargs[1..])
+                } else {
+                    cmd!(editor, file_path)
+                };
+                expr.start()?;
+                Ok(())
             } else {
-                cmd!(editor, file_path)
-            };
-            expr.start()?;
-            Ok(())
-        } else {
-            let (sender, receiver) = channel();
-            thread::spawn(move || {
-                loop {
-                    let mut line = String::new();
-                    if let Ok(amt) = reader.read_line(&mut line) {
-                        if amt > 0 {
-                            if sender.send(line).is_err() {
-                                // probably user hit ctrl-c, just stop
+                let (sender, receiver) = channel();
+                thread::spawn(move || {
+                    loop {
+                        let mut line = String::new();
+                        if let Ok(amt) = reader.read_line(&mut line) {
+                            if amt > 0 {
+                                if sender.send(line).is_err() {
+                                    // probably user hit ctrl-c, just stop
+                                    break;
+                                }
+                            } else {
                                 break;
                             }
                         } else {
                             break;
                         }
-                    } else {
-                        break;
                     }
-                }
-            });
-            while !env.ctrlcbool.load(Ordering::SeqCst) {
-                match receiver.recv_timeout(Duration::new(1, 0)) {
-                    Ok(line) => {
-                        clickwrite!(writer, "{}", line); // newlines already in line
-                    }
-                    Err(e) => {
-                        if let RecvTimeoutError::Disconnected = e {
-                            break;
+                });
+                while !env.ctrlcbool.load(Ordering::SeqCst) {
+                    match receiver.recv_timeout(Duration::new(1, 0)) {
+                        Ok(line) => {
+                            clickwrite!(writer, "{}", line); // newlines already in line
+                        }
+                        Err(e) => {
+                            if let RecvTimeoutError::Disconnected = e {
+                                break;
+                            }
                         }
                     }
                 }
+                Ok(())
             }
-            Ok(())
         }
-    } else {
-        Err(ClickError::CommandError(
-            "Could not get reader for logs".to_string(),
-        ))
+        Err(e) => Err(e),
     }
 }
 
@@ -265,7 +263,7 @@ command!(
                     .long("timestamps")
                     .help(
                         "Include an RFC3339 or RFC3339Nano timestamp at the beginning \
-                     of every line of log output.",
+                         of every line of log output.",
                     )
                     .takes_value(false),
             )
@@ -277,9 +275,9 @@ command!(
                     .conflicts_with("output")
                     .help(
                         "Open fetched logs in an editor rather than printing them out. with \
-                     --editor ARG, ARG is used as the editor command, otherwise click \
-                     environment editor (see set/env commands) is used, otherwise the \
-                     $EDITOR environment variable is used.",
+                         --editor ARG, ARG is used as the editor command, otherwise click \
+                         environment editor (see set/env commands) is used, otherwise the \
+                         $EDITOR environment variable is used.",
                     )
                     .takes_value(true)
                     .min_values(0),
@@ -292,8 +290,8 @@ command!(
                     .conflicts_with("follow")
                     .help(
                         "Write output to a file at the specified path instead of printing it. \
-                     This path can be templated with {name}, {namespace}, and {time} to write \
-                     individual files for each pod in a range. (See 'help ranges').",
+                         This path can be templated with {name}, {namespace}, and {time} to write \
+                         individual files for each pod in a range. (See 'help ranges').",
                     )
                     .takes_value(true),
             );

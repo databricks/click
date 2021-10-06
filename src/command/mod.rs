@@ -100,7 +100,11 @@ where
         }
     };
 
-    let list_opt: Option<List<T>> = env.run_on_context(|c| c.execute_list(request));
+    let list_res = env.run_on_context::<_, List<T>>(|c| c.execute_list(request));
+    if list_res.is_err() {
+        env.clear_last_objs();
+    }
+    let list = list_res?;
 
     let mut flags: Vec<&str> = match matches.values_of("show") {
         Some(v) => v.collect(),
@@ -150,7 +154,7 @@ where
         env,
         writer,
         cols,
-        list_opt,
+        list,
         extractors,
         regex,
         sort,
@@ -203,7 +207,7 @@ pub fn handle_list_result<'a, T, F>(
     env: &mut Env,
     writer: &mut ClickWriter,
     cols: Vec<&str>,
-    list_opt: Option<List<T>>,
+    mut list: List<T>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     regex: Option<Regex>,
     sort: Option<command_def::SortFunc<T>>,
@@ -214,46 +218,41 @@ where
     T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
     F: Fn(&T) -> KObj,
 {
-    match list_opt {
-        Some(mut list) => {
-            if let Some(command_def::SortFunc::Pre(func)) = sort.as_ref() {
-                list.items.sort_by(|a, b| (func.cmp)(a, b));
-            }
-
-            let mut specs = build_specs(&cols, &list, extractors, true, regex, get_kobj);
-
-            let mut titles: Vec<Cell> = vec![Cell::new("####")];
-            titles.reserve(cols.len());
-            for col in cols.iter() {
-                titles.push(Cell::new(col));
-            }
-
-            if let Some(command_def::SortFunc::Post(colname)) = sort {
-                let index = cols.iter().position(|&c| c == colname);
-                match index {
-                    Some(index) => {
-                        let idx = index + 1; // +1 for #### col
-                        specs.sort_by(|a, b| a.1.get(idx).unwrap().cmp(b.1.get(idx).unwrap()));
-                    }
-                    None => clickwriteln!(
-                        writer,
-                        "Asked to sort by {}, but it's not a column in the output",
-                        colname
-                    ),
-                }
-            }
-
-            let (kobjs, rows): (Vec<KObj>, Vec<RowSpec>) = if reverse {
-                specs.into_iter().rev().unzip()
-            } else {
-                specs.into_iter().unzip()
-            };
-
-            crate::table::print_table(Row::new(titles), rows, writer);
-            env.set_last_objs(kobjs);
-        }
-        None => env.clear_last_objs(),
+    if let Some(command_def::SortFunc::Pre(func)) = sort.as_ref() {
+        list.items.sort_by(|a, b| (func.cmp)(a, b));
     }
+
+    let mut specs = build_specs(&cols, &list, extractors, true, regex, get_kobj);
+
+    let mut titles: Vec<Cell> = vec![Cell::new("####")];
+    titles.reserve(cols.len());
+    for col in cols.iter() {
+        titles.push(Cell::new(col));
+    }
+
+    if let Some(command_def::SortFunc::Post(colname)) = sort {
+        let index = cols.iter().position(|&c| c == colname);
+        match index {
+            Some(index) => {
+                let idx = index + 1; // +1 for #### col
+                specs.sort_by(|a, b| a.1.get(idx).unwrap().cmp(b.1.get(idx).unwrap()));
+            }
+            None => clickwriteln!(
+                writer,
+                "Asked to sort by {}, but it's not a column in the output",
+                colname
+            ),
+        }
+    }
+
+    let (kobjs, rows): (Vec<KObj>, Vec<RowSpec>) = if reverse {
+        specs.into_iter().rev().unzip()
+    } else {
+        specs.into_iter().unzip()
+    };
+
+    crate::table::print_table(Row::new(titles), rows, writer);
+    env.set_last_objs(kobjs);
     Ok(())
 }
 

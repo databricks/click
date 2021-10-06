@@ -287,7 +287,7 @@ impl Context {
     pub fn execute(
         &self,
         k8sreq: http::Request<Vec<u8>>,
-    ) -> Result<http::Response<Bytes>, Box<dyn std::error::Error>> {
+    ) -> Result<http::Response<Bytes>, ClickError> {
         let (parts, body) = k8sreq.into_parts();
 
         let url = self.endpoint.join(&parts.uri.to_string())?;
@@ -342,7 +342,7 @@ impl Context {
         &self,
         k8sreq: http::Request<Vec<u8>>,
         timeout: Option<Duration>,
-    ) -> Result<reqwest::blocking::Response, Box<dyn std::error::Error>> {
+    ) -> Result<reqwest::blocking::Response, ClickError> {
         let (parts, body) = k8sreq.into_parts();
 
         let url = self.endpoint.join(&parts.uri.to_string())?;
@@ -391,32 +391,32 @@ impl Context {
         if resp.status().is_success() {
             Ok(resp)
         } else {
-            resp.error_for_status()
-                .map_err(|e| format!("Error: {}", e).into())
+            let err = match resp.error_for_status_ref() {
+                Ok(_) => panic!("status was not success, but error_for_status returned Ok"),
+                Err(e) => e,
+            };
+            let body = resp.json()?;
+            Err(ClickError::Reqwest(err, Some(body)))
         }
     }
 
     pub fn read<T: k8s_openapi::Response + Debug>(
         &self,
         k8sreq: http::Request<Vec<u8>>,
-    ) -> Result<T, Box<dyn std::error::Error>> {
+    ) -> Result<T, ClickError> {
         let response = self.execute(k8sreq)?;
         let status_code: http::StatusCode = response.status();
         match k8s_openapi::Response::try_from_parts(status_code, response.body()) {
             Ok((res, _)) => Ok(res),
             // Need more response data. We're blocking, so this is a hard error
-            Err(k8s_openapi::ResponseError::NeedMoreData) => {
-                Err("failed to read enough data".into())
-            }
-            // Some other error, like the response body being malformed JSON or invalid UTF-8.
-            Err(err) => Err(format!("error: {} {:?}", status_code, err).into()),
+            Err(e) => Err(ClickError::ResponseError(e)),
         }
     }
 
     pub fn execute_list<T: ListableResource + for<'de> Deserialize<'de> + Debug>(
         &self,
         k8sreq: http::Request<Vec<u8>>,
-    ) -> Result<List<T>, Box<dyn std::error::Error>> {
+    ) -> Result<List<T>, ClickError> {
         let response = self.execute(k8sreq)?;
         let status_code: http::StatusCode = response.status();
 
@@ -429,23 +429,15 @@ impl Context {
                 // (not HTTP 200, but still parsed successfully)
                 Ok(other) => {
                     if status_code == http::StatusCode::UNAUTHORIZED {
-                        return Err(Box::new(ClickError::Kube(ClickErrNo::Unauthorized)));
+                        return Err(ClickError::Kube(ClickErrNo::Unauthorized));
                     } else {
-                        return Err(
-                            format!("Got unexpected status {} {:?}", status_code, other).into()
-                        );
+                        return Err(ClickError::ParseErr(
+                            // TODO maybe a special error type for this
+                            format!("Got unexpected status {} {:?}", status_code, other),
+                        ));
                     }
                 }
-
-                // Need more response data. We're blocking, so this is a hard error
-                Err(k8s_openapi::ResponseError::NeedMoreData) => {
-                    return Err("failed to read enough data".into())
-                }
-
-                // Some other error, like the response body being malformed JSON or invalid UTF-8.
-                Err(err) => {
-                    return Err(format!("error: {} {:?}", status_code, err).into());
-                }
+                Err(e) => return Err(ClickError::ResponseError(e)),
             };
 
         Ok(res_list)

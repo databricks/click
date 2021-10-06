@@ -15,6 +15,8 @@
 use std::convert::From;
 use std::{env, error, fmt, io};
 
+use serde_json::Value;
+
 #[derive(Debug)]
 pub enum ClickErrNo {
     InvalidContextName,
@@ -62,17 +64,18 @@ pub enum ClickError {
     CommandError(String),
     ParseErr(String),
     Kube(ClickErrNo),
-    KubeServerError(String),
     ConfigFileError(String),
     DecodeError(base64::DecodeError),
     Io(io::Error),
     SerdeJson(serde_json::Error),
     SerdeYaml(serde_yaml::Error),
     RequestError(k8s_openapi::RequestError),
+    ResponseError(k8s_openapi::ResponseError),
     Clap(clap::Error),
     JoinPathsError(env::JoinPathsError),
     Pem(pem::PemError),
-    Reqwest(reqwest::Error),
+    Reqwest(reqwest::Error, Option<Value>),
+    UrlParse(url::ParseError),
 }
 
 impl fmt::Display for ClickError {
@@ -81,7 +84,6 @@ impl fmt::Display for ClickError {
             ClickError::CommandError(ref s) => write!(f, "Error running command: {}", s),
             ClickError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
             ClickError::Kube(ref err) => write!(f, "Kube Error: {}", err),
-            ClickError::KubeServerError(ref s) => write!(f, "Server Error: {}", s),
             ClickError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
             ClickError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
             ClickError::Io(ref err) => write!(f, "IO error: {}", err),
@@ -97,10 +99,22 @@ impl fmt::Display for ClickError {
                     e
                 ),
             },
+            ClickError::ResponseError(ref err) => match err {
+                k8s_openapi::ResponseError::NeedMoreData => {
+                    write!(f, "Failed to read enough data")
+                }
+                k8s_openapi::ResponseError::Json(e) => {
+                    write!(f, "Failed to deserialize response json: {}", e)
+                }
+                k8s_openapi::ResponseError::Utf8(e) => {
+                    write!(f, "Response contained invalid utf-8 data: {}", e)
+                }
+            },
             ClickError::Clap(ref err) => write!(f, "Error in clap: {}", err),
             ClickError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
             ClickError::Pem(ref err) => write!(f, "Pem error: {}", err),
-            ClickError::Reqwest(ref err) => write!(f, "Reqwest error: {}", err),
+            ClickError::Reqwest(ref err, _) => write!(f, "Reqwest error: {}", err),
+            ClickError::UrlParse(ref err) => write!(f, "Error parsing url: {}", err),
         }
     }
 }
@@ -111,20 +125,23 @@ impl error::Error for ClickError {
             ClickError::CommandError(_) => None,
             ClickError::ParseErr(_) => None,
             ClickError::Kube(ref err) => Some(err),
-            ClickError::KubeServerError(_) => None,
             ClickError::ConfigFileError(_) => None,
             ClickError::DecodeError(ref err) => Some(err),
             ClickError::Io(ref err) => Some(err),
             ClickError::SerdeJson(ref err) => Some(err),
             ClickError::SerdeYaml(ref err) => Some(err),
             ClickError::RequestError(ref err) => Some(err),
+            ClickError::ResponseError(ref err) => Some(err),
             ClickError::Clap(ref err) => Some(err),
             ClickError::JoinPathsError(ref err) => Some(err),
             ClickError::Pem(ref err) => Some(err),
-            ClickError::Reqwest(ref err) => Some(err),
+            ClickError::Reqwest(ref err, _) => Some(err),
+            ClickError::UrlParse(ref err) => Some(err),
         }
     }
 }
+
+// TODO: Macro all below
 
 impl From<io::Error> for ClickError {
     fn from(err: io::Error) -> ClickError {
@@ -176,6 +193,12 @@ impl From<pem::PemError> for ClickError {
 
 impl From<reqwest::Error> for ClickError {
     fn from(err: reqwest::Error) -> ClickError {
-        ClickError::Reqwest(err)
+        ClickError::Reqwest(err, None)
+    }
+}
+
+impl From<url::ParseError> for ClickError {
+    fn from(err: url::ParseError) -> ClickError {
+        ClickError::UrlParse(err)
     }
 }

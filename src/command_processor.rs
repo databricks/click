@@ -18,6 +18,7 @@ use crate::error::ClickError;
 use crate::kobj::KObj;
 use crate::output::ClickWriter;
 use crate::parser::{try_parse_csl, try_parse_range, Parser};
+use crate::values::val_str;
 
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
@@ -336,7 +337,19 @@ impl CommandProcessor {
                     } else if let Some(cmd) = self.commands.iter().find(|&c| c.is(cmdstr)) {
                         // found a matching command
                         if let Err(e) = cmd.exec(env, &mut parts, &mut writer) {
-                            clickwriteln!(writer, "{}", e);
+                            match e {
+                                ClickError::Reqwest(_, Some(val)) => {
+                                    let reason = val_str("/reason", &val, "no reason given");
+                                    let msg = val_str("/message", &val, "no message returned");
+                                    clickwriteln!(
+                                        writer,
+                                        "Error executing request. Reason: {}, Message: {}",
+                                        reason,
+                                        msg
+                                    )
+                                }
+                                _ => clickwriteln!(writer, "{}", e),
+                            };
                         }
                     } else if cmdstr == "help" {
                         self.show_help(&mut parts, &mut writer);

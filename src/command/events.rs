@@ -60,8 +60,7 @@ fn print_events_for_obj(obj: &KObj, env: &Env, writer: &mut ClickWriter) -> Resu
         opts.field_selector = Some(&fs);
         api::Event::list_event_for_all_namespaces(opts)?
     };
-    print_events(request, env, writer, include_namespace, false);
-    Ok(())
+    print_events(request, env, writer, include_namespace, false)
 }
 
 fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), ClickError> {
@@ -75,75 +74,67 @@ fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), ClickE
         include_namespace = true;
         api::Event::list_event_for_all_namespaces(opts)?
     };
-    print_events(request, env, writer, include_namespace, true);
-    Ok(())
+    print_events(request, env, writer, include_namespace, true)
 }
 
-// TODO: This should return an error if we fail to fetch
 fn print_events(
     request: Request<Vec<u8>>,
     env: &Env,
     writer: &mut ClickWriter,
     include_namespace: bool,
     include_object: bool,
-) {
-    let events_opt: Option<List<api::Event>> = env.run_on_context(|c| c.execute_list(request));
-    match events_opt {
-        Some(mut event_list) => {
-            if !event_list.items.is_empty() {
-                event_list.items.sort_by(event_cmp);
-                let mut table = Table::new();
-                let mut titles = if include_namespace {
-                    vec![
-                        cell!("Namespace"),
-                        cell!("Last Seen"),
-                        cell!("Type"),
-                        cell!("Reason"),
-                    ]
-                } else {
-                    vec![cell!("Last Seen"), cell!("Type"), cell!("Reason")]
-                };
-                if include_object {
-                    titles.push(cell!("Object"));
-                }
-                titles.push(cell!("Message"));
-                table.set_titles(Row::new(titles));
-                for event in event_list.items.iter() {
-                    let mut row: Vec<Cell> = Vec::new();
-                    if include_namespace {
-                        row.push(Cell::new(
-                            event.metadata.namespace.as_deref().unwrap_or("unknown"),
-                        ));
-                    }
-                    let timestr = match event.last_timestamp.as_ref() {
-                        Some(ts) => time_since(ts.0),
-                        None => event
-                            .event_time
-                            .as_ref()
-                            .map(|t| time_since(t.0))
-                            .unwrap_or_else(|| "unknown".to_string()),
-                    };
-                    row.push(Cell::new(&timestr));
-                    row.push(Cell::new(event.type_.as_deref().unwrap_or("unknown")));
-                    row.push(Cell::new(event.reason.as_deref().unwrap_or("unknown")));
-                    if include_object {
-                        row.push(Cell::new(
-                            event.involved_object.name.as_deref().unwrap_or("unknown"),
-                        ));
-                    }
-                    row.push(Cell::new(event.message.as_deref().unwrap_or("<none>")));
-                    table.add_row(Row::new(row));
-                }
-                table.set_format(*crate::table::TBLFMT);
-                table.print(writer).unwrap_or(0);
-            } else {
-                clickwriteln!(writer, "No events");
+) -> Result<(), ClickError> {
+    let mut event_list: List<api::Event> = env.run_on_context(|c| c.execute_list(request))?;
+    if !event_list.items.is_empty() {
+        event_list.items.sort_by(event_cmp);
+        let mut table = Table::new();
+        let mut titles = if include_namespace {
+            vec![
+                cell!("Namespace"),
+                cell!("Last Seen"),
+                cell!("Type"),
+                cell!("Reason"),
+            ]
+        } else {
+            vec![cell!("Last Seen"), cell!("Type"), cell!("Reason")]
+        };
+        if include_object {
+            titles.push(cell!("Object"));
+        }
+        titles.push(cell!("Message"));
+        table.set_titles(Row::new(titles));
+        for event in event_list.items.iter() {
+            let mut row: Vec<Cell> = Vec::new();
+            if include_namespace {
+                row.push(Cell::new(
+                    event.metadata.namespace.as_deref().unwrap_or("unknown"),
+                ));
             }
+            let timestr = match event.last_timestamp.as_ref() {
+                Some(ts) => time_since(ts.0),
+                None => event
+                    .event_time
+                    .as_ref()
+                    .map(|t| time_since(t.0))
+                    .unwrap_or_else(|| "unknown".to_string()),
+            };
+            row.push(Cell::new(&timestr));
+            row.push(Cell::new(event.type_.as_deref().unwrap_or("unknown")));
+            row.push(Cell::new(event.reason.as_deref().unwrap_or("unknown")));
+            if include_object {
+                row.push(Cell::new(
+                    event.involved_object.name.as_deref().unwrap_or("unknown"),
+                ));
+            }
+            row.push(Cell::new(event.message.as_deref().unwrap_or("<none>")));
+            table.add_row(Row::new(row));
         }
-        None => {
-            clickwriteln!(writer, "Failed to fetch events");
-        }
+        table.set_format(*crate::table::TBLFMT);
+        table.print(writer).unwrap_or(0);
+    } else {
+        clickwriteln!(writer, "No events");
     }
+    Ok(())
 }
 
 command!(

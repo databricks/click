@@ -30,7 +30,7 @@ pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a,
 }
 
 /// Get the item at specified pointer, assuming it's a Number, and format it as a string
-// #[allow(dead_code)] // used by features, so without them isn't used
+#[allow(dead_code)] // used by features, so without them isn't used
 pub fn val_num(pointer: &str, value: &Value, default: &str) -> String {
     match value.pointer(pointer) {
         Some(p) => match p.as_i64() {

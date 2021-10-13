@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// code to deal with discovering and quering endpoints created by crds
+// Code to deal with the k8s table api:
+// https://kubernetes.io/docs/reference/using-api/api-concepts/#receiving-resources-as-tables
 
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
@@ -121,9 +122,6 @@ impl K8sTable {
         kobjs
     }
 }
-
-// Code to deal with the k8s table api:
-// https://kubernetes.io/docs/reference/using-api/api-concepts/#receiving-resources-as-tables
 
 /// The common response type for all table API operations.
 #[derive(Debug)]

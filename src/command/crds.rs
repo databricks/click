@@ -87,10 +87,10 @@ fn find_desc_for(env: &mut Env, name: &str) -> Result<Option<CrdApiDesc>, ClickE
 command!(
     Crd,
     "crd",
-    "get the specified crd",
+    "Get a list of resources with the specified name that have been defined by a CRD.",
     |clap: App<'static, 'static>| clap.arg(
         Arg::with_name("name")
-            .help("The name of the crd object to get")
+            .help("The name of the resource defined by a CRD to get")
             .required(true)
             .index(1)
     ),
@@ -117,7 +117,11 @@ command!(
                 }
             }
             None => {
-                clickwriteln!(writer, "Cluster doesn't have a resource of type: {}", name);
+                clickwriteln!(
+                    writer,
+                    "Cluster doesn't have a CRD created resource of type: {}",
+                    name
+                );
             }
         }
         Ok(())

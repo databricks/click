@@ -138,6 +138,9 @@ fn delete_obj(
                     api::Pod::delete_namespaced_pod(obj.name.as_str(), ns.as_str(), options)?.0;
                 send_delete::<api::Pod>(env, writer, req)
             }
+            ObjType::Crd { .. } => Err(ClickError::CommandError(
+                "Can't delete CRDs yet".to_string(),
+            )),
             ObjType::ReplicaSet => {
                 let req = api_apps::ReplicaSet::delete_namespaced_replica_set(
                     obj.name.as_str(),

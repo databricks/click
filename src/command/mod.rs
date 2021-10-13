@@ -42,6 +42,7 @@ pub mod command_def;
 pub mod alias; // commands for alias/unalias
 pub mod click; // commands internal to click (setting config values, etc)
 pub mod configmaps; // commands relating to configmaps
+pub mod crds; // commands to query crd created objects
 pub mod delete; // command to delete objects
 pub mod deployments; // command to list deployments
 pub mod describe; // the describe command

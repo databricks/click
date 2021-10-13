@@ -35,6 +35,10 @@ pub enum ObjType {
     Pod {
         containers: Vec<String>,
     },
+    Crd {
+        _type: String,
+        group_version: String,
+    },
     Node,
     Deployment,
     Service,
@@ -103,8 +107,9 @@ impl KObj {
     }
 
     pub fn type_str(&self) -> &str {
-        match self.typ {
+        match &self.typ {
             ObjType::Pod { .. } => "Pod",
+            ObjType::Crd { _type, .. } => _type,
             ObjType::Node => "Node",
             ObjType::Deployment => "Deployment",
             ObjType::Service => "Service",
@@ -124,6 +129,7 @@ impl KObj {
     pub fn prompt_str(&self) -> ANSIString {
         match self.typ {
             ObjType::Pod { .. } => Yellow.bold().paint(self.name.as_str()),
+            ObjType::Crd { .. } => Blue.bold().paint(self.name.as_str()),
             ObjType::Node => Blue.bold().paint(self.name.as_str()),
             ObjType::Deployment => Purple.bold().paint(self.name.as_str()),
             ObjType::Service => Cyan.bold().paint(self.name.as_str()),
@@ -178,6 +184,34 @@ impl KObj {
                 clickwriteln!(writer, "Invalid response trying to read service info");
             }
         }
+    }
+
+    // crd is a bit more complex, so handle it here
+    fn crd_describe(
+        &self,
+        _type: &str,
+        group_version: &str,
+        matches: &ArgMatches,
+        env: &Env,
+        writer: &mut ClickWriter,
+    ) -> Result<(), ClickError> {
+        let ns = self.namespace.as_ref().unwrap();
+        let (request, _) =
+            crate::crd::read_namespaced_resource(&self.name, ns, _type, group_version)?;
+        match env
+            .run_on_context(|c| c.read::<crate::crd::ReadResourceValueResponse>(request))
+            .unwrap()
+        {
+            crate::crd::ReadResourceValueResponse::Ok(t) => {
+                if !maybe_full_describe_output(matches, &t, writer) {
+                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
+                }
+            }
+            crate::crd::ReadResourceValueResponse::Other(e) => {
+                clickwriteln!(writer, "Error getting response: {:?}", e);
+            }
+        };
+        Ok(())
     }
 
     /// describe the object represented by this kobj
@@ -342,6 +376,12 @@ impl KObj {
                     api_storage::ReadStorageClassResponse::Ok,
                     None
                 );
+            }
+            ObjType::Crd {
+                ref _type,
+                ref group_version,
+            } => {
+                self.crd_describe(_type, group_version, matches, env, writer)?;
             }
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => {

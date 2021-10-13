@@ -303,7 +303,7 @@ impl Context {
             _ => unimplemented!(),
         };
 
-        let req = req.body(body);
+        let req = req.headers(parts.headers).body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {
                 UserAuth::AuthProvider(provider) => match provider.ensure_token() {

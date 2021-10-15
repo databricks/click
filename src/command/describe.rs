@@ -27,33 +27,59 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 
+use super::events::print_events_for_obj;
+
 command!(
     Describe,
     "describe",
     "Describe the active kubernetes object.",
-    |clap: App<'static, 'static>| clap
-        .arg(
+    |clap: App<'static, 'static>| {
+        clap.arg(
             Arg::with_name("json")
                 .short("j")
                 .long("json")
                 .help("Print the full description in json")
-                .takes_value(false)
+                .takes_value(false),
         )
         .arg(
             Arg::with_name("yaml")
                 .short("y")
                 .long("yaml")
                 .help("Print the full description in yaml")
-                .takes_value(false)
-        ),
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("include_events")
+                .short("e")
+                .long("events")
+                .help(
+                    "If true, include events in the output, if false, do not. \
+                     Default can be set by 'set describe_include_events [true/false]'",
+                )
+                .takes_value(true)
+                .possible_values(&["true", "false"]),
+        )
+    },
     vec!["describe"],
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
+        let mut include_events = env.click_config.describe_include_events;
+        if let Some(b) = matches.value_of("include_events") {
+            include_events = b.parse().unwrap(); // safe, validated to be true/false
+        }
         env.apply_to_selection(
             writer,
             Some(&env.click_config.range_separator),
-            |obj, writer| obj.describe(&matches, env, writer),
+            |obj, writer| {
+                obj.describe(&matches, env, writer)?;
+                if include_events {
+                    clickwriteln!(writer, "Events:");
+                    print_events_for_obj(obj, env, writer)
+                } else {
+                    Ok(())
+                }
+            },
         )
     }
 );

@@ -168,6 +168,7 @@ pub const SET_OPTS: &[&str] = &[
     "editor",
     "terminal",
     "range_separator",
+    "describe_include_events",
 ];
 
 command!(
@@ -212,11 +213,10 @@ Example:
                 "circular" => env.set_completion_type(config::CompletionType::Circular),
                 "list" => env.set_completion_type(config::CompletionType::List),
                 _ => {
-                    write!(
-                        stderr(),
-                        "Invalid completion type.  Possible values are: [circular, list]\n"
-                    )
-                    .unwrap_or(());
+                    clickwriteln!(
+                        writer,
+                        "Invalid completion type.  Possible values are: [circular, list]"
+                    );
                     failed = true;
                 }
             },
@@ -224,11 +224,10 @@ Example:
                 "vi" => env.set_edit_mode(config::EditMode::Vi),
                 "emacs" => env.set_edit_mode(config::EditMode::Emacs),
                 _ => {
-                    write!(
-                        stderr(),
-                        "Invalid edit_mode.  Possible values are: [emacs, vi]\n"
-                    )
-                    .unwrap_or(());
+                    clickwriteln!(
+                        writer,
+                        "Invalid edit_mode.  Possible values are: [emacs, vi]"
+                    );
                     failed = true;
                 }
             },
@@ -241,6 +240,16 @@ Example:
             "range_separator" => {
                 env.click_config.range_separator = value.to_string();
             }
+            "describe_include_events" => match value.parse() {
+                Ok(b) => env.click_config.describe_include_events = b,
+                Err(_) => {
+                    clickwriteln!(
+                        writer,
+                        "describe_include_events must be set to 'true' or 'false'"
+                    );
+                    failed = true;
+                }
+            },
             _ => {
                 // this shouldn't happen
                 write!(stderr(), "Invalid option\n").unwrap_or(());

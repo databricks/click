@@ -478,6 +478,7 @@ impl fmt::Display for Env {
   Editor: {}
   Terminal: {}
   Range Separator: {}
+  Describe Shows Events: {}
 }}",
             if let Some(ref c) = self.context {
                 Green.bold().paint(c.name.as_str())
@@ -507,6 +508,7 @@ impl fmt::Display for Env {
                     .unwrap_or(&"<unset, will use xterm>".to_owned())
             ),
             Green.paint(&self.click_config.range_separator),
+            Green.paint(&self.click_config.describe_include_events.to_string()),
         )
     }
 }

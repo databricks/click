@@ -102,6 +102,10 @@ fn default_read_timeout() -> u32 {
     20
 }
 
+fn default_describe_include_events() -> bool {
+    true
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ClickConfig {
     pub namespace: Option<String>,
@@ -121,6 +125,9 @@ pub struct ClickConfig {
     pub connect_timeout_secs: u32,
     #[serde(default = "default_read_timeout")]
     pub read_timeout_secs: u32,
+
+    #[serde(default = "default_describe_include_events")]
+    pub describe_include_events: bool,
 }
 
 impl Default for ClickConfig {
@@ -136,6 +143,7 @@ impl Default for ClickConfig {
             range_separator: default_range_sep(),
             connect_timeout_secs: default_connect_timeout(),
             read_timeout_secs: default_read_timeout(),
+            describe_include_events: true,
         }
     }
 }

@@ -106,10 +106,7 @@ fn ss_current(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
 }
 
 fn ss_desired(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
-    statefulset
-        .status
-        .as_ref()
-        .map(|stat| stat.replicas.into())
+    statefulset.status.as_ref().map(|stat| stat.replicas.into())
 }
 
 fn ss_ready(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {

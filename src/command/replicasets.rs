@@ -103,10 +103,7 @@ fn rs_images(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
 }
 
 fn rs_current(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
-    replicaset
-        .status
-        .as_ref()
-        .map(|stat| stat.replicas.into())
+    replicaset.status.as_ref().map(|stat| stat.replicas.into())
 }
 
 fn rs_desired(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {

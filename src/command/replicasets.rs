@@ -106,12 +106,12 @@ fn rs_current(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
     replicaset
         .status
         .as_ref()
-        .map(|stat| format!("{}", stat.replicas).into())
+        .map(|stat| stat.replicas.into())
 }
 
 fn rs_desired(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
     replicaset.spec.as_ref().map(|spec| match spec.replicas {
-        Some(desired) => format!("{}", desired).into(),
+        Some(desired) => desired.into(),
         None => "Unspecified".into(),
     })
 }
@@ -121,8 +121,8 @@ fn rs_ready(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
         .status
         .as_ref()
         .map(|stat| match stat.ready_replicas {
-            Some(ready) => format!("{}", ready).into(),
-            None => "0".into(),
+            Some(ready) => ready.into(),
+            None => 0.into(),
         })
 }
 

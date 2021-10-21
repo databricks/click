@@ -66,7 +66,7 @@ fn secret_type(secret: &api::Secret) -> Option<CellSpec<'_>> {
 }
 
 fn secret_data(secret: &api::Secret) -> Option<CellSpec<'_>> {
-    Some(format!("{}", secret.data.len()).into())
+    Some(secret.data.len().into())
 }
 
 list_command!(

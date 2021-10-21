@@ -56,7 +56,7 @@ fn cm_to_kobj(configmap: &api::ConfigMap) -> KObj {
 }
 
 fn cm_data(configmap: &api::ConfigMap) -> Option<CellSpec<'_>> {
-    Some(format!("{}", configmap.data.len()).into())
+    Some(configmap.data.len().into())
 }
 
 list_command!(

@@ -39,6 +39,7 @@ lazy_static! {
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
     Index,
+    Int(i64),
     Str(Cow<'a, str>),
 }
 
@@ -53,6 +54,14 @@ impl<'a> CellSpec<'a> {
     pub fn new_index() -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Index,
+            style: None,
+            align: None,
+        }
+    }
+
+    pub fn new_int(num: i64) -> CellSpec<'a> {
+        CellSpec {
+            txt: CellSpecTxt::Int(num),
             style: None,
             align: None,
         }
@@ -81,6 +90,11 @@ impl<'a> CellSpec<'a> {
                 c.align(format::Alignment::RIGHT);
                 c
             }
+            CellSpecTxt::Int(num) => {
+                let mut c = Cell::new(format!("{}", num).as_str());
+                c.align(format::Alignment::RIGHT);
+                c
+            }
             CellSpecTxt::Str(s) => Cell::new(s),
         };
 
@@ -98,6 +112,10 @@ impl<'a> CellSpec<'a> {
     pub fn matches(&self, regex: &Regex) -> bool {
         match &self.txt {
             CellSpecTxt::Index => false,
+            CellSpecTxt::Int(num) => {
+                let s = format!("{}", num); // TODO: is there a fast way to do this
+                regex.is_match(&s)
+            }
             CellSpecTxt::Str(s) => regex.is_match(s),
         }
     }
@@ -133,6 +151,24 @@ impl<'a> From<String> for CellSpec<'a> {
     }
 }
 
+impl<'a> From<i64> for CellSpec<'a> {
+    fn from(num: i64) -> Self {
+        CellSpec::new_int(num)
+    }
+}
+
+impl<'a> From<i32> for CellSpec<'a> {
+    fn from(num: i32) -> Self {
+        CellSpec::new_int(num as i64)
+    }
+}
+
+impl<'a> From<usize> for CellSpec<'a> {
+    fn from(num: usize) -> Self {
+        CellSpec::new_int(num as i64)
+    }
+}
+
 impl<'a, T> From<Option<T>> for CellSpec<'a>
 where
     T: Into<CellSpec<'a>>,
@@ -148,9 +184,9 @@ impl<'a> PartialEq for CellSpec<'a> {
     fn eq(&self, other: &Self) -> bool {
         match (&self.txt, &other.txt) {
             (CellSpecTxt::Index, CellSpecTxt::Index) => true,
-            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => false,
-            (CellSpecTxt::Str(_), CellSpecTxt::Index) => false,
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
+            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
+            _ => false,
         }
     }
 }
@@ -160,9 +196,9 @@ impl<'a> PartialOrd for CellSpec<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (&self.txt, &other.txt) {
             (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
-            (CellSpecTxt::Index, CellSpecTxt::Str(_)) => None,
-            (CellSpecTxt::Str(_), CellSpecTxt::Index) => None,
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
+            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
+            _ => None,
         }
     }
 }

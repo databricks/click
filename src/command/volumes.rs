@@ -73,6 +73,7 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
     }
 }
 
+// TODO: Switch to a capacity col type
 fn volume_capacity(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.capacity

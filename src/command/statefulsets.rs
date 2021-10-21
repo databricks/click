@@ -100,16 +100,13 @@ fn ss_current(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
         .status
         .as_ref()
         .map(|stat| match stat.current_replicas {
-            Some(current) => format!("{}", current).into(),
-            None => "0".into(),
+            Some(current) => current.into(),
+            None => 0.into(),
         })
 }
 
 fn ss_desired(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
-    statefulset
-        .status
-        .as_ref()
-        .map(|stat| format!("{}", stat.replicas).into())
+    statefulset.status.as_ref().map(|stat| stat.replicas.into())
 }
 
 fn ss_ready(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
@@ -117,8 +114,8 @@ fn ss_ready(statefulset: &apps_api::StatefulSet) -> Option<CellSpec<'_>> {
         .status
         .as_ref()
         .map(|stat| match stat.ready_replicas {
-            Some(ready) => format!("{}", ready).into(),
-            None => "0".into(),
+            Some(ready) => ready.into(),
+            None => 0.into(),
         })
 }
 

@@ -101,7 +101,7 @@ fn deployment_desired(deployment: &apps_api::Deployment) -> Option<CellSpec<'_>>
     deployment
         .spec
         .as_ref()
-        .and_then(|spec| spec.replicas.as_ref().map(|r| format!("{}", r).into()))
+        .and_then(|spec| spec.replicas.as_ref().map(|r| (*r).into()))
 }
 
 fn deployment_available(deployment: &apps_api::Deployment) -> Option<CellSpec<'_>> {
@@ -109,8 +109,8 @@ fn deployment_available(deployment: &apps_api::Deployment) -> Option<CellSpec<'_
         .status
         .as_ref()
         .map(|stat| match stat.available_replicas {
-            Some(ready) => format!("{}", ready).into(),
-            None => "0".into(),
+            Some(avail) => avail.into(),
+            None => 0.into(),
         })
 }
 
@@ -119,8 +119,8 @@ fn deployment_ready(deployment: &apps_api::Deployment) -> Option<CellSpec<'_>> {
         .status
         .as_ref()
         .map(|stat| match stat.ready_replicas {
-            Some(ready) => format!("{}", ready).into(),
-            None => "0".into(),
+            Some(ready) => ready.into(),
+            None => 0.into(),
         })
 }
 
@@ -129,8 +129,8 @@ fn deployment_uptodate(deployment: &apps_api::Deployment) -> Option<CellSpec<'_>
         .status
         .as_ref()
         .map(|stat| match stat.updated_replicas {
-            Some(ready) => format!("{}", ready).into(),
-            None => "0".into(),
+            Some(updated) => updated.into(),
+            None => 0.into(),
         })
 }
 

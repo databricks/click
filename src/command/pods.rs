@@ -178,7 +178,7 @@ fn restart_count(pod: &api::Pod) -> Option<CellSpec<'_>> {
             .container_statuses
             .iter()
             .fold(0, |acc, cs| acc + cs.restart_count);
-        format!("{}", count).into()
+        count.into()
     })
 }
 

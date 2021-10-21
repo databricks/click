@@ -409,6 +409,8 @@ pub fn add_extra_cols<'a>(
     }
 }
 
+// TODO: this should be removed all together in favor of keeping a cellspec in a sortable form until
+// just before display
 pub enum SortFunc<T> {
     Pre(PreExtractSort<T>),
     Post(&'static str), // sort based on column index given

@@ -19,6 +19,7 @@ use k8s_openapi::{api::core::v1 as api, http::Request, List};
 use prettytable::{Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 
+use crate::command::format_duration;
 use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
     command::time_since,
@@ -115,11 +116,11 @@ fn print_events(
                 ));
             }
             let timestr = match event.last_timestamp.as_ref() {
-                Some(ts) => time_since(ts.0),
+                Some(ts) => format_duration(time_since(ts.0)),
                 None => event
                     .event_time
                     .as_ref()
-                    .map(|t| time_since(t.0))
+                    .map(|t| format_duration(time_since(t.0)))
                     .unwrap_or_else(|| "unknown".to_string()),
             };
             row.push(Cell::new(&timestr));

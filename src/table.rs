@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::command::format_duration;
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
 use crate::output::ClickWriter;
 
+use chrono::Duration;
 use clap::ArgMatches;
 use prettytable::Cell;
 use prettytable::Row;
@@ -40,6 +42,7 @@ lazy_static! {
 enum CellSpecTxt<'a> {
     Index,
     Int(i64),
+    Duration(Duration),
     Str(Cow<'a, str>),
 }
 
@@ -85,6 +88,9 @@ impl<'a> CellSpec<'a> {
 
     pub fn to_cell(&self, index: usize) -> Cell {
         let mut cell = match &self.txt {
+            CellSpecTxt::Duration(duration) => {
+                Cell::new(&format_duration(*duration))
+            }
             CellSpecTxt::Index => {
                 let mut c = Cell::new(format!("{}", index).as_str());
                 c.align(format::Alignment::RIGHT);
@@ -112,11 +118,21 @@ impl<'a> CellSpec<'a> {
     pub fn matches(&self, regex: &Regex) -> bool {
         match &self.txt {
             CellSpecTxt::Index => false,
-            CellSpecTxt::Int(num) => {
-                let s = format!("{}", num); // TODO: is there a fast way to do this
-                regex.is_match(&s)
-            }
             CellSpecTxt::Str(s) => regex.is_match(s),
+            _ => {
+                regex.is_match(&self.to_string())
+            }
+        }
+    }
+}
+
+impl <'a> ToString for CellSpec<'a> {
+    fn to_string(&self) -> String {
+        match &self.txt {
+            CellSpecTxt::Index => "[index]".to_string(),
+            CellSpecTxt::Int(num) => format!("{}", num),
+            CellSpecTxt::Duration(duration) => format_duration(*duration),
+            CellSpecTxt::Str(s) => s.to_string(),
         }
     }
 }
@@ -169,6 +185,16 @@ impl<'a> From<usize> for CellSpec<'a> {
     }
 }
 
+impl<'a> From<Duration> for CellSpec<'a> {
+    fn from(duration: Duration) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Duration(duration),
+            style: None,
+            align: None,
+        }
+    }
+}
+
 impl<'a, T> From<Option<T>> for CellSpec<'a>
 where
     T: Into<CellSpec<'a>>,
@@ -186,6 +212,7 @@ impl<'a> PartialEq for CellSpec<'a> {
             (CellSpecTxt::Index, CellSpecTxt::Index) => true,
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
+            (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1 == dur2,
             _ => false,
         }
     }
@@ -198,6 +225,7 @@ impl<'a> PartialOrd for CellSpec<'a> {
             (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
+            (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1.partial_cmp(dur2),
             _ => None,
         }
     }

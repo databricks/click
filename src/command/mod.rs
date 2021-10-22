@@ -335,7 +335,7 @@ pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>
     let meta = obj.metadata();
     meta.creation_timestamp
         .as_ref()
-        .map(|ts| time_since(ts.0).into())
+        .map(|ts| format_duration(time_since(ts.0)).into())
 }
 
 /// An extractor for the Namespace field. Extracts the namespace out of the object metadata
@@ -390,10 +390,9 @@ pub fn format_duration(duration: Duration) -> String {
     }
 }
 
-pub fn time_since(date: DateTime<Utc>) -> String {
+pub fn time_since(date: DateTime<Utc>) -> Duration {
     let now = Utc::now();
-    let diff = now.signed_duration_since(date);
-    format_duration(diff)
+    now.signed_duration_since(date)
 }
 
 /// Build a multi-line string of the specified keyvals

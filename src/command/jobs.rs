@@ -75,7 +75,6 @@ fn job_completions(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     Some(format!("{}/{}", succeeded, completions).into())
 }
 
-// TODO: Switch to a CellSpec for duration when removing the SortFunc stuff
 fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     let stat = job.status.as_ref();
     match stat.and_then(|s| s.start_time.as_ref()) {

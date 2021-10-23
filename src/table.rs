@@ -19,6 +19,7 @@ use crate::output::ClickWriter;
 
 use chrono::Duration;
 use clap::ArgMatches;
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use prettytable::Cell;
 use prettytable::Row;
 use prettytable::{format, Table};
@@ -40,9 +41,10 @@ lazy_static! {
 
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
+    Quantity(Quantity),
+    Duration(Duration),
     Index,
     Int(i64),
-    Duration(Duration),
     Str(Cow<'a, str>),
 }
 
@@ -101,6 +103,7 @@ impl<'a> CellSpec<'a> {
                 c.align(format::Alignment::RIGHT);
                 c
             }
+            CellSpecTxt::Quantity(quant) => Cell::new(&quant.0),
             CellSpecTxt::Str(s) => Cell::new(s),
         };
 
@@ -117,6 +120,7 @@ impl<'a> CellSpec<'a> {
 
     pub fn matches(&self, regex: &Regex) -> bool {
         match &self.txt {
+            CellSpecTxt::Quantity(quant) => regex.is_match(&quant.0),
             CellSpecTxt::Index => false,
             CellSpecTxt::Str(s) => regex.is_match(s),
             _ => {
@@ -129,6 +133,7 @@ impl<'a> CellSpec<'a> {
 impl <'a> ToString for CellSpec<'a> {
     fn to_string(&self) -> String {
         match &self.txt {
+            CellSpecTxt::Quantity(quant) => quant.0.clone(),
             CellSpecTxt::Index => "[index]".to_string(),
             CellSpecTxt::Int(num) => format!("{}", num),
             CellSpecTxt::Duration(duration) => format_duration(*duration),
@@ -185,6 +190,16 @@ impl<'a> From<usize> for CellSpec<'a> {
     }
 }
 
+impl<'a> From<Quantity> for CellSpec<'a> {
+    fn from(quant: Quantity) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::Quantity(quant),
+            style: None,
+            align: None,
+        }
+    }
+}
+
 impl<'a> From<Duration> for CellSpec<'a> {
     fn from(duration: Duration) -> Self {
         CellSpec {
@@ -213,6 +228,7 @@ impl<'a> PartialEq for CellSpec<'a> {
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
             (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1 == dur2,
+            (CellSpecTxt::Quantity(quant1), CellSpecTxt::Quantity(quant2)) => quant1 == quant2,
             _ => false,
         }
     }
@@ -226,6 +242,9 @@ impl<'a> PartialOrd for CellSpec<'a> {
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
             (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1.partial_cmp(dur2),
+            (CellSpecTxt::Quantity(quant1), CellSpecTxt::Quantity(quant2)) => {
+                raw_quantity(quant1).partial_cmp(&raw_quantity(quant2))
+            }
             _ => None,
         }
     }
@@ -237,6 +256,133 @@ impl<'a> Ord for CellSpec<'a> {
             Some(o) => o,
             None => Ordering::Equal,
         }
+    }
+}
+
+// convert a Quantity to a raw number. We assume the quantity has been serialized according to
+// the rules in the docs such that:
+//  Before serializing, Quantity will be put in “canonical form”. This means that Exponent/suffix
+//  will be adjusted up or down (with a corresponding increase or decrease in Mantissa) such that:
+//  a. No precision is lost b. No fractional digits will be emitted c. The exponent (or suffix) is
+//  as large as possible. The sign will be omitted unless the number is negative.
+// Specifically we assume no fractional quantity.
+// Anything with an invalid format is converted to 0.0
+pub fn raw_quantity(quantity: &Quantity) -> f64 {
+    let mut chars = quantity.0.chars().peekable();
+    let has_neg = chars.peek().unwrap_or(&'+').eq(&'-');
+    if has_neg {
+        chars.next();
+    }
+
+    // find location of first non-digit
+    let mut split = match chars.position(|c| !c.is_digit(10)) {
+        Some(pos) => pos,
+        None => {
+            // no non digit, just parse as a raw number, set split to end of string
+            let mut len = quantity.0.len();
+            if has_neg {
+                len -= 1; // since we'll add one below :)
+            }
+            len
+        }
+    };
+
+    if has_neg {
+        split += 1; // shift over for the -
+    }
+
+    let digits = if has_neg {
+        &quantity.0[1..split]
+    } else {
+        &quantity.0[..split]
+    };
+
+    let amt = i64::from_str_radix(digits, 10).unwrap();
+    let suffix = &quantity.0[split..];
+
+    let base10:i64 = 10;
+
+    if suffix.len() > 1 &&
+        (
+            suffix.starts_with("e") || suffix.starts_with("E")
+        )
+    {
+        // our suffix has more than one char and starts with e/E, so it should be a decimal exponent
+        match u32::from_str_radix(&suffix[1..], 10) {
+            Ok(exp) => {
+                let famt = (amt * base10.pow(exp)) as f64;
+                if has_neg {
+                    return -famt;
+                } else {
+                    return famt;
+                }
+            }
+            Err(_) => {
+                println!("Invalid suffix for quantity: {}", suffix);
+                return 0.0;
+            }
+        }
+    }
+
+    let bytes = match suffix {
+        "" => amt,
+        "m" => {
+            // this is the only branch that could actually produce a fraction, so we handle it
+            // specially
+            let famt = amt as f64;
+            let famt = famt / (base10.pow(3) as f64);
+            if has_neg {
+                return -famt;
+            } else {
+                return famt;
+            }
+        }
+        "Ki" => {
+            amt * 2 << 9
+        }
+        "Mi" => {
+            amt * 2 << 19
+        }
+        "Gi" => {
+            amt * 2 << 29
+        }
+        "Ti" => {
+            amt * 2 << 39
+        }
+        "Pi" => {
+            amt * 2 << 49
+        }
+        "Ei" => {
+            amt * 2 << 59
+        }
+        "k" => {
+            amt * base10.pow(3)
+        }
+        "M" => {
+            amt * base10.pow(6)
+        }
+        "G" => {
+            amt * base10.pow(9)
+        }
+        "T" => {
+            amt * base10.pow(12)
+        }
+        "P" => {
+            amt * base10.pow(15)
+        }
+        "E" => {
+            amt * base10.pow(18)
+        }
+        _ => {
+            println!("Invalid suffix for quantity {}", suffix);
+            0
+        }
+    };
+
+    if has_neg {
+        -bytes as f64
+    } else {
+        bytes as f64
     }
 }
 
@@ -281,5 +427,25 @@ pub fn print_table(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut Clic
     table.set_format(*TBLFMT);
     if !term_print_table(&table, writer) {
         table.print(writer).unwrap_or(0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+    use crate::table::raw_quantity;
+
+    #[test]
+    fn test_raw_quantity() {
+        assert_eq!(raw_quantity(&Quantity("1500m".to_string())), 1.5);
+        assert_eq!(raw_quantity(&Quantity("-1500m".to_string())), -1.5);
+        assert_eq!(raw_quantity(&Quantity("1Ki".to_string())), 1024.0);
+        assert_eq!(raw_quantity(&Quantity("2Gi".to_string())), 2147483648.0);
+        assert_eq!(raw_quantity(&Quantity("12e6".to_string())), 12000000.0);
+        assert_eq!(raw_quantity(&Quantity("12E6".to_string())), 12000000.0);
+        assert_eq!(raw_quantity(&Quantity("-22E6".to_string())), -22000000.0);
+        assert_eq!(raw_quantity(&Quantity("3G".to_string())), 3000000000.0);
+        assert_eq!(raw_quantity(&Quantity("34".to_string())), 34.0);
+        assert_eq!(raw_quantity(&Quantity("-3456".to_string())), -3456.0);
     }
 }

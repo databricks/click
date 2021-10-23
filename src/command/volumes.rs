@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use clap::{App, Arg};
-use k8s_openapi::api::core::v1 as api;
+use k8s_openapi::{api::core::v1 as api, apimachinery::pkg::api::resource::Quantity};
 
 use crate::{
     command::command_def::{exec_match, show_arg, sort_arg, start_clap, Cmd},
@@ -73,13 +73,15 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
     }
 }
 
-// TODO: Switch to a capacity col type
 fn volume_capacity(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
         spec.capacity
             .get("storage")
             .as_ref()
-            .map(|q| q.0.clone().into())
+            .map(|q| {
+                let quant = Quantity(q.0.clone());
+                quant.into()
+            })
     })
 }
 

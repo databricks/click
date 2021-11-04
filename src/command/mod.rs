@@ -112,35 +112,26 @@ where
         None => vec![],
     };
 
-    let sort = matches
-        .value_of("sort")
-        .map(|s| match s.to_lowercase().as_str() {
-            "age" => {
-                let sf = command_def::PreExtractSort {
-                    cmp: command_def::age_cmp,
-                };
-                command_def::SortFunc::Pre(sf)
-            }
-            other => {
-                if let Some(col) = mapped_val(other, col_map) {
-                    command_def::SortFunc::Post(col)
-                } else if let Some(ecm) = extra_col_map {
-                    let mut func = None;
-                    for (flag, col) in ecm.iter() {
-                        if flag.eq(&other) {
-                            flags.push(flag);
-                            func = Some(command_def::SortFunc::Post(col));
-                        }
-                    }
-                    match func {
-                        Some(f) => f,
-                        None => panic!("Shouldn't be allowed to ask to sort by: {}", other),
-                    }
-                } else {
-                    panic!("Shouldn't be allowed to ask to sort by: {}", other);
+    let sort = matches.value_of("sort").map(|s| {
+        let colname = s.to_lowercase();
+        if let Some(col) = mapped_val(&colname, col_map) {
+            command_def::SortCol(col)
+        } else if let Some(ecm) = extra_col_map {
+            let mut func = None;
+            for (flag, col) in ecm.iter() {
+                if flag.eq(&colname) {
+                    flags.push(flag);
+                    func = Some(command_def::SortCol(col));
                 }
             }
-        });
+            match func {
+                Some(f) => f,
+                None => panic!("Shouldn't be allowed to ask to sort by: {}", colname),
+            }
+        } else {
+            panic!("Shouldn't be allowed to ask to sort by: {}", colname);
+        }
+    });
 
     if let Some(ecm) = extra_col_map {
         // if we're not in a namespace, we want to add a namespace col if it's in extra_col_map
@@ -208,10 +199,10 @@ pub fn handle_list_result<'a, T, F>(
     env: &mut Env,
     writer: &mut ClickWriter,
     cols: Vec<&str>,
-    mut list: List<T>,
+    list: List<T>,
     extractors: Option<&HashMap<String, Extractor<T>>>,
     regex: Option<Regex>,
-    sort: Option<command_def::SortFunc<T>>,
+    sort: Option<command_def::SortCol>,
     reverse: bool,
     get_kobj: F,
 ) -> Result<(), ClickError>
@@ -219,10 +210,6 @@ where
     T: 'a + ListableResource + Metadata<Ty = ObjectMeta>,
     F: Fn(&T) -> KObj,
 {
-    if let Some(command_def::SortFunc::Pre(func)) = sort.as_ref() {
-        list.items.sort_by(|a, b| (func.cmp)(a, b));
-    }
-
     let mut specs = build_specs(&cols, &list, extractors, true, regex, get_kobj);
 
     let mut titles: Vec<Cell> = vec![Cell::new("####")];
@@ -231,7 +218,7 @@ where
         titles.push(Cell::new(col));
     }
 
-    if let Some(command_def::SortFunc::Post(colname)) = sort {
+    if let Some(command_def::SortCol(colname)) = sort {
         let index = cols.iter().position(|&c| c == colname);
         match index {
             Some(index) => {
@@ -331,11 +318,9 @@ pub fn extract_name<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str
 }
 
 /// An extractor for the Age field. Extracts the age out of the object metadata
-pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
+pub fn extract_age<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<CellSpec<'_>> {
     let meta = obj.metadata();
-    meta.creation_timestamp
-        .as_ref()
-        .map(|ts| time_since(ts.0).into())
+    meta.creation_timestamp.as_ref().map(|ts| ts.0.into())
 }
 
 /// An extractor for the Namespace field. Extracts the namespace out of the object metadata
@@ -390,10 +375,9 @@ pub fn format_duration(duration: Duration) -> String {
     }
 }
 
-pub fn time_since(date: DateTime<Utc>) -> String {
+pub fn time_since(date: DateTime<Utc>) -> Duration {
     let now = Utc::now();
-    let diff = now.signed_duration_since(date);
-    format_duration(diff)
+    now.signed_duration_since(date)
 }
 
 /// Build a multi-line string of the specified keyvals

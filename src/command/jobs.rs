@@ -18,7 +18,7 @@ use k8s_openapi::api::batch::v1 as batch_api;
 
 use crate::{
     command::command_def::{exec_match, show_arg, sort_arg, start_clap, Cmd},
-    command::{format_duration, keyval_string, run_list_command, time_since, Extractor},
+    command::{keyval_string, run_list_command, time_since, Extractor},
     completer,
     env::Env,
     kobj::{KObj, ObjType},
@@ -75,7 +75,6 @@ fn job_completions(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     Some(format!("{}/{}", succeeded, completions).into())
 }
 
-// TODO: Switch to a CellSpec for duration when removing the SortFunc stuff
 fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     let stat = job.status.as_ref();
     match stat.and_then(|s| s.start_time.as_ref()) {
@@ -95,7 +94,7 @@ fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {
             match end {
                 Some(end) => {
                     let diff = end.0.signed_duration_since(start.0);
-                    Some(format_duration(diff).into())
+                    Some(diff.into())
                 }
                 None => Some(time_since(start.0).into()),
             }

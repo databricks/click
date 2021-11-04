@@ -75,13 +75,10 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
 
 fn volume_capacity(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
-        spec.capacity
-            .get("storage")
-            .as_ref()
-            .map(|q| {
-                let quant = Quantity(q.0.clone());
-                quant.into()
-            })
+        spec.capacity.get("storage").as_ref().map(|q| {
+            let quant = Quantity(q.0.clone());
+            quant.into()
+        })
     })
 }
 

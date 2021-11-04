@@ -14,7 +14,6 @@
 
 /// This module contains shared code that's useful for defining commands
 use clap::{App, AppSettings, Arg, ArgMatches};
-use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::env::Env;
@@ -22,7 +21,6 @@ use crate::error::ClickError;
 use crate::output::ClickWriter;
 
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::io::Write;
 
 // command definition
@@ -409,28 +407,8 @@ pub fn add_extra_cols<'a>(
     }
 }
 
-// TODO: this should be removed all together in favor of keeping a cellspec in a sortable form until
-// just before display
-pub enum SortFunc<T> {
-    Pre(PreExtractSort<T>),
-    Post(&'static str), // sort based on column index given
-}
-
-/// A function that can sort based on a column, pre extraction
-pub struct PreExtractSort<T> {
-    pub cmp: fn(a: &T, b: &T) -> Ordering,
-}
-
-pub fn age_cmp<T: Metadata<Ty = ObjectMeta>>(a: &T, b: &T) -> Ordering {
-    let ato = a.metadata().creation_timestamp.as_ref();
-    let bto = b.metadata().creation_timestamp.as_ref();
-    match (ato, bto) {
-        (None, None) => Ordering::Equal,
-        (Some(_), None) => Ordering::Greater,
-        (None, Some(_)) => Ordering::Less,
-        (Some(at), Some(bt)) => at.0.cmp(&bt.0),
-    }
-}
+// sort based on column index given
+pub struct SortCol(pub &'static str);
 
 /// get a clap arg for sorting. this takes one or two lists of possible values to allow for passing
 /// normal and extra cols

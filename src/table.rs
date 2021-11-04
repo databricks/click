@@ -13,11 +13,12 @@
 // limitations under the License.
 
 use crate::command::format_duration;
+use crate::command::time_since;
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
 use crate::output::ClickWriter;
 
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use clap::ArgMatches;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use prettytable::Cell;
@@ -41,6 +42,7 @@ lazy_static! {
 
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
+    DateTime(DateTime<Utc>),
     Quantity(Quantity),
     Duration(Duration),
     Index,
@@ -90,9 +92,8 @@ impl<'a> CellSpec<'a> {
 
     pub fn to_cell(&self, index: usize) -> Cell {
         let mut cell = match &self.txt {
-            CellSpecTxt::Duration(duration) => {
-                Cell::new(&format_duration(*duration))
-            }
+            CellSpecTxt::DateTime(datetime) => Cell::new(&format_duration(time_since(*datetime))),
+            CellSpecTxt::Duration(duration) => Cell::new(&format_duration(*duration)),
             CellSpecTxt::Index => {
                 let mut c = Cell::new(format!("{}", index).as_str());
                 c.align(format::Alignment::RIGHT);
@@ -123,20 +124,19 @@ impl<'a> CellSpec<'a> {
             CellSpecTxt::Quantity(quant) => regex.is_match(&quant.0),
             CellSpecTxt::Index => false,
             CellSpecTxt::Str(s) => regex.is_match(s),
-            _ => {
-                regex.is_match(&self.to_string())
-            }
+            _ => regex.is_match(&self.to_string()),
         }
     }
 }
 
-impl <'a> ToString for CellSpec<'a> {
+impl<'a> ToString for CellSpec<'a> {
     fn to_string(&self) -> String {
         match &self.txt {
-            CellSpecTxt::Quantity(quant) => quant.0.clone(),
+            CellSpecTxt::DateTime(datetime) => format_duration(time_since(*datetime)),
+            CellSpecTxt::Duration(duration) => format_duration(*duration),
             CellSpecTxt::Index => "[index]".to_string(),
             CellSpecTxt::Int(num) => format!("{}", num),
-            CellSpecTxt::Duration(duration) => format_duration(*duration),
+            CellSpecTxt::Quantity(quant) => quant.0.clone(),
             CellSpecTxt::Str(s) => s.to_string(),
         }
     }
@@ -210,6 +210,16 @@ impl<'a> From<Duration> for CellSpec<'a> {
     }
 }
 
+impl<'a> From<DateTime<Utc>> for CellSpec<'a> {
+    fn from(dt: DateTime<Utc>) -> Self {
+        CellSpec {
+            txt: CellSpecTxt::DateTime(dt),
+            style: None,
+            align: None,
+        }
+    }
+}
+
 impl<'a, T> From<Option<T>> for CellSpec<'a>
 where
     T: Into<CellSpec<'a>>,
@@ -224,6 +234,7 @@ where
 impl<'a> PartialEq for CellSpec<'a> {
     fn eq(&self, other: &Self) -> bool {
         match (&self.txt, &other.txt) {
+            (CellSpecTxt::DateTime(dt1), CellSpecTxt::DateTime(dt2)) => dt1.eq(dt2),
             (CellSpecTxt::Index, CellSpecTxt::Index) => true,
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
@@ -238,6 +249,7 @@ impl<'a> Eq for CellSpec<'a> {}
 impl<'a> PartialOrd for CellSpec<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (&self.txt, &other.txt) {
+            (CellSpecTxt::DateTime(dt1), CellSpecTxt::DateTime(dt2)) => dt1.partial_cmp(dt2),
             (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
             (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
             (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
@@ -297,18 +309,14 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
         &quantity.0[..split]
     };
 
-    let amt = i64::from_str_radix(digits, 10).unwrap();
+    let amt = digits.parse::<i64>().unwrap();
     let suffix = &quantity.0[split..];
 
-    let base10:i64 = 10;
+    let base10: i64 = 10;
 
-    if suffix.len() > 1 &&
-        (
-            suffix.starts_with("e") || suffix.starts_with("E")
-        )
-    {
+    if suffix.len() > 1 && (suffix.starts_with('e') || suffix.starts_with('E')) {
         // our suffix has more than one char and starts with e/E, so it should be a decimal exponent
-        match u32::from_str_radix(&suffix[1..], 10) {
+        match (&suffix[1..]).parse::<u32>() {
             Ok(exp) => {
                 let famt = (amt * base10.pow(exp)) as f64;
                 if has_neg {
@@ -337,42 +345,18 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
                 return famt;
             }
         }
-        "Ki" => {
-            amt * 2 << 9
-        }
-        "Mi" => {
-            amt * 2 << 19
-        }
-        "Gi" => {
-            amt * 2 << 29
-        }
-        "Ti" => {
-            amt * 2 << 39
-        }
-        "Pi" => {
-            amt * 2 << 49
-        }
-        "Ei" => {
-            amt * 2 << 59
-        }
-        "k" => {
-            amt * base10.pow(3)
-        }
-        "M" => {
-            amt * base10.pow(6)
-        }
-        "G" => {
-            amt * base10.pow(9)
-        }
-        "T" => {
-            amt * base10.pow(12)
-        }
-        "P" => {
-            amt * base10.pow(15)
-        }
-        "E" => {
-            amt * base10.pow(18)
-        }
+        "Ki" => (amt * 2) << 9,
+        "Mi" => (amt * 2) << 19,
+        "Gi" => (amt * 2) << 29,
+        "Ti" => (amt * 2) << 39,
+        "Pi" => (amt * 2) << 49,
+        "Ei" => (amt * 2) << 59,
+        "k" => amt * base10.pow(3),
+        "M" => amt * base10.pow(6),
+        "G" => amt * base10.pow(9),
+        "T" => amt * base10.pow(12),
+        "P" => amt * base10.pow(15),
+        "E" => amt * base10.pow(18),
         _ => {
             println!("Invalid suffix for quantity {}", suffix);
             0
@@ -432,8 +416,8 @@ pub fn print_table(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut Clic
 
 #[cfg(test)]
 mod tests {
-    use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
     use crate::table::raw_quantity;
+    use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 
     #[test]
     fn test_raw_quantity() {

@@ -32,6 +32,7 @@ use crate::{
     error::{ClickErrNo, ClickError},
 };
 
+#[derive(Clone)]
 pub enum UserAuth {
     AuthProvider(Box<AuthProvider>),
     ExecProvider(Box<ExecProvider>),
@@ -175,6 +176,7 @@ pub struct Context {
     pub name: String,
     endpoint: Url,
     client: RefCell<Client>,
+    log_client: RefCell<Client>,
     root_ca: Option<Certificate>,
     auth: RefCell<Option<UserAuth>>,
     connect_timeout_secs: u32,
@@ -190,22 +192,35 @@ impl Context {
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
     ) -> Context {
-        let (client, auth) = Context::get_client(
+        let (client, client_auth) = Context::get_client(
             &endpoint,
             root_ca.clone(),
-            auth,
+            auth.clone(),
             None,
             connect_timeout_secs,
             read_timeout_secs,
         );
+        // have to create a special client for logs until
+        // https://github.com/seanmonstar/reqwest/issues/1380
+        // is resolved
+        let (log_client, _) = Context::get_client(
+            &endpoint,
+            root_ca.clone(),
+            auth,
+            None,
+            u32::MAX,
+            u32::MAX,
+        );
         let client = RefCell::new(client);
-        let auth = RefCell::new(auth);
+        let log_client = RefCell::new(log_client);
+        let client_auth = RefCell::new(client_auth);
         Context {
             name: name.into(),
             endpoint,
             client,
+            log_client,
             root_ca,
-            auth,
+            auth: client_auth,
             connect_timeout_secs,
             read_timeout_secs,
         }
@@ -272,12 +287,21 @@ impl Context {
                     let (new_client, new_auth) = Context::get_client(
                         &self.endpoint,
                         self.root_ca.clone(),
-                        auth,
-                        Some(id),
+                        auth.clone(),
+                        Some(id.clone()),
                         self.connect_timeout_secs,
                         self.read_timeout_secs,
                     );
+                    let (new_log_client, _) = Context::get_client(
+                        &self.endpoint,
+                        self.root_ca.clone(),
+                        auth,
+                        Some(id),
+                        u32::MAX,
+                        u32::MAX,
+                    );
                     *self.client.borrow_mut() = new_client;
+                    *self.log_client.borrow_mut() = new_log_client;
                     *self.auth.borrow_mut() = new_auth;
                 }
             }
@@ -352,9 +376,9 @@ impl Context {
         }
 
         let req = match parts.method {
-            http::method::Method::GET => self.client.borrow().get(url),
-            http::method::Method::POST => self.client.borrow().post(url),
-            http::method::Method::DELETE => self.client.borrow().delete(url),
+            http::method::Method::GET => self.log_client.borrow().get(url),
+            http::method::Method::POST => self.log_client.borrow().post(url),
+            http::method::Method::DELETE => self.log_client.borrow().delete(url),
             _ => unimplemented!(),
         };
 
@@ -382,11 +406,12 @@ impl Context {
             None => req,
         };
 
-        // we build the request here so we can set the timeout to None if needed. RequestBuilder
-        // doesn't support that for some reason
-        let mut req = req.build()?;
-        *req.timeout_mut() = timeout;
-        let resp = self.client.borrow().execute(req)?;
+        let req = match timeout {
+            Some(timeout) => req.timeout(timeout),
+            None => req, // log_client above already has a super long timeout
+        };
+
+        let resp = req.send()?;
 
         if resp.status().is_success() {
             Ok(resp)

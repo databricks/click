@@ -203,14 +203,8 @@ impl Context {
         // have to create a special client for logs until
         // https://github.com/seanmonstar/reqwest/issues/1380
         // is resolved
-        let (log_client, _) = Context::get_client(
-            &endpoint,
-            root_ca.clone(),
-            auth,
-            None,
-            u32::MAX,
-            u32::MAX,
-        );
+        let (log_client, _) =
+            Context::get_client(&endpoint, root_ca.clone(), auth, None, u32::MAX, u32::MAX);
         let client = RefCell::new(client);
         let log_client = RefCell::new(log_client);
         let client_auth = RefCell::new(client_auth);

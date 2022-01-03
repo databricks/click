@@ -40,6 +40,7 @@ lazy_static! {
     static ref POD_EXTRACTORS: HashMap<String, Extractor<api::Pod>> = {
         let mut m: HashMap<String, Extractor<api::Pod>> = HashMap::new();
         m.insert("IP".to_owned(), pod_ip);
+        m.insert("Last Restart".to_owned(), last_restart);
         m.insert("Node".to_owned(), pod_node);
         m.insert("Nominated Node".to_owned(), pod_nominated_node);
         m.insert("Readiness Gates".to_owned(), pod_readiness_gates);
@@ -63,6 +64,7 @@ const COL_FLAGS: &[&str] = &{ extract_first!(COL_MAP) };
 const EXTRA_COL_MAP: &[(&str, &str)] = &[
     ("ip", "IP"),
     ("labels", "Labels"),
+    ("lastrestart", "Last Restart"),
     ("namespace", "Namespace"),
     ("node", "Node"),
     ("nominatednode", "Nominated Node"),
@@ -179,6 +181,36 @@ fn restart_count(pod: &api::Pod) -> Option<CellSpec<'_>> {
             .iter()
             .fold(0, |acc, cs| acc + cs.restart_count);
         count.into()
+    })
+}
+
+fn last_restart(pod: &api::Pod) -> Option<CellSpec<'_>> {
+    pod.status.as_ref().and_then(|stat| {
+        let mut last_restart = None;
+        for cs in stat.container_statuses.iter() {
+            // TODO: Simplify if https://rust-lang.github.io/rfcs/2497-if-let-chains.html happens
+            if let Some(state) = &cs.last_state {
+                if let Some(terminated) = &state.terminated {
+                    if let Some(finished) = &terminated.finished_at {
+                        if last_restart.is_none() {
+                            last_restart = Some(finished.0)
+                        } else {
+                            // check which is more recent
+                            let last = last_restart.unwrap(); // okay: checked above
+                            if finished.0 > last {
+                                last_restart = Some(finished.0)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if last_restart.is_some() {
+            last_restart.map(|lr| lr.into())
+        } else {
+            // we want a custom "no such value" for this field
+            Some("None".into())
+        }
     })
 }
 

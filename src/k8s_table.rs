@@ -33,10 +33,11 @@ use crate::{
 pub struct ColumnDefintion {
     name: String,
     #[serde(rename = "type")]
+    // TODO: Use these
     _type: String, // TODO: enum?
-    format: String, // TODO: Enum?
-    description: String,
-    priority: i32,
+    _format: String, // TODO: Enum?
+    _description: String,
+    _priority: i32,
 }
 
 #[derive(Debug)]

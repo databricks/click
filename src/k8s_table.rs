@@ -30,14 +30,14 @@ use crate::{
 };
 
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)] // needed since we deserialze these fields from k8s
 pub struct ColumnDefintion {
     name: String,
     #[serde(rename = "type")]
-    // TODO: Use these
     _type: String, // TODO: enum?
-    _format: String, // TODO: Enum?
-    _description: String,
-    _priority: i32,
+    format: String, // TODO: Enum?
+    description: String,
+    priority: i32,
 }
 
 #[derive(Debug)]

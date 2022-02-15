@@ -137,11 +137,8 @@ pub fn try_parse_range(line: &str) -> Option<Box<dyn Iterator<Item = usize>>> {
         };
         let start = if start_str.is_empty() {
             0
-        } else if let Ok(s) = start_str.parse::<usize>() {
-            s
         } else {
-            // whatever was before the .. isn't a number, so this isn't a proper range
-            return None;
+            start_str.parse::<usize>().ok()?
         };
 
         if end_str.is_empty() {

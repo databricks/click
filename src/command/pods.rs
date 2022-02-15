@@ -205,12 +205,7 @@ fn last_restart(pod: &api::Pod) -> Option<CellSpec<'_>> {
                 }
             }
         }
-        if last_restart.is_some() {
-            last_restart.map(|lr| lr.into())
-        } else {
-            // we want a custom "no such value" for this field
-            Some("None".into())
-        }
+        last_restart.map(|lr| lr.into())
     })
 }
 

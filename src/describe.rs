@@ -621,7 +621,7 @@ fn get_message_str(v: &Value) -> Cow<str> {
                 "Deployment has minimum availability." => Colour::Green,
                 _ => Colour::Yellow,
             };
-            buf.push_str(format!("  Message: {}\n", colour.paint(msg).to_string()).as_str());
+            buf.push_str(format!("  Message: {}\n", colour.paint(msg)).as_str());
         }
     }
     buf.into()

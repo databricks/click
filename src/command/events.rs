@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
+use chrono::{offset::Utc, DateTime};
 use clap::App;
 use k8s_openapi::ListOptional;
 use k8s_openapi::{api::core::v1 as api, http::Request, List};
@@ -35,12 +36,21 @@ use std::cmp;
 use std::collections::HashMap;
 use std::io::Write;
 
+// try and get a timestamp for the event. we look in last_timestamp, and if that's not present, just
+// event_time
+fn get_event_ts(event: &api::Event) -> Option<DateTime<Utc>> {
+    match &event.last_timestamp {
+        Some(ts) => Some(ts.0),
+        None => event.event_time.as_ref().map(|ts| ts.0),
+    }
+}
+
 fn event_cmp(e1: &api::Event, e2: &api::Event) -> cmp::Ordering {
-    match (e1.last_timestamp.as_ref(), e2.last_timestamp.as_ref()) {
+    match (get_event_ts(e1), get_event_ts(e2)) {
         (None, None) => cmp::Ordering::Equal,
         (None, Some(_)) => cmp::Ordering::Less,
         (Some(_), None) => cmp::Ordering::Greater,
-        (Some(e1ts), Some(e2ts)) => e1ts.partial_cmp(e2ts).unwrap(),
+        (Some(e1ts), Some(e2ts)) => e1ts.partial_cmp(&e2ts).unwrap(),
     }
 }
 
@@ -115,13 +125,9 @@ fn print_events(
                     event.metadata.namespace.as_deref().unwrap_or("unknown"),
                 ));
             }
-            let timestr = match event.last_timestamp.as_ref() {
-                Some(ts) => format_duration(time_since(ts.0)),
-                None => event
-                    .event_time
-                    .as_ref()
-                    .map(|t| format_duration(time_since(t.0)))
-                    .unwrap_or_else(|| "unknown".to_string()),
+            let timestr = match get_event_ts(event) {
+                Some(ts) => format_duration(time_since(ts)),
+                None => "unknown".to_string(),
             };
             row.push(Cell::new(&timestr));
             row.push(Cell::new(event.type_.as_deref().unwrap_or("unknown")));

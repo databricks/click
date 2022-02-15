@@ -43,10 +43,11 @@ lazy_static! {
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
     DateTime(DateTime<Utc>),
-    Quantity(Quantity),
     Duration(Duration),
     Index,
     Int(i64),
+    None,
+    Quantity(Quantity),
     Str(Cow<'a, str>),
 }
 
@@ -104,6 +105,7 @@ impl<'a> CellSpec<'a> {
                 c.align(format::Alignment::RIGHT);
                 c
             }
+            CellSpecTxt::None => Cell::new("Unknown/None"),
             CellSpecTxt::Quantity(quant) => Cell::new(&quant.0),
             CellSpecTxt::Str(s) => Cell::new(s),
         };
@@ -136,6 +138,7 @@ impl<'a> ToString for CellSpec<'a> {
             CellSpecTxt::Duration(duration) => format_duration(*duration),
             CellSpecTxt::Index => "[index]".to_string(),
             CellSpecTxt::Int(num) => format!("{}", num),
+            CellSpecTxt::None => "Unknown/None".to_string(),
             CellSpecTxt::Quantity(quant) => quant.0.clone(),
             CellSpecTxt::Str(s) => s.to_string(),
         }
@@ -227,7 +230,11 @@ where
     fn from(opt: Option<T>) -> Self {
         match opt {
             Some(v) => v.into(),
-            None => "Unknown".into(),
+            None => CellSpec {
+                txt: CellSpecTxt::None,
+                style: None,
+                align: None,
+            },
         }
     }
 }
@@ -235,11 +242,12 @@ impl<'a> PartialEq for CellSpec<'a> {
     fn eq(&self, other: &Self) -> bool {
         match (&self.txt, &other.txt) {
             (CellSpecTxt::DateTime(dt1), CellSpecTxt::DateTime(dt2)) => dt1.eq(dt2),
-            (CellSpecTxt::Index, CellSpecTxt::Index) => true,
-            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
-            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
             (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1 == dur2,
+            (CellSpecTxt::Index, CellSpecTxt::Index) => true,
+            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1 == num2,
+            (CellSpecTxt::None, CellSpecTxt::None) => true,
             (CellSpecTxt::Quantity(quant1), CellSpecTxt::Quantity(quant2)) => quant1 == quant2,
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st == ot,
             _ => false,
         }
     }
@@ -250,13 +258,16 @@ impl<'a> PartialOrd for CellSpec<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (&self.txt, &other.txt) {
             (CellSpecTxt::DateTime(dt1), CellSpecTxt::DateTime(dt2)) => dt1.partial_cmp(dt2),
-            (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
-            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
-            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
             (CellSpecTxt::Duration(dur1), CellSpecTxt::Duration(dur2)) => dur1.partial_cmp(dur2),
+            (CellSpecTxt::Index, CellSpecTxt::Index) => Some(Ordering::Equal),
+            (CellSpecTxt::Int(num1), CellSpecTxt::Int(num2)) => num1.partial_cmp(num2),
+            (CellSpecTxt::None, CellSpecTxt::None) => Some(Ordering::Equal),
             (CellSpecTxt::Quantity(quant1), CellSpecTxt::Quantity(quant2)) => {
                 raw_quantity(quant1).partial_cmp(&raw_quantity(quant2))
             }
+            (CellSpecTxt::Str(st), CellSpecTxt::Str(ot)) => st.partial_cmp(ot),
+            (CellSpecTxt::None, _) => Some(Ordering::Greater), // none is the least
+            (_, CellSpecTxt::None) => Some(Ordering::Less),    // none is the least
             _ => None,
         }
     }

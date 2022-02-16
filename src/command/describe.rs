@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -33,24 +33,24 @@ command!(
     Describe,
     "describe",
     "Describe the active kubernetes object.",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("json")
-                .short("j")
+            Arg::new("json")
+                .short('j')
                 .long("json")
                 .help("Print the full description in json")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("yaml")
-                .short("y")
+            Arg::new("yaml")
+                .short('y')
                 .long("yaml")
                 .help("Print the full description in yaml")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("include_events")
-                .short("e")
+            Arg::new("include_events")
+                .short('e')
                 .long("events")
                 .help(
                     "If true, include events in the output, if false, do not. \

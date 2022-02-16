@@ -165,21 +165,21 @@ pub fn uppercase_first(s: &str) -> String {
 }
 
 /// a clap validator for duration
-fn valid_duration(s: String) -> Result<(), String> {
-    parse_duration(s.as_str())
+fn valid_duration(s: &str) -> Result<(), String> {
+    parse_duration(s)
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
 /// a clap validator for rfc3339 dates
-fn valid_date(s: String) -> Result<(), String> {
-    DateTime::parse_from_rfc3339(s.as_str())
+fn valid_date(s: &str) -> Result<(), String> {
+    DateTime::parse_from_rfc3339(s)
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
 /// a clap validator for u32
-pub fn valid_u32(s: String) -> Result<(), String> {
+pub fn valid_u32(s: &str) -> Result<(), String> {
     s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
 }
 

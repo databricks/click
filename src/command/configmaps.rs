@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use k8s_openapi::api::core::v1 as api;
 
 use crate::{
@@ -65,17 +65,17 @@ list_command!(
     "Get configmaps (in current namespace if set)",
     super::COL_FLAGS,
     super::EXTRA_COL_FLAGS,
-    |clap: App<'static, 'static>| clap
+    |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::with_name("show_label")
-                .short("L")
+            Arg::new("show_label")
+                .short('L')
                 .long("labels")
                 .help("Show configmap labels (deprecated, use --show labels)")
                 .takes_value(false)
         )
         .arg(
-            Arg::with_name("regex")
-                .short("r")
+            Arg::new("regex")
+                .short('r')
                 .long("regex")
                 .help("Filter confimaps by the specified regex")
                 .takes_value(true)
@@ -83,8 +83,8 @@ list_command!(
         .arg(show_arg(EXTRA_COL_FLAGS, true))
         .arg(sort_arg(COL_FLAGS, None))
         .arg(
-            Arg::with_name("reverse")
-                .short("R")
+            Arg::new("reverse")
+                .short('R')
                 .long("reverse")
                 .help("Reverse the order of the returned list")
                 .takes_value(false),

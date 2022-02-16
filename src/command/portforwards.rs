@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use prettytable::{format, Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 
@@ -36,12 +36,12 @@ command!(
     PortForward,
     "port-forward",
     "Forward one (or more) local ports to the currently active pod",
-    |clap: App<'static, 'static>| clap
+    |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::with_name("ports")
+            Arg::new("ports")
                 .help("the ports to forward")
-                .multiple(true)
-                .validator(|s: String| {
+                .multiple_values(true)
+                .validator(|s: &str| {
                     let parts: Vec<&str> = s.split(':').collect();
                     if parts.len() > 2 {
                         Err(format!(
@@ -209,18 +209,18 @@ command!(
     PortForwards,
     "port-forwards",
     "List or control active port forwards.  Default is to list.",
-    |clap: App<'static, 'static>| clap
+    |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::with_name("action")
+            Arg::new("action")
                 .help("Action to take")
                 .required(false)
                 .possible_values(&["list", "output", "stop"])
                 .index(1)
         )
         .arg(
-            Arg::with_name("index")
+            Arg::new("index")
                 .help("Index (from 'port-forwards list') of port forward to take action on")
-                .validator(|s: String| s.parse::<usize>().map(|_| ()).map_err(|e| e.to_string()))
+                .validator(|s: &str| s.parse::<usize>().map(|_| ()).map_err(|e| e.to_string()))
                 .required(false)
                 .index(2)
         )

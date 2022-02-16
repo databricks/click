@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -32,7 +32,7 @@ use std::io::{self, Write};
 use std::process::Command;
 
 /// a clap validator for boolean
-fn valid_bool(s: String) -> Result<(), String> {
+fn valid_bool(s: &str) -> Result<(), String> {
     s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
 }
 
@@ -120,24 +120,24 @@ command!(
     Exec,
     "exec",
     "exec specified command on active pod",
-    |clap: App<'static, 'static>| clap
+    |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::with_name("command")
+            Arg::new("command")
                 .help("The command to execute")
                 .required(true)
-                .multiple(true) // required for trailing_var_arg
+                .multiple_values(true) // required for trailing_var_arg
                 .index(1)
         )
         .arg(
-            Arg::with_name("container")
-                .short("c")
+            Arg::new("container")
+                .short('c')
                 .long("container")
                 .help("Exec in the specified container")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name("terminal")
-                .short("t")
+            Arg::new("terminal")
+                .short('t')
                 .long("terminal")
                 .help(
                     "Run the command in a new terminal.  With --terminal ARG, ARG is used as the \
@@ -149,8 +149,8 @@ command!(
                 .min_values(0)
         )
         .arg(
-            Arg::with_name("tty")
-                .short("T")
+            Arg::new("tty")
+                .short('T')
                 .long("tty")
                 .help("If stdin is a TTY. Contrary to kubectl, this defaults to TRUE")
                 .validator(valid_bool)
@@ -158,8 +158,8 @@ command!(
                 .min_values(0)
         )
         .arg(
-            Arg::with_name("stdin")
-                .short("i")
+            Arg::new("stdin")
+                .short('i')
                 .long("stdin")
                 .help("Pass stdin to the container. Contrary to kubectl, this defaults to TRUE")
                 .validator(valid_bool)

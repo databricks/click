@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use chrono::offset::Utc;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use prettytable::Table;
 use rustyline::completion::Pair as RustlinePair;
 
@@ -68,8 +68,8 @@ command!(
     "context",
     "Set the current context (will clear any selected pod). \
      With no argument, lists available contexts.",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("context")
+    |clap: ClapCommand<'static>| clap.arg(
+        Arg::new("context")
             .help("The name of the context")
             .required(false)
             .index(1)
@@ -175,16 +175,16 @@ command!(
     SetCmd,
     "set",
     "Set click options. (See 'help completion' and 'help edit_mode' for more information",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("option")
+            Arg::new("option")
                 .help("The click option to set")
                 .required(true)
                 .index(1)
                 .possible_values(SET_OPTS),
         )
         .arg(
-            Arg::with_name("value")
+            Arg::new("value")
                 .help("The value to set the option to")
                 .required(true)
                 .index(2),

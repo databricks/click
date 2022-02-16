@@ -15,7 +15,7 @@
 use ansi_term::Colour::Yellow;
 use chrono::offset::{Local, Utc};
 use chrono::DateTime;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use k8s_openapi::api::core::v1 as api;
 
 use reqwest::blocking::Response;
@@ -204,17 +204,17 @@ command!(
     Logs,
     "logs",
     "Get logs from a container in the current pod",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         let ret = clap
             .arg(
-                Arg::with_name("container")
+                Arg::new("container")
                     .help("Specify which container to get logs from")
                     .required(false)
                     .index(1),
             )
             .arg(
-                Arg::with_name("follow")
-                    .short("f")
+                Arg::new("follow")
+                    .short('f')
                     .long("follow")
                     .help("Follow the logs as new records arrive (stop with ^C)")
                     .conflicts_with("editor")
@@ -222,22 +222,22 @@ command!(
                     .takes_value(false),
             )
             .arg(
-                Arg::with_name("tail")
-                    .short("t")
+                Arg::new("tail")
+                    .short('t')
                     .long("tail")
                     .validator(valid_u32)
                     .help("Number of lines from the end of the logs to show")
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("previous")
-                    .short("p")
+                Arg::new("previous")
+                    .short('p')
                     .long("previous")
                     .help("Return previous terminated container logs")
                     .takes_value(false),
             )
             .arg(
-                Arg::with_name("since")
+                Arg::new("since")
                     .long("since")
                     .conflicts_with("sinceTime")
                     .validator(valid_duration)
@@ -248,7 +248,7 @@ command!(
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("sinceTime")
+                Arg::new("sinceTime")
                     .long("since-time")
                     .conflicts_with("since")
                     .validator(valid_date)
@@ -259,7 +259,7 @@ command!(
                     .takes_value(true),
             )
             .arg(
-                Arg::with_name("timestamps")
+                Arg::new("timestamps")
                     .long("timestamps")
                     .help(
                         "Include an RFC3339 or RFC3339Nano timestamp at the beginning \
@@ -268,9 +268,9 @@ command!(
                     .takes_value(false),
             )
             .arg(
-                Arg::with_name("editor")
+                Arg::new("editor")
                     .long("editor")
-                    .short("e")
+                    .short('e')
                     .conflicts_with("follow")
                     .conflicts_with("output")
                     .help(
@@ -283,9 +283,9 @@ command!(
                     .min_values(0),
             )
             .arg(
-                Arg::with_name("output")
+                Arg::new("output")
                     .long("output")
-                    .short("o")
+                    .short('o')
                     .conflicts_with("editor")
                     .conflicts_with("follow")
                     .help(
@@ -297,7 +297,7 @@ command!(
             );
         k8s_if_ge_1_17! {
             let ret = ret.arg(
-                Arg::with_name("insecure")
+                Arg::new("insecure")
                     .long("insecure-skip-tls-verify-backend")
                     .help("Skip verifying the identity of the kubelet that logs are requested from. \
                            This could allow an attacker to provide invalid logs. \

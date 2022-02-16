@@ -73,7 +73,7 @@ mod values;
 #[cfg(test)]
 mod duct_mock;
 
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 
 use std::path::PathBuf;
 
@@ -86,35 +86,35 @@ use crate::output::ClickWriter;
 fn main() {
     env_logger::init();
     // Command line arg parsing for click itself
-    let matches = App::new("Click")
+    let matches = ClapCommand::new("Click")
         .version(crate_version!())
         .author("Nick Lanham <nick@databricks.com>")
         .about("Command Line Interactive Contoller for Kubernetes")
         .arg(
-            Arg::with_name("config_dir")
-                .short("c")
+            Arg::new("config_dir")
+                .short('c')
                 .long("config_dir")
                 .value_name("DIR")
                 .help("Specify the directory to find kubernetes and click configs")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("exec")
+            Arg::new("exec")
                 .long("exec")
                 .value_name("COMMAND")
                 .help("Execute the specified command then exit")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("context")
-                .short("C")
+            Arg::new("context")
+                .short('C')
                 .long("context")
                 .help("Start in the specified context")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("namespace")
-                .short("n")
+            Arg::new("namespace")
+                .short('n')
                 .long("namespace")
                 .help("Start in the specified namespace")
                 .takes_value(true),

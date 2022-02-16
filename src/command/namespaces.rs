@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Command as ClapCommand, Arg};
 use k8s_openapi::api::core::v1 as api;
 use rustyline::completion::Pair as RustlinePair;
 
@@ -47,8 +47,8 @@ command!(
     Namespace,
     "namespace",
     "Set the current namespace (no argument to clear namespace)",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("namespace")
+    |clap: ClapCommand<'static>| clap.arg(
+        Arg::new("namespace")
             .help("The namespace to use")
             .required(false)
             .index(1)
@@ -86,18 +86,18 @@ command!(
     Namespaces,
     "namespaces",
     "Get namespaces in current context",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("regex")
-                .short("r")
+            Arg::new("regex")
+                .short('r')
                 .long("regex")
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
         )
         .arg(sort_arg(COL_FLAGS, None))
         .arg(
-            Arg::with_name("reverse")
-                .short("R")
+            Arg::new("reverse")
+                .short('R')
                 .long("reverse")
                 .help("Reverse the order of the returned list")
                 .takes_value(false),

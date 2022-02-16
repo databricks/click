@@ -68,7 +68,7 @@ macro_rules! extract_first {
     }};
 }
 
-const DEFAULT_HELP_TEMPLATE: &'static str = "\
+const DEFAULT_HELP_TEMPLATE: &str = "\
     {bin} {version}\n\
     {about-with-newline}\n\
     \n\

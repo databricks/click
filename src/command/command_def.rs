@@ -68,6 +68,16 @@ macro_rules! extract_first {
     }};
 }
 
+const DEFAULT_HELP_TEMPLATE: &'static str = "\
+    {bin} {version}\n\
+    {about-with-newline}\n\
+    \n\
+    {before-help}\
+    {usage-heading}\n    {usage}\n\
+    \n\
+    {all-args}{after-help}\
+";
+
 pub trait Cmd {
     // break if returns true
     fn exec(
@@ -101,6 +111,7 @@ pub fn start_clap(
     let app = ClapCommand::new(name)
         .about(about)
         .before_help(aliases)
+        .help_template(DEFAULT_HELP_TEMPLATE)
         .disable_version_flag(true)
         .no_binary_name(true);
     if trailing_var_arg {

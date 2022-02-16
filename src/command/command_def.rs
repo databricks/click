@@ -102,7 +102,6 @@ pub fn start_clap(
         .about(about)
         .before_help(aliases)
         .disable_version_flag(true)
-        .color(clap::ColorChoice::Always)
         .no_binary_name(true);
     if trailing_var_arg {
         app.trailing_var_arg(true)

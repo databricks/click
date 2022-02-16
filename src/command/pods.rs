@@ -16,7 +16,7 @@ use ansi_term::{
     Colour::{Green, Red, Yellow},
     Style,
 };
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::api::core::v1 as api;
 use k8s_openapi::ListOptional;
 
@@ -244,7 +244,7 @@ list_command!(
                 .short('l')
                 .long("label")
                 .help("Get pods with specified label selector (example: app=nginx)")
-                .takes_value(true)
+                .takes_value(true),
         )
         .arg(
             Arg::new("node")

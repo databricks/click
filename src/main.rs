@@ -73,7 +73,7 @@ mod values;
 #[cfg(test)]
 mod duct_mock;
 
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 
 use std::path::PathBuf;
 

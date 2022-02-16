@@ -166,9 +166,7 @@ pub fn uppercase_first(s: &str) -> String {
 
 /// a clap validator for duration
 fn valid_duration(s: &str) -> Result<(), String> {
-    parse_duration(s)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    parse_duration(s).map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// a clap validator for rfc3339 dates

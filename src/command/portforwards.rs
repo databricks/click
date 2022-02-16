@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use prettytable::{format, Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 

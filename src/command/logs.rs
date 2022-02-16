@@ -15,7 +15,7 @@
 use ansi_term::Colour::Yellow;
 use chrono::offset::{Local, Utc};
 use chrono::DateTime;
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::api::core::v1 as api;
 
 use reqwest::blocking::Response;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::{api::core::v1 as api, apimachinery::pkg::api::resource::Quantity};
 
 use crate::{

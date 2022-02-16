@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use chrono::offset::Utc;
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use prettytable::Table;
 use rustyline::completion::Pair as RustlinePair;
 

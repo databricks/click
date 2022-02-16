@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// This module contains shared code that's useful for defining commands
-use clap::{Command as ClapCommand, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command as ClapCommand};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::env::Env;
@@ -132,8 +132,7 @@ where
                 // todo: switch back in the same way as write_help
                 //clickwriteln!(writer, "{}", e);
                 Ok(())
-            }
-            else if e.kind() == clap::ErrorKind::DisplayVersion {
+            } else if e.kind() == clap::ErrorKind::DisplayVersion {
                 clickwriteln!(writer, "{}", e);
                 Ok(())
             } else {
@@ -275,7 +274,8 @@ macro_rules! command {
                 let arg_opt = args.find(|arg| {
                     // first see if the long flag matches
                     if let Some(long) = arg.get_long() {
-                        if long == &opt[2..] { // strip off -- prefix we get passed
+                        if long == &opt[2..] {
+                            // strip off -- prefix we get passed
                             return true;
                         }
                     }
@@ -291,7 +291,10 @@ macro_rules! command {
                     false
                 });
                 match arg_opt {
-                    Some(arg) => match self.named_completers.get(arg.get_long().unwrap_or_else(|| "")) {
+                    Some(arg) => match self
+                        .named_completers
+                        .get(arg.get_long().unwrap_or_else(|| ""))
+                    {
                         Some(completer) => completer(prefix, env),
                         None => vec![],
                     },
@@ -309,17 +312,17 @@ macro_rules! command {
                 let repoff = prefix.len();
                 let app = self.clap.borrow();
                 let args = app.get_arguments();
-                args.filter(|arg| {
-                    completer::long_matches(&arg.get_long(), prefix)
-                }).map(|arg| {
-                    RustlinePair {
-                        display: format!("--{}", arg.get_long().unwrap()), // safe, checked above
-                        replacement: format!(
-                            "{} ",
-                            arg.get_long().unwrap()[repoff..].to_string()
-                        ),
-                    }
-                }).collect()
+                args.filter(|arg| completer::long_matches(&arg.get_long(), prefix))
+                    .map(|arg| {
+                        RustlinePair {
+                            display: format!("--{}", arg.get_long().unwrap()), // safe, checked above
+                            replacement: format!(
+                                "{} ",
+                                arg.get_long().unwrap()[repoff..].to_string()
+                            ),
+                        }
+                    })
+                    .collect()
             }
         }
     };

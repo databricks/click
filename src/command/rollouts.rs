@@ -14,7 +14,7 @@
 
 /// Support for argo rollouts https://argoproj.github.io/argo-rollouts/
 use ansi_term::Colour::Yellow;
-use clap::{Command as ClapCommand, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, http, ListOptional, ListResponse,
     ListableResource, Metadata, NamespaceResourceScope, RequestError, Resource, Response,

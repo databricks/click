@@ -22,6 +22,7 @@ use std::io::Result;
 #[derive(Clone)]
 pub struct MockExpression {
     cmd: String,
+    #[allow(dead_code)]
     args: Vec<String>,
 }
 

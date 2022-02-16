@@ -189,7 +189,7 @@ impl ClickConfig {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
     static TEST_CONFIG: &str = r"---
@@ -202,6 +202,10 @@ completiontype: List
 aliases:
   - alias: pn
     expanded: pods --sort node";
+
+    pub fn get_parsed_test_click_config() -> ClickConfig {
+        ClickConfig::from_reader(TEST_CONFIG.as_bytes()).unwrap()
+    }
 
     #[test]
     fn test_parse_config() {

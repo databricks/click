@@ -138,7 +138,17 @@ impl Config {
             .iter()
             .map(|config_path| super::kubefile::Config::from_file(config_path))
             .collect::<Result<Vec<_>, _>>()?;
+        let sources = match env::join_paths(paths.iter())?.into_string() {
+            Ok(srcs) => srcs,
+            Err(_) => "[config paths contain non-utf8 characters, cannot be displayed]".to_string(),
+        };
+        Config::from_configs(iconfs, sources)
+    }
 
+    fn from_configs(
+        iconfs: Vec<super::kubefile::Config>,
+        source_file: String,
+    ) -> Result<Config, ClickError> {
         // copy over clusters
         let mut cluster_map = HashMap::new();
         for iconf in iconfs.iter() {
@@ -223,13 +233,8 @@ impl Config {
             }
         }
 
-        let sources = match env::join_paths(paths.iter())?.into_string() {
-            Ok(srcs) => srcs,
-            Err(_) => "[config paths contain non-utf8 characters, cannot be displayed]".to_string(),
-        };
-
         Ok(Config {
-            source_file: sources,
+            source_file,
             clusters: cluster_map,
             contexts: context_map,
             users: user_map,
@@ -254,8 +259,14 @@ impl Config {
             .get(&context.user)
             .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
-        let endpoint = reqwest::Url::parse(&cluster.server).unwrap();
-        let ca_cert = cluster.cert.as_ref().map(|c| get_reqwest_cert(c));
+        let endpoint = reqwest::Url::parse(&cluster.server)?;
+        let ca_cert = match &cluster.cert {
+            Some(cert) => {
+                let reqwest_cert = get_reqwest_cert(cert)?;
+                Some(reqwest_cert)
+            }
+            None => None,
+        };
 
         let mut k8suser = Err(ClickError::ConfigFileError(
             "[WARN]: Context {} has no client certificate and key, nor does it specify \
@@ -309,8 +320,8 @@ impl Config {
     }
 }
 
-fn get_reqwest_cert(data: &str) -> reqwest::Certificate {
-    reqwest::Certificate::from_pem(data.as_bytes()).unwrap()
+fn get_reqwest_cert(data: &str) -> Result<reqwest::Certificate, ClickError> {
+    reqwest::Certificate::from_pem(data.as_bytes()).map_err(|e| e.into())
 }
 
 #[cfg(test)]
@@ -325,5 +336,31 @@ pub mod tests {
             contexts: BTreeMap::new(),
             users: HashMap::new(),
         }
+    }
+
+    fn get_config_from_kubefile_test_conf() -> Config {
+        let kube_config = crate::config::kubefile::tests::get_parsed_test_config();
+        Config::from_configs(vec![kube_config], "test".to_string()).unwrap() // ok, in test
+    }
+
+    #[test]
+    fn ensure_valid_context() {
+        let conf = get_config_from_kubefile_test_conf();
+        let click_conf = crate::config::click::tests::get_parsed_test_click_config();
+        assert!(conf.get_context("insecure_context", &click_conf).is_ok());
+    }
+
+    #[test]
+    fn ensure_err_on_invalid_ca_cert() {
+        let conf = get_config_from_kubefile_test_conf();
+        let click_conf = crate::config::click::tests::get_parsed_test_click_config();
+        assert!(conf.get_context("data_context", &click_conf).is_err()); // ca_cert is invalid
+    }
+
+    #[test]
+    fn ensure_invalid_context() {
+        let conf = get_config_from_kubefile_test_conf();
+        let click_conf = crate::config::click::tests::get_parsed_test_click_config();
+        assert!(conf.get_context("c1ctx", &click_conf).is_err()); // don't have certs
     }
 }

@@ -445,7 +445,7 @@ impl ExecProvider {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
     static TEST_CONFIG: &str = r"apiVersion: v1
@@ -476,6 +476,14 @@ contexts:
     cluster: cluster2
     user: c2user
   name: c2ctx
+- context:
+    cluster: insecure
+    user: token
+  name: insecure_context
+- context:
+    cluster: data
+    user: token
+  name: data_context
 current-context: c1ctx
 users:
 - name: c1user
@@ -516,6 +524,10 @@ users:
       command: aws
       env: null
 ";
+
+    pub fn get_parsed_test_config() -> Config {
+        Config::from_reader(TEST_CONFIG.as_bytes()).unwrap()
+    }
 
     fn contains_cluster(config: &Config, cluster: Cluster) -> bool {
         for c in config.clusters.iter() {

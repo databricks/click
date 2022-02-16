@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use chrono::{offset::Utc, DateTime};
-use clap::App;
+use clap::Command as ClapCommand;
 use k8s_openapi::ListOptional;
 use k8s_openapi::{api::core::v1 as api, http::Request, List};
 use prettytable::{Cell, Row, Table};

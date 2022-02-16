@@ -223,7 +223,7 @@ impl ClickHelper {
     }
 }
 
-/// Does the short option (an Option<char>) from clap match
+/// Does the long option (an Option<str>) from clap match
 pub fn long_matches(long: &Option<&str>, prefix: &str) -> bool {
     match long {
         Some(lstr) => lstr.starts_with(prefix),

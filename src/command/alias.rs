@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Arg, Command as ClapCommand};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -31,13 +31,13 @@ command!(
     Alias,
     "alias",
     "Define or display aliases",
-    |clap: App<'static, 'static>| clap
+    |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::with_name("alias")
+            Arg::new("alias")
                 .help(
                     "the short version of the command.\nCannot be 'alias', 'unalias', or a number."
                 )
-                .validator(|s: String| {
+                .validator(|s: &str| {
                     if s == "alias" || s == "unalias" || s.parse::<usize>().is_ok() {
                         Err("alias cannot be \"alias\", \"unalias\", or a number".to_owned())
                     } else {
@@ -48,7 +48,7 @@ command!(
                 .requires("expanded")
         )
         .arg(
-            Arg::with_name("expanded")
+            Arg::new("expanded")
                 .help("what the short version of the command should expand to")
                 .required(false)
                 .requires("alias")
@@ -99,8 +99,8 @@ command!(
     Unalias,
     "unalias",
     "Remove an alias",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("alias")
+    |clap: ClapCommand<'static>| clap.arg(
+        Arg::new("alias")
             .help("Short version of alias to remove")
             .required(true)
     ),

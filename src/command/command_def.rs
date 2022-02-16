@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// This module contains shared code that's useful for defining commands
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command as ClapCommand};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::env::Env;
@@ -68,6 +68,16 @@ macro_rules! extract_first {
     }};
 }
 
+const DEFAULT_HELP_TEMPLATE: &str = "\
+    {bin} {version}\n\
+    {about-with-newline}\n\
+    \n\
+    {before-help}\
+    {usage-heading}\n    {usage}\n\
+    \n\
+    {all-args}{after-help}\
+";
+
 pub trait Cmd {
     // break if returns true
     fn exec(
@@ -97,15 +107,15 @@ pub fn start_clap(
     about: &'static str,
     aliases: &'static str,
     trailing_var_arg: bool,
-) -> App<'static, 'static> {
-    let app = App::new(name)
+) -> ClapCommand<'static> {
+    let app = ClapCommand::new(name)
         .about(about)
         .before_help(aliases)
-        .setting(AppSettings::NoBinaryName)
-        .setting(AppSettings::DisableVersion)
-        .setting(AppSettings::ColoredHelp);
+        .help_template(DEFAULT_HELP_TEMPLATE)
+        .disable_version_flag(true)
+        .no_binary_name(true);
     if trailing_var_arg {
-        app.setting(AppSettings::TrailingVarArg)
+        app.trailing_var_arg(true)
     } else {
         app
     }
@@ -113,7 +123,7 @@ pub fn start_clap(
 
 /// Run specified closure with given matches. Returns () on success, or an Err if an error occurs
 pub fn exec_match<F>(
-    clap: &RefCell<App<'static, 'static>>,
+    clap: &RefCell<ClapCommand<'static>>,
     env: &mut Env,
     args: &mut dyn Iterator<Item = &str>,
     writer: &mut ClickWriter,
@@ -122,14 +132,18 @@ pub fn exec_match<F>(
 where
     F: FnOnce(ArgMatches, &mut Env, &mut ClickWriter) -> Result<(), ClickError>,
 {
-    let matches = clap.borrow_mut().get_matches_from_safe_borrow(args);
+    let mut cmd = clap.borrow_mut();
+    let matches = cmd.try_get_matches_from_mut(args);
     match matches {
         Ok(matches) => func(matches, env, writer),
         Err(e) => {
-            if e.kind == clap::ErrorKind::HelpDisplayed
-                || e.kind == clap::ErrorKind::VersionDisplayed
-            {
-                clickwriteln!(writer, "{}", e.message);
+            if e.kind() == clap::ErrorKind::DisplayHelp {
+                cmd.print_help().expect("Couldn't print help");
+                // todo: switch back in the same way as write_help
+                //clickwriteln!(writer, "{}", e);
+                Ok(())
+            } else if e.kind() == clap::ErrorKind::DisplayVersion {
+                clickwriteln!(writer, "{}", e);
                 Ok(())
             } else {
                 Err(ClickError::Clap(e))
@@ -156,7 +170,7 @@ macro_rules! no_named_complete {
 /// * cmd_name: the name of the struct for the command
 /// * name: the string name of the command
 /// * about: an about string describing the command
-/// * extra_args: closure taking an App that addes any additional argument stuff and returns an App
+/// * extra_args: closure taking a Command that addes any additional argument stuff and returns a Command
 /// * aliases: a vector of strs that specify what a user can type to invoke this command
 /// * cmplt_expr: an expression to return possible completions for the command
 /// * named_cmplters: a map of argument -> completer for completing named arguments
@@ -198,7 +212,7 @@ macro_rules! command {
      $named_cmplters: expr, $cmd_expr:expr, $trailing_var_arg: expr) => {
         pub struct $cmd_name {
             aliases: Vec<&'static str>,
-            clap: RefCell<App<'static, 'static>>,
+            clap: RefCell<ClapCommand<'static>>,
             completers: Vec<&'static dyn Fn(&str, &Env) -> Vec<RustlinePair>>,
             named_completers: HashMap<String, fn(&str, &Env) -> Vec<RustlinePair>>,
         }
@@ -238,12 +252,12 @@ macro_rules! command {
                 $name
             }
 
+            // TODO: switch back to command.write_help when
+            // https://github.com/clap-rs/clap/issues/3480 is resolved
             fn write_help(&self, writer: &mut ClickWriter) {
-                if let Err(res) = self.clap.borrow_mut().write_help(writer) {
+                if let Err(res) = self.clap.borrow_mut().print_help() {
                     clickwriteln!(writer, "Couldn't print help: {}", res);
                 }
-                // clap print_help doesn't add final newline
-                clickwrite!(writer, "\n");
             }
 
             fn about(&self) -> &'static str {
@@ -264,21 +278,33 @@ macro_rules! command {
                 prefix: &str,
                 env: &Env,
             ) -> Vec<RustlinePair> {
-                let parser = &self.clap.borrow().p;
-                let opt_builder = parser.opts.iter().find(|opt_builder| {
-                    let long_matched = match opt_builder.s.long {
-                        Some(lstr) => lstr == &opt[2..], // strip off -- prefix we get passed
-                        None => false,
-                    };
-                    long_matched
-                        || (opt.len() == 2
-                            && match opt_builder.s.short {
-                                Some(schr) => schr == opt.chars().nth(1).unwrap(), // safe, strip off - prefix we get passed
-                                None => false,
-                            })
+                let app = self.clap.borrow();
+                let mut args = app.get_arguments();
+                // see if an opt we have matches what we've typed so far
+                let arg_opt = args.find(|arg| {
+                    // first see if the long flag matches
+                    if let Some(long) = arg.get_long() {
+                        if long == &opt[2..] {
+                            // strip off -- prefix we get passed
+                            return true;
+                        }
+                    }
+                    // didn't find a long opt, let's see if a short one matches
+                    if opt.len() == 2 {
+                        if let Some(short) = arg.get_short() {
+                            // safe, strip off - prefix we get passed
+                            if (short == opt.chars().nth(1).unwrap()) {
+                                return true;
+                            }
+                        }
+                    }
+                    false
                 });
-                match opt_builder {
-                    Some(ob) => match self.named_completers.get(ob.s.long.unwrap_or_else(|| "")) {
+                match arg_opt {
+                    Some(arg) => match self
+                        .named_completers
+                        .get(arg.get_long().unwrap_or_else(|| ""))
+                    {
                         Some(completer) => completer(prefix, env),
                         None => vec![],
                     },
@@ -294,33 +320,19 @@ macro_rules! command {
              */
             fn complete_option(&self, prefix: &str) -> Vec<RustlinePair> {
                 let repoff = prefix.len();
-                let parser = &self.clap.borrow().p;
-
-                let flags = parser
-                    .flags
-                    .iter()
-                    .filter(|flag_builder| completer::long_matches(&flag_builder.s.long, prefix))
-                    .map(|flag_builder| RustlinePair {
-                        display: format!("--{}", flag_builder.s.long.unwrap()),
-                        replacement: format!(
-                            "{} ",
-                            flag_builder.s.long.unwrap()[repoff..].to_string()
-                        ),
-                    });
-
-                let opts = parser
-                    .opts
-                    .iter()
-                    .filter(|opt_builder| completer::long_matches(&opt_builder.s.long, prefix))
-                    .map(|opt_builder| RustlinePair {
-                        display: format!("--{}", opt_builder.s.long.unwrap()),
-                        replacement: format!(
-                            "{} ",
-                            opt_builder.s.long.unwrap()[repoff..].to_string()
-                        ),
-                    });
-
-                flags.chain(opts).collect()
+                let app = self.clap.borrow();
+                let args = app.get_arguments();
+                args.filter(|arg| completer::long_matches(&arg.get_long(), prefix))
+                    .map(|arg| {
+                        RustlinePair {
+                            display: format!("--{}", arg.get_long().unwrap()), // safe, checked above
+                            replacement: format!(
+                                "{} ",
+                                arg.get_long().unwrap()[repoff..].to_string()
+                            ),
+                        }
+                    })
+                    .collect()
             }
         }
     };
@@ -412,16 +424,16 @@ pub struct SortCol(pub &'static str);
 
 /// get a clap arg for sorting. this takes one or two lists of possible values to allow for passing
 /// normal and extra cols
-pub fn sort_arg<'a>(cols: &[&'a str], extra_cols: Option<&[&'a str]>) -> Arg<'a, 'a> {
-    let arg = Arg::with_name("sort")
-        .short("s")
+pub fn sort_arg<'a>(cols: &'a [&'a str], extra_cols: Option<&'a [&'a str]>) -> Arg<'a> {
+    let arg = Arg::new("sort")
+        .short('s')
         .long("sort")
         .help(
             "Sort by specified column (if column isn't shown by default, it will \
              be shown)",
         )
         .takes_value(true)
-        .case_insensitive(true)
+        .ignore_case(true)
         .possible_values(cols);
     match extra_cols {
         Some(extra) => arg.possible_values(extra),
@@ -437,15 +449,15 @@ static SHOW_HELP_WITH_LABELS: &str =
      Use '--show all,labels' to show all available columns. (Note that 'all' doesn't \
      include labels due to thier size)";
 /// get a clap arg for showing extra cols.
-pub fn show_arg<'a>(extra_cols: &[&'a str], labels: bool) -> Arg<'a, 'a> {
-    let arg = Arg::with_name("show")
-        .short("S")
+pub fn show_arg<'a>(extra_cols: &'a [&'a str], labels: bool) -> Arg<'a> {
+    let arg = Arg::new("show")
+        .short('S')
         .long("show")
         .takes_value(true)
         .possible_value("all")
         .possible_values(extra_cols)
-        .case_insensitive(true)
-        .use_delimiter(true);
+        .ignore_case(true)
+        .use_value_delimiter(true);
     if labels {
         arg.help(SHOW_HELP_WITH_LABELS)
     } else {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::{
     api::apps::v1 as api_apps, api::batch::v1 as api_batch, api::core::v1 as api,
     api::storage::v1 as api_storage, http::Request, DeleteOptional, DeleteResponse,
@@ -242,27 +242,27 @@ command!(
     Delete,
     "delete",
     "Delete the active object (will ask for confirmation)",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("grace")
-                .short("g")
+            Arg::new("grace")
+                .short('g')
                 .long("gracePeriod")
                 .help("The duration in seconds before the object should be deleted.")
                 .validator(valid_u32)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cascade")
-                .short("c")
+            Arg::new("cascade")
+                .short('c')
                 .long("cascade")
                 .help("Cascading strategy for deletion of any dependent objects.")
                 .takes_value(true)
                 .possible_values(&["background", "foreground", "orphan"])
-                .case_insensitive(true)
+                .ignore_case(true)
                 .default_value("background"),
         )
         .arg(
-            Arg::with_name("now")
+            Arg::new("now")
                 .long("now")
                 .help(
                     "If set, resources are signaled for immediate shutdown \
@@ -272,7 +272,7 @@ command!(
                 .conflicts_with("grace"),
         )
         .arg(
-            Arg::with_name("force")
+            Arg::new("force")
                 .long("force")
                 .help(
                     "Force immediate deletion.  For some resources this may result in \

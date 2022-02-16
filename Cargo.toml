@@ -23,7 +23,7 @@ atomicwrites = "^0.3"
 base64 = "^0.13"
 bytes = "1.0.1"
 chrono = { version = "^0.4", features = ["serde"] }
-clap = "^2.33"
+clap = { version = "^3.1", features = ["cargo", "color"] }
 ctrlc = "^3.1"
 dirs = "^4.0"
 duct = "^0.13"

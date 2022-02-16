@@ -16,7 +16,7 @@ use ansi_term::{
     Colour::{Green, Red, Yellow},
     Style,
 };
-use clap::{App, Arg};
+use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::api::core::v1 as api;
 use k8s_openapi::ListOptional;
 
@@ -231,24 +231,31 @@ list_command!(
     "Get pods (in current namespace if set)",
     super::COL_FLAGS,
     super::EXTRA_COL_FLAGS,
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("labels")
-                .short("L")
+            Arg::new("labels")
+                .short('L')
                 .long("labels")
                 .help("include labels in output (deprecated, use --show labels)")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("node")
-                .short("n")
+            Arg::new("label")
+                .short('l')
+                .long("label")
+                .help("Get pods with specified label selector (example: app=nginx)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("node")
+                .short('n')
                 .long("node")
                 .help("Only fetch pods on the specified node.")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("regex")
-                .short("r")
+            Arg::new("regex")
+                .short('r')
                 .long("regex")
                 .help("Filter returned value by the specified regex")
                 .takes_value(true),
@@ -256,8 +263,8 @@ list_command!(
         .arg(show_arg(EXTRA_COL_FLAGS, true))
         .arg(sort_arg(COL_FLAGS, Some(EXTRA_COL_FLAGS)))
         .arg(
-            Arg::with_name("reverse")
-                .short("R")
+            Arg::new("reverse")
+                .short('R')
                 .long("reverse")
                 .help("Reverse the order of the returned list")
                 .takes_value(false),
@@ -312,10 +319,10 @@ command!(
     Containers,
     "containers",
     "Print information about the containers of the active pod",
-    |clap: App<'static, 'static>| {
+    |clap: ClapCommand<'static>| {
         clap.arg(
-            Arg::with_name("volumes")
-                .short("v")
+            Arg::new("volumes")
+                .short('v')
                 .long("volumes")
                 .help("show information about each containers volume mounts")
                 .takes_value(false),

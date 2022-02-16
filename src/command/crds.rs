@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use ansi_term::Colour::Yellow;
-use clap::{App, Arg};
+use clap::{Arg, Command as ClapCommand};
 
 use rustyline::completion::Pair as RustlinePair;
 
@@ -88,8 +88,8 @@ command!(
     Crd,
     "crd",
     "Get a list of resources with the specified name that have been defined by a CRD.",
-    |clap: App<'static, 'static>| clap.arg(
-        Arg::with_name("name")
+    |clap: ClapCommand<'static>| clap.arg(
+        Arg::new("name")
             .help("The name of the resource defined by a CRD to get")
             .required(true)
             .index(1)

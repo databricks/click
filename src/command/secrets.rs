@@ -77,7 +77,7 @@ list_command!(
     super::EXTRA_COL_FLAGS,
     |clap: ClapCommand<'static>| clap
         .arg(
-            Arg::new("show_label")
+            Arg::new("labels")
                 .short('L')
                 .long("labels")
                 .help("Show secrets labels (deprecated, use --show labels)")

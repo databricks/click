@@ -18,6 +18,7 @@ use chrono::{DateTime, Local, TimeZone};
 use serde_json::{self, Value};
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 
@@ -338,12 +339,13 @@ impl ExecConfig {
                     let args: Vec<String> = vec![];
                     ductcmd(command, args)
                 };
-                let expr = if let Some(env) = &self.env {
-                    let env = env.iter().map(|nv| (&nv.name, &nv.value));
-                    expr.full_env(env)
-                } else {
-                    expr
+                let mut env_map: HashMap<_, _> = std::env::vars().collect();
+                if let Some(env) = &self.env {
+                    for nv in env.iter() {
+                        env_map.insert(nv.name.clone(), nv.value.clone());
+                    }
                 };
+                let expr = expr.full_env(env_map);
 
                 serde_json::from_reader(expr.reader()?).map_err(ClickError::from)
             }

@@ -174,62 +174,59 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
+        let context = env.context.as_ref().ok_or_else(|| ClickError::CommandError(
+            "Need an active context in order to exec.".to_string(),
+        ))?;
         let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
-        if let Some(context) = env.context.as_ref() {
-            let tty = if matches.is_present("tty") {
-                if let Some(v) = matches.value_of("tty") {
-                    // already validated
-                    v.parse::<bool>().unwrap()
-                } else {
-                    true
-                }
+        let tty = if matches.is_present("tty") {
+            if let Some(v) = matches.value_of("tty") {
+                // already validated
+                v.parse::<bool>().unwrap()
             } else {
                 true
-            };
-            let stdin = if matches.is_present("stdin") {
-                if let Some(v) = matches.value_of("stdin") {
-                    // already validated
-                    v.parse::<bool>().unwrap()
-                } else {
-                    true
-                }
-            } else {
-                true
-            };
-            let it_arg = match (tty, stdin) {
-                (true, true) => "-it",
-                (true, false) => "-t",
-                (false, true) => "-i",
-                (false, false) => "",
-            };
-            env.apply_to_selection(
-                writer,
-                Some(&env.click_config.range_separator),
-                |obj, writer| {
-                    if obj.is_pod() {
-                        do_exec(
-                            env,
-                            obj,
-                            &context.name,
-                            &cmd,
-                            it_arg,
-                            &matches.value_of("container"),
-                            &matches.value_of("terminal"),
-                            matches.is_present("terminal"),
-                            writer,
-                        )
-                    } else {
-                        Err(ClickError::CommandError(
-                            "Exec only possible on pods".to_string(),
-                        ))
-                    }
-                },
-            )
+            }
         } else {
-            Err(ClickError::CommandError(
-                "Need an active context in order to exec.".to_string(),
-            ))
-        }
+            true
+        };
+        let stdin = if matches.is_present("stdin") {
+            if let Some(v) = matches.value_of("stdin") {
+                // already validated
+                v.parse::<bool>().unwrap()
+            } else {
+                true
+            }
+        } else {
+            true
+        };
+        let it_arg = match (tty, stdin) {
+            (true, true) => "-it",
+            (true, false) => "-t",
+            (false, true) => "-i",
+            (false, false) => "",
+        };
+        env.apply_to_selection(
+            writer,
+            Some(&env.click_config.range_separator),
+            |obj, writer| {
+                if obj.is_pod() {
+                    do_exec(
+                        env,
+                        obj,
+                        &context.name,
+                        &cmd,
+                        it_arg,
+                        &matches.value_of("container"),
+                        &matches.value_of("terminal"),
+                        matches.is_present("terminal"),
+                        writer,
+                    )
+                } else {
+                    Err(ClickError::CommandError(
+                        "Exec only possible on pods".to_string(),
+                    ))
+                }
+            },
+        )
     },
     true // exec wants to gather up all it's training args into one big exec call
 );

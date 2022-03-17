@@ -141,6 +141,18 @@ command!(
                 .takes_value(true)
                 .default_value("0")
         )
+        .after_help(
+            "
+Examples:
+  # Copy /tmp/bar from the selected pod to /tmp/foo locally:
+  cp /tmp/bar /tmp/foo
+
+  # Copy /tmp/foo in the selected pod in a specific container to /tmp/bar locally:
+  cp /tmp/foo /tmp/bar -c <container>
+
+  # Copy the local directory /tmp/foof to /tmp/barf in the selected pod:
+  copy --direction to /tmp/foof /tmp/barf"
+        )
     },
     vec!["cp", "copy"],
     noop_complete!(),

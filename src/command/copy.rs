@@ -150,9 +150,9 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let context = env.context.as_ref().ok_or_else(|| ClickError::CommandError(
-            "Need an active context in order to copy.".to_string(),
-        ))?;
+        let context = env.context.as_ref().ok_or_else(|| {
+            ClickError::CommandError("Need an active context in order to copy.".to_string())
+        })?;
         let src = matches.value_of("src").unwrap(); // safe, required
         let dest = matches.value_of("dest").unwrap(); // safe, required
         let from = matches.value_of("direction").unwrap() == "from"; // safe, has default

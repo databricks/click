@@ -174,9 +174,9 @@ command!(
     )])
     .collect(),
     |matches, env, writer| {
-        let context = env.context.as_ref().ok_or_else(|| ClickError::CommandError(
-            "Need an active context in order to exec.".to_string(),
-        ))?;
+        let context = env.context.as_ref().ok_or_else(|| {
+            ClickError::CommandError("Need an active context in order to exec.".to_string())
+        })?;
         let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
         let tty = if matches.is_present("tty") {
             if let Some(v) = matches.value_of("tty") {

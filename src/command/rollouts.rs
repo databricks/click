@@ -33,7 +33,6 @@ use crate::{
     values::val_num,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
@@ -120,7 +119,7 @@ list_command!(
         ),
     vec!["rollouts"],
     noop_complete!(),
-    IntoIter::new([]),
+    [].into_iter(),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
             Some(ns) => RolloutValue::list_namespaced_rollout(ns, Default::default())?,

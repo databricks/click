@@ -25,7 +25,6 @@ use crate::{
     output::ClickWriter,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -168,10 +167,11 @@ command!(
         ),
     vec!["exec"],
     noop_complete!(),
-    IntoIter::new([(
+    [(
         "container".to_string(),
         completer::container_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
+    )]
+    .into_iter()
     .collect(),
     |matches, env, writer| {
         let context = env.context.as_ref().ok_or_else(|| {

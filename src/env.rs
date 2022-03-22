@@ -443,7 +443,7 @@ impl Env {
         line: &'a str,
         prev_word: Option<&'a str>,
     ) -> ExpandedAlias<'a> {
-        let pos = line.find(char::is_whitespace).unwrap_or_else(|| line.len());
+        let pos = line.find(char::is_whitespace).unwrap_or(line.len());
         let word = &line[0..pos];
         // don't expand if prev_word is Some, and is equal to my word
         // this means an alias maps to itself, and we want to stop expanding

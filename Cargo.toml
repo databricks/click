@@ -9,7 +9,7 @@ license = "Apache-2.0"
 readme = "README.md"
 keywords = ["kubernetes", "repl", "click", "cli"]
 categories = ["command-line-interface", "command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [badges]
 travis-ci = { repository = "databricks/click" }

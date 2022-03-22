@@ -120,7 +120,7 @@ list_command!(
         ),
     vec!["rollouts"],
     noop_complete!(),
-    IntoIter::new([]),
+    [].into_iter(),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
             Some(ns) => RolloutValue::list_namespaced_rollout(ns, Default::default())?,

@@ -26,7 +26,6 @@ use crate::{
     table::CellSpec,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
@@ -169,7 +168,7 @@ list_command!(
         ),
     vec!["job", "jobs"],
     noop_complete!(),
-    IntoIter::new([]),
+    [].into_iter(),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
             Some(ns) => batch_api::Job::list_namespaced_job(ns, Default::default())?,

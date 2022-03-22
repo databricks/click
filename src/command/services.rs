@@ -26,7 +26,6 @@ use crate::{
     table::CellSpec,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
@@ -168,7 +167,7 @@ list_command!(
     },
     vec!["services"],
     noop_complete!(),
-    IntoIter::new([]),
+    [].into_iter(),
     |matches, env, writer| {
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = match &env.namespace {

@@ -26,7 +26,6 @@ use crate::{
     table::CellSpec,
 };
 
-use std::array::IntoIter;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -211,7 +210,7 @@ list_command!(
     },
     vec!["nodes"],
     noop_complete!(),
-    IntoIter::new([]),
+    [].into_iter(),
     |matches, env, writer| {
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
         let (request, _response_body) = api::Node::list_node(Default::default())?;

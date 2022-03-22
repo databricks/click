@@ -25,11 +25,11 @@ use crate::{
     output::ClickWriter,
 };
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::process::Command;
-use std::{array::IntoIter, borrow::Cow};
 
 #[allow(clippy::too_many_arguments)]
 fn do_copy(
@@ -156,10 +156,11 @@ Examples:
     },
     vec!["cp", "copy"],
     noop_complete!(),
-    IntoIter::new([(
+    [(
         "container".to_string(),
         completer::container_completer as fn(&str, &Env) -> Vec<RustlinePair>
-    )])
+    )]
+    .into_iter()
     .collect(),
     |matches, env, writer| {
         let context = env.context.as_ref().ok_or_else(|| {

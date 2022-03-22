@@ -371,7 +371,7 @@ macro_rules! list_command {
             $aliases,
             $cmplters,
             //$named_cmplters,
-            IntoIter::new([
+            [
                 (
                     "sort".to_string(),
                     list_sort_completers::$cmd_name as fn(&str, &Env) -> Vec<RustlinePair>
@@ -380,7 +380,8 @@ macro_rules! list_command {
                     "show".to_string(),
                     list_show_completers::$cmd_name as fn(&str, &Env) -> Vec<RustlinePair>
                 )
-            ])
+            ]
+            .into_iter()
             .chain($named_cmplters)
             .collect(),
             $cmd_expr,

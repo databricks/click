@@ -33,7 +33,6 @@ use crate::{
     values::val_num,
 };
 
-use std::array::IntoIter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;

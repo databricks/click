@@ -15,14 +15,17 @@
 //! Code to handle reading and representing .kube/config files.
 
 use chrono::{DateTime, Local, TimeZone};
+use serde::{Deserialize, Deserializer};
 use serde_json::{self, Value};
+use serde_with::formats::Flexible;
+use serde_with::TimestampSeconds;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use std::{cell::RefCell, time::SystemTime};
 
-use crate::error::{ClickError, ClickErrNo};
+use crate::error::{ClickErrNo, ClickError};
 
 // During testing we use a mock clock to be time independent.
 #[cfg(test)]
@@ -125,41 +128,165 @@ pub struct ContextConf {
  * moment. This exposes to the k8s classes a way to get the token for each
  */
 // Classes to hold deserialized data for auth
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct AuthProvider {
-    name: String,
-    config: AuthProviderConfig,
+    name: Option<String>,
+    config: Option<AuthProviderConfig>,
 }
 
 impl AuthProvider {
     /// Try to get a token from this provider. If the current token is expired, the provider will
     /// attempt to refresh it
     pub fn get_token(&self) -> Result<String, ClickError> {
-        self.config.get_token()
+        match &self.config {
+            Some(config) => config.get_token(),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
     }
 }
 
+impl<'de> Deserialize<'de> for AuthProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let json: serde_json::value::Value = serde_json::value::Value::deserialize(deserializer)?;
+        let name = json.get("name").expect("name").as_str().unwrap();
+        let config = json.get("config").expect("config");
+
+        match name {
+            "azure" => {
+                let azure_config: AuthProviderAzureConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Azure(azure_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            "gcp" => {
+                let gcp_config: AuthProviderGcpConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Gcp(gcp_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            "oicd" => {
+                print_refresh_warn(name);
+                let oidc_config: AuthProviderOidcConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Oidc(oidc_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            _ => {
+                println!(
+                    "[Warning] found an authprovider with name {}, which isn't supported. \
+                          Clusters using this provider will not be able to authenticate",
+                    name
+                );
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(AuthProviderConfig::Invalid),
+                })
+            }
+        }
+    }
+}
+
+fn print_refresh_warn(name: &str) {
+    println!(
+        "[Warning] Click does not support refreshing tokens for '{}' auth-providers. \
+         If you get permission denied, try running a kubectl command against a cluster to \
+         refresh it.",
+        name
+    );
+}
+
 #[derive(PartialEq, Debug, Deserialize, Clone)]
-#[serde(untagged)]
 enum AuthProviderConfig {
+    Azure(AuthProviderAzureConfig),
     Gcp(AuthProviderGcpConfig),
     Oidc(AuthProviderOidcConfig),
+    // If we encounter an error deserializing for a particular cluster, we don't want to prevent
+    // starting, so we just mark as an invalid config
+    Invalid,
 }
 
 impl AuthProviderConfig {
     fn get_token(&self) -> Result<String, ClickError> {
         match self {
+            AuthProviderConfig::Azure(azure_config) => azure_config.get_token(),
             AuthProviderConfig::Gcp(gcp_config) => gcp_config.get_token(),
             AuthProviderConfig::Oidc(oidc_config) => oidc_config.get_token(),
+            AuthProviderConfig::Invalid => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
+    }
+}
+
+#[serde_with::serde_as]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderAzureConfig {
+    #[serde(rename = "access-token")]
+    access_token: Option<String>,
+    #[serde(rename = "expires-on")]
+    #[serde_as(as = "Option<TimestampSeconds<String,Flexible>>")]
+    expires_on: Option<SystemTime>,
+}
+
+impl AuthProviderAzureConfig {
+    fn is_expired(&self) -> bool {
+        match self.expires_on {
+            Some(e) => {
+                let now = SystemTime::now();
+                e < now
+            }
+            None => {
+                eprintln!("No expiry in azure provider.");
+                true
+            }
+        }
+    }
+
+    fn get_token(&self) -> Result<String, ClickError> {
+        if self.is_expired() {
+            eprintln!("Azure token is expired, and click does not support refreshing it (as this provider is deprecated). Please run one kubectl command against this cluster to refresh the token");
+            return Err(ClickError::Kube(ClickErrNo::NoTokenAvailable));
+        }
+        match &self.access_token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
         }
     }
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
-struct AuthProviderOidcConfig;
+struct AuthProviderOidcConfig {
+    #[serde(rename = "client-id")]
+    client_id: Option<String>,
+    #[serde(rename = "client-secret")]
+    client_secret: Option<String>,
+    #[serde(rename = "id-token")]
+    id_token: RefCell<Option<String>>,
+    #[serde(rename = "idp-certificate-authority")]
+    idp_certificate_authority: Option<String>,
+    #[serde(rename = "idp-issuer-url")]
+    idp_issuer_url: Option<String>,
+    #[serde(rename = "refresh-token")]
+    refresh_token: Option<String>,
+}
+
 impl AuthProviderOidcConfig {
     fn get_token(&self) -> Result<String, ClickError> {
-        todo!()
+        let token = self.id_token.borrow();
+        match &*token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
     }
 }
 
@@ -192,7 +319,7 @@ impl AuthProviderGcpConfig {
         }
         match &*token {
             Some(t) => Ok(t.clone()),
-            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable))
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
         }
     }
 

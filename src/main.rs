@@ -41,6 +41,7 @@ extern crate rustls;
 extern crate rustyline;
 extern crate serde;
 extern crate serde_json;
+extern crate serde_with;
 extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;

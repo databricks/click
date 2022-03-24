@@ -27,13 +27,17 @@ pub enum ClickErrNo {
     Unknown,
 }
 
+static NO_TOKEN_STR: &str = "Couldn't get an authentication token from the auth-provider. \
+                             You can try exiting Click and running a kubectl command \
+                             against the cluster to refresh it.";
+
 impl fmt::Display for ClickErrNo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClickErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             ClickErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             ClickErrNo::InvalidUser => write!(f, "Invalid User Name"),
-            ClickErrNo::NoTokenAvailable => write!(f, "Could not get token from AuthProvider"),
+            ClickErrNo::NoTokenAvailable => write!(f, "{}", NO_TOKEN_STR),
             ClickErrNo::Unauthorized => write!(
                 f,
                 "Not authorized to talk to cluster, check credentials in config"
@@ -49,7 +53,7 @@ impl error::Error for ClickErrNo {
             ClickErrNo::InvalidContextName => "Invalid Context Name",
             ClickErrNo::InvalidCluster => "Invalid Cluster Name",
             ClickErrNo::InvalidUser => "Invalid User Name",
-            ClickErrNo::NoTokenAvailable => "Could not get token from AuthProvider",
+            ClickErrNo::NoTokenAvailable => NO_TOKEN_STR,
             ClickErrNo::Unauthorized => {
                 "Not authorized to talk to cluster, check credentials in config"
             }

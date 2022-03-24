@@ -91,14 +91,6 @@ impl UserAuth {
     }
 }
 
-fn print_token_err() {
-    println!(
-        "Couldn't get an authentication token. You can try exiting Click and \
-         running a kubectl command against the cluster to refresh it. \
-         Also please report this error on the Click github page."
-    );
-}
-
 // convert a pkcs1 der to pkcs8 format
 fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
     let oid = ObjectIdentifier::from_slice(&[1, 2, 840, 113_549, 1, 1, 1]);
@@ -327,7 +319,7 @@ impl Context {
                 UserAuth::AuthProvider(provider) => {
                     let token = provider.get_token()?;
                     req.bearer_auth(token)
-                },
+                }
                 UserAuth::ExecProvider(ref exec_provider) => {
                     let (auth, _) = exec_provider.get_auth();
                     match auth {
@@ -379,7 +371,7 @@ impl Context {
                 UserAuth::AuthProvider(provider) => {
                     let token = provider.get_token()?;
                     req.bearer_auth(token)
-                },
+                }
                 UserAuth::ExecProvider(ref exec_provider) => {
                     let (auth, _) = exec_provider.get_auth();
                     match auth {

@@ -121,19 +121,56 @@ pub struct ContextConf {
     pub user: String,
 }
 
+/** k8s has a number of differnt "auth-provider" types. Click supports oidc and gcp at the
+ * moment. This exposes to the k8s classes a way to get the token for each
+ */
 // Classes to hold deserialized data for auth
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AuthProvider {
     name: String,
-    pub token: RefCell<Option<String>>,
-    pub expiry: RefCell<Option<DateTime<Local>>>,
-    pub config: AuthProviderConfig,
+    // pub token: RefCell<Option<String>>,
+    // pub expiry: RefCell<Option<DateTime<Local>>>,
+    #[serde(tag = "name", content = "config")]
+    config: AuthProviderConfig,
+}
+
+impl AuthProvider {
+    /// Try to get a token from this provider. If the current token is expired, the provider will
+    /// attempt to refresh it
+    fn get_token(&self) -> Result<String, ClickError> {
+        self.config.get_token()
+    }
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
-pub struct AuthProviderConfig {
+enum AuthProviderConfig {
+    #[serde(rename="gcp")]
+    Gcp(AuthProviderGcpConfig),
+    #[serde(rename="oidc")]
+    Oidc(AuthProviderOidcConfig),
+}
+
+impl AuthProviderConfig {
+    fn get_token(&self) -> Result<String, ClickError> {
+        match self {
+            AuthProviderConfig::Gcp(gcp_config) => gcp_config.get_token(),
+            AuthProviderConfig::Oidc(oidc_config) => oidc_config.get_token(),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderOidcConfig;
+impl AuthProviderOidcConfig {
+    fn get_token(&self) -> Result<String, ClickError> {
+        todo!()
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderGcpConfig {
     #[serde(rename = "access-token")]
-    pub access_token: Option<String>,
+    pub access_token: Option<RefCell<String>>,
     expiry: Option<String>,
 
     #[serde(rename = "cmd-args")]
@@ -146,7 +183,7 @@ pub struct AuthProviderConfig {
     token_key: Option<String>,
 }
 
-impl AuthProvider {
+impl AuthProviderGcpConfig {
     // Copy the token and expiry out of the config into the refcells
     pub fn copy_up(&self) {
         let mut token = self.token.borrow_mut();

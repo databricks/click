@@ -598,7 +598,7 @@ impl ExecProvider {
 pub mod tests {
     use super::*;
 
-    static TEST_CONFIG: &str = r"apiVersion: v1
+    static TEST_CONFIG: &str = r#"apiVersion: v1
 clusters:
 - cluster:
     certificate-authority: ../relative/ca.cert
@@ -660,6 +660,20 @@ users:
         cmd-path: /bin/gcloud
         expiry-key: '{.credential.token_expiry}'
         token-key: '{.credential.access_token}'
+- name: azure-example
+  user:
+    auth-provider:
+      config:
+        access-token: SomeVeryLongToken
+        apiserver-id: 982347734-4234-2344678-43a3-23094234
+        client-id: 34fa4433d0-3308-bbbb-bbbb-bbbbbba
+        config-mode: "1"
+        environment: AzurePublicCloud
+        expires-in: "599"
+        expires-on: "1648156449"
+        refresh-token: 0.SomeVeryLongToken
+        tenant-id: a-tenant-id
+      name: azure
 - name: exec
   user:
     exec:
@@ -673,7 +687,7 @@ users:
       - test-cluster
       command: aws
       env: null
-";
+"#;
 
     pub fn get_parsed_test_config() -> Config {
         Config::from_reader(TEST_CONFIG.as_bytes()).unwrap()

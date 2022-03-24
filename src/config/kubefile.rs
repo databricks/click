@@ -15,14 +15,17 @@
 //! Code to handle reading and representing .kube/config files.
 
 use chrono::{DateTime, Local, TimeZone};
+use serde::{Deserialize, Deserializer};
 use serde_json::{self, Value};
+use serde_with::formats::Flexible;
+use serde_with::TimestampSeconds;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use std::{cell::RefCell, time::SystemTime};
 
-use crate::error::ClickError;
+use crate::error::{ClickErrNo, ClickError};
 
 // During testing we use a mock clock to be time independent.
 #[cfg(test)]
@@ -121,20 +124,177 @@ pub struct ContextConf {
     pub user: String,
 }
 
+/** k8s has a number of differnt "auth-provider" types. Click supports oidc and gcp at the
+ * moment. This exposes to the k8s classes a way to get the token for each
+ */
 // Classes to hold deserialized data for auth
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct AuthProvider {
-    name: String,
-    pub token: RefCell<Option<String>>,
-    pub expiry: RefCell<Option<DateTime<Local>>>,
-    pub config: AuthProviderConfig,
+    name: Option<String>,
+    config: Option<AuthProviderConfig>,
+}
+
+impl AuthProvider {
+    /// Try to get a token from this provider. If the current token is expired, the provider will
+    /// attempt to refresh it
+    pub fn get_token(&self) -> Result<String, ClickError> {
+        match &self.config {
+            Some(config) => config.get_token(),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AuthProvider {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let json: serde_json::value::Value = serde_json::value::Value::deserialize(deserializer)?;
+        let name = json.get("name").expect("name").as_str().unwrap();
+        let config = json.get("config").expect("config");
+
+        match name {
+            "azure" => {
+                let azure_config: AuthProviderAzureConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Azure(azure_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            "gcp" => {
+                let gcp_config: AuthProviderGcpConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Gcp(gcp_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            "oicd" => {
+                print_refresh_warn(name);
+                let oidc_config: AuthProviderOidcConfig =
+                    serde_json::from_value(config.clone()).unwrap();
+                let config = AuthProviderConfig::Oidc(oidc_config);
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(config),
+                })
+            }
+            _ => {
+                println!(
+                    "[Warning] found an authprovider with name {}, which isn't supported. \
+                          Clusters using this provider will not be able to authenticate",
+                    name
+                );
+                Ok(AuthProvider {
+                    name: Some(name.to_string()),
+                    config: Some(AuthProviderConfig::Invalid),
+                })
+            }
+        }
+    }
+}
+
+fn print_refresh_warn(name: &str) {
+    println!(
+        "[Warning] Click does not support refreshing tokens for '{}' auth-providers. \
+         If you get permission denied, try running a kubectl command against a cluster to \
+         refresh it.",
+        name
+    );
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
-pub struct AuthProviderConfig {
+enum AuthProviderConfig {
+    Azure(AuthProviderAzureConfig),
+    Gcp(AuthProviderGcpConfig),
+    Oidc(AuthProviderOidcConfig),
+    // If we encounter an error deserializing for a particular cluster, we don't want to prevent
+    // starting, so we just mark as an invalid config
+    Invalid,
+}
+
+impl AuthProviderConfig {
+    fn get_token(&self) -> Result<String, ClickError> {
+        match self {
+            AuthProviderConfig::Azure(azure_config) => azure_config.get_token(),
+            AuthProviderConfig::Gcp(gcp_config) => gcp_config.get_token(),
+            AuthProviderConfig::Oidc(oidc_config) => oidc_config.get_token(),
+            AuthProviderConfig::Invalid => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
+    }
+}
+
+#[serde_with::serde_as]
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderAzureConfig {
     #[serde(rename = "access-token")]
-    pub access_token: Option<String>,
-    expiry: Option<String>,
+    access_token: Option<String>,
+    #[serde(rename = "expires-on")]
+    #[serde_as(as = "Option<TimestampSeconds<String,Flexible>>")]
+    expires_on: Option<SystemTime>,
+}
+
+impl AuthProviderAzureConfig {
+    fn is_expired(&self) -> bool {
+        match self.expires_on {
+            Some(e) => {
+                let now = SystemTime::now();
+                e < now
+            }
+            None => {
+                eprintln!("No expiry in azure provider.");
+                true
+            }
+        }
+    }
+
+    fn get_token(&self) -> Result<String, ClickError> {
+        if self.is_expired() {
+            eprintln!("Azure token is expired, and click does not support refreshing it (as this provider is deprecated). Please run one kubectl command against this cluster to refresh the token");
+            return Err(ClickError::Kube(ClickErrNo::NoTokenAvailable));
+        }
+        match &self.access_token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderOidcConfig {
+    #[serde(rename = "client-id")]
+    client_id: Option<String>,
+    #[serde(rename = "client-secret")]
+    client_secret: Option<String>,
+    #[serde(rename = "id-token")]
+    id_token: RefCell<Option<String>>,
+    #[serde(rename = "idp-certificate-authority")]
+    idp_certificate_authority: Option<String>,
+    #[serde(rename = "idp-issuer-url")]
+    idp_issuer_url: Option<String>,
+    #[serde(rename = "refresh-token")]
+    refresh_token: Option<String>,
+}
+
+impl AuthProviderOidcConfig {
+    fn get_token(&self) -> Result<String, ClickError> {
+        let token = self.id_token.borrow();
+        match &*token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Deserialize, Clone)]
+struct AuthProviderGcpConfig {
+    #[serde(rename = "access-token")]
+    pub access_token: RefCell<Option<String>>,
+    expiry: RefCell<Option<DateTime<Local>>>,
 
     #[serde(rename = "cmd-args")]
     cmd_args: Option<String>,
@@ -146,19 +306,20 @@ pub struct AuthProviderConfig {
     token_key: Option<String>,
 }
 
-impl AuthProvider {
-    // Copy the token and expiry out of the config into the refcells
-    pub fn copy_up(&self) {
-        let mut token = self.token.borrow_mut();
-        *token = self.config.access_token.clone();
-        let mut expiry = self.expiry.borrow_mut();
-        if let Some(expiry_str) = &self.config.expiry {
-            match AuthProvider::parse_expiry(expiry_str.as_str()) {
-                Ok(e) => *expiry = Some(e),
-                Err(e) => {
-                    eprintln!("Failed to parse expiry from config: {}", e);
-                }
-            }
+impl AuthProviderGcpConfig {
+    /// Gets the token. This first checks that we have a valid token, and if not, attempts to update
+    /// it based on the config
+    pub fn get_token(&self) -> Result<String, ClickError> {
+        let mut token = self.access_token.borrow_mut();
+        if token.is_none() || self.is_expired() {
+            // update
+            let mut expiry = self.expiry.borrow_mut();
+            *token = None;
+            self.update_token(&mut token, &mut expiry)
+        }
+        match &*token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable)),
         }
     }
 
@@ -211,9 +372,9 @@ impl AuthProvider {
     ) {
         let v: Value = serde_json::from_str(output).unwrap();
         let mut updated_token = false;
-        match self.config.token_key.as_ref() {
+        match self.token_key.as_ref() {
             Some(tk) => {
-                let token_pntr = AuthProvider::make_pointer(tk.as_str());
+                let token_pntr = AuthProviderGcpConfig::make_pointer(tk.as_str());
                 let extracted_token = v.pointer(token_pntr.as_str()).and_then(|tv| tv.as_str());
                 *token = extracted_token.map(|t| t.to_owned());
                 updated_token = true;
@@ -224,14 +385,14 @@ impl AuthProvider {
         }
 
         if updated_token {
-            match self.config.expiry_key.as_ref() {
+            match self.expiry_key.as_ref() {
                 Some(ek) => {
-                    let expiry_pntr = AuthProvider::make_pointer(ek.as_str());
+                    let expiry_pntr = AuthProviderGcpConfig::make_pointer(ek.as_str());
                     let extracted_expiry =
                         v.pointer(expiry_pntr.as_str()).and_then(|ev| ev.as_str());
                     match extracted_expiry {
                         Some(extracted_expiry) => {
-                            match AuthProvider::parse_expiry(extracted_expiry) {
+                            match AuthProviderGcpConfig::parse_expiry(extracted_expiry) {
                                 Ok(e) => *expiry = Some(e),
                                 Err(e) => {
                                     eprintln!("Failed to parse expiry from returned json: {}", e);
@@ -254,10 +415,9 @@ impl AuthProvider {
     }
 
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<DateTime<Local>>) {
-        match self.config.cmd_path {
+        match self.cmd_path {
             Some(ref conf_cmd) => {
                 let args = self
-                    .config
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
@@ -275,18 +435,6 @@ impl AuthProvider {
                 println!("No update command specified, can't update");
             }
         }
-    }
-
-    /// Checks that we have a valid token, and if not, attempts to update it based on the config
-    pub fn ensure_token(&self) -> Option<String> {
-        let mut token = self.token.borrow_mut();
-        if token.is_none() || self.is_expired() {
-            // update
-            let mut expiry = self.expiry.borrow_mut();
-            *token = None;
-            self.update_token(&mut token, &mut expiry)
-        }
-        token.clone()
     }
 }
 
@@ -450,7 +598,7 @@ impl ExecProvider {
 pub mod tests {
     use super::*;
 
-    static TEST_CONFIG: &str = r"apiVersion: v1
+    static TEST_CONFIG: &str = r#"apiVersion: v1
 clusters:
 - cluster:
     certificate-authority: ../relative/ca.cert
@@ -506,12 +654,26 @@ users:
 - name: gke
   user:
     auth-provider:
-      name: gke-provider
+      name: gcp
       config:
         cmd-args: config config-helper --format=json
         cmd-path: /bin/gcloud
         expiry-key: '{.credential.token_expiry}'
         token-key: '{.credential.access_token}'
+- name: azure-example
+  user:
+    auth-provider:
+      config:
+        access-token: SomeVeryLongToken
+        apiserver-id: 982347734-4234-2344678-43a3-23094234
+        client-id: 34fa4433d0-3308-bbbb-bbbb-bbbbbba
+        config-mode: "1"
+        environment: AzurePublicCloud
+        expires-in: "599"
+        expires-on: "1648156449"
+        refresh-token: 0.SomeVeryLongToken
+        tenant-id: a-tenant-id
+      name: azure
 - name: exec
   user:
     exec:
@@ -525,7 +687,7 @@ users:
       - test-cluster
       command: aws
       env: null
-";
+"#;
 
     pub fn get_parsed_test_config() -> Config {
         Config::from_reader(TEST_CONFIG.as_bytes()).unwrap()
@@ -729,45 +891,40 @@ users:
 
     #[test]
     fn make_pointer() {
-        let p = AuthProvider::make_pointer("{.credential.expiry_key}");
+        let p = AuthProviderGcpConfig::make_pointer("{.credential.expiry_key}");
         assert_eq!(p, "/credential/expiry_key");
 
-        let p = AuthProvider::make_pointer("");
+        let p = AuthProviderGcpConfig::make_pointer("");
         assert_eq!(p, "");
 
-        let p = AuthProvider::make_pointer("{}");
+        let p = AuthProviderGcpConfig::make_pointer("{}");
         assert_eq!(p, "");
 
-        let p = AuthProvider::make_pointer("{blah}");
+        let p = AuthProviderGcpConfig::make_pointer("{blah}");
         assert_eq!(p, "blah");
 
-        let p = AuthProvider::make_pointer("{.blah}");
+        let p = AuthProviderGcpConfig::make_pointer("{.blah}");
         assert_eq!(p, "/blah");
 
-        let p = AuthProvider::make_pointer("{blah.foo}");
+        let p = AuthProviderGcpConfig::make_pointer("{blah.foo}");
         assert_eq!(p, "blah/foo");
     }
 
     #[test]
     fn parse_output_and_update() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config = AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(None),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: Some("{.credential.token_expiry}".to_string()),
-                token_key: Some("{.credential.access_token}".to_string()),
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: Some("{.credential.token_expiry}".to_string()),
+            token_key: Some("{.credential.access_token}".to_string()),
         };
         {
             // scope for token/expiry borrow
-            let mut token = ap.token.borrow_mut();
-            let mut expiry = ap.expiry.borrow_mut();
-            ap.parse_output_and_update(
+            let mut token = gcp_config.access_token.borrow_mut();
+            let mut expiry = gcp_config.expiry.borrow_mut();
+            gcp_config.parse_output_and_update(
                 r#"{
   "configuration": {
     "active_configuration": "default",
@@ -791,9 +948,12 @@ users:
                 &mut expiry,
             );
         }
-        assert_eq!(ap.token, RefCell::new(Some("THETOKEN".to_string())));
         assert_eq!(
-            ap.expiry,
+            gcp_config.access_token,
+            RefCell::new(Some("THETOKEN".to_string()))
+        );
+        assert_eq!(
+            gcp_config.expiry,
             RefCell::new(Some(
                 DateTime::parse_from_rfc3339("2019-12-29T23:38:43Z")
                     .unwrap()
@@ -803,41 +963,14 @@ users:
     }
 
     #[test]
-    fn copy_up() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
-            expiry: RefCell::new(None),
-            config: AuthProviderConfig {
-                access_token: Some("CTOKEN".to_string()),
-                expiry: Some("2019-12-29T23:24:25Z".to_string()),
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
-        };
-        ap.copy_up();
-        assert_eq!(ap.token, RefCell::new(Some("CTOKEN".to_string())));
-        assert_eq!(
-            ap.expiry,
-            RefCell::new(Some(
-                DateTime::parse_from_rfc3339("2019-12-29T23:24:25Z")
-                    .unwrap()
-                    .with_timezone(&Local)
-            ))
-        );
-    }
-
-    #[test]
     fn parse_expiry() {
-        let e = AuthProvider::parse_expiry("2018-04-01T05:57:31Z");
+        let e = AuthProviderGcpConfig::parse_expiry("2018-04-01T05:57:31Z");
         assert_eq!(
             e.unwrap(),
             DateTime::parse_from_rfc3339("2018-04-01T05:57:31Z").unwrap()
         );
 
-        let e = AuthProvider::parse_expiry("2018-04-01 5:57:31");
+        let e = AuthProviderGcpConfig::parse_expiry("2018-04-01 5:57:31");
         assert_eq!(
             e.unwrap(),
             Local
@@ -845,41 +978,31 @@ users:
                 .unwrap()
         );
 
-        let fe = AuthProvider::parse_expiry("INVALID");
+        let fe = AuthProviderGcpConfig::parse_expiry("INVALID");
         assert!(fe.is_err());
     }
 
     #[test]
     fn is_expired() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config = AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(Some(Local::now() - chrono::Duration::hours(1))),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: None,
+            token_key: None,
         };
-        assert!(ap.is_expired());
+        assert!(gcp_config.is_expired());
 
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config = AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(Some(Local::now() + chrono::Duration::hours(1))),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: None,
+            token_key: None,
         };
-        assert!(!ap.is_expired());
+        assert!(!gcp_config.is_expired());
     }
 
     #[test]

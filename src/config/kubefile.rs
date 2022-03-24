@@ -912,7 +912,7 @@ users:
 
     #[test]
     fn parse_output_and_update() {
-        let gcp_config =AuthProviderGcpConfig {
+        let gcp_config = AuthProviderGcpConfig {
             access_token: RefCell::new(None),
             expiry: RefCell::new(None),
             cmd_args: None,
@@ -948,7 +948,10 @@ users:
                 &mut expiry,
             );
         }
-        assert_eq!(gcp_config.access_token, RefCell::new(Some("THETOKEN".to_string())));
+        assert_eq!(
+            gcp_config.access_token,
+            RefCell::new(Some("THETOKEN".to_string()))
+        );
         assert_eq!(
             gcp_config.expiry,
             RefCell::new(Some(

@@ -654,7 +654,7 @@ users:
 - name: gke
   user:
     auth-provider:
-      name: gke-provider
+      name: gcp
       config:
         cmd-args: config config-helper --format=json
         cmd-path: /bin/gcloud
@@ -877,45 +877,40 @@ users:
 
     #[test]
     fn make_pointer() {
-        let p = AuthProvider::make_pointer("{.credential.expiry_key}");
+        let p = AuthProviderGcpConfig::make_pointer("{.credential.expiry_key}");
         assert_eq!(p, "/credential/expiry_key");
 
-        let p = AuthProvider::make_pointer("");
+        let p = AuthProviderGcpConfig::make_pointer("");
         assert_eq!(p, "");
 
-        let p = AuthProvider::make_pointer("{}");
+        let p = AuthProviderGcpConfig::make_pointer("{}");
         assert_eq!(p, "");
 
-        let p = AuthProvider::make_pointer("{blah}");
+        let p = AuthProviderGcpConfig::make_pointer("{blah}");
         assert_eq!(p, "blah");
 
-        let p = AuthProvider::make_pointer("{.blah}");
+        let p = AuthProviderGcpConfig::make_pointer("{.blah}");
         assert_eq!(p, "/blah");
 
-        let p = AuthProvider::make_pointer("{blah.foo}");
+        let p = AuthProviderGcpConfig::make_pointer("{blah.foo}");
         assert_eq!(p, "blah/foo");
     }
 
     #[test]
     fn parse_output_and_update() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config =AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(None),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: Some("{.credential.token_expiry}".to_string()),
-                token_key: Some("{.credential.access_token}".to_string()),
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: Some("{.credential.token_expiry}".to_string()),
+            token_key: Some("{.credential.access_token}".to_string()),
         };
         {
             // scope for token/expiry borrow
-            let mut token = ap.token.borrow_mut();
-            let mut expiry = ap.expiry.borrow_mut();
-            ap.parse_output_and_update(
+            let mut token = gcp_config.access_token.borrow_mut();
+            let mut expiry = gcp_config.expiry.borrow_mut();
+            gcp_config.parse_output_and_update(
                 r#"{
   "configuration": {
     "active_configuration": "default",
@@ -939,9 +934,9 @@ users:
                 &mut expiry,
             );
         }
-        assert_eq!(ap.token, RefCell::new(Some("THETOKEN".to_string())));
+        assert_eq!(gcp_config.access_token, RefCell::new(Some("THETOKEN".to_string())));
         assert_eq!(
-            ap.expiry,
+            gcp_config.expiry,
             RefCell::new(Some(
                 DateTime::parse_from_rfc3339("2019-12-29T23:38:43Z")
                     .unwrap()
@@ -951,41 +946,14 @@ users:
     }
 
     #[test]
-    fn copy_up() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
-            expiry: RefCell::new(None),
-            config: AuthProviderConfig {
-                access_token: Some("CTOKEN".to_string()),
-                expiry: Some("2019-12-29T23:24:25Z".to_string()),
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
-        };
-        ap.copy_up();
-        assert_eq!(ap.token, RefCell::new(Some("CTOKEN".to_string())));
-        assert_eq!(
-            ap.expiry,
-            RefCell::new(Some(
-                DateTime::parse_from_rfc3339("2019-12-29T23:24:25Z")
-                    .unwrap()
-                    .with_timezone(&Local)
-            ))
-        );
-    }
-
-    #[test]
     fn parse_expiry() {
-        let e = AuthProvider::parse_expiry("2018-04-01T05:57:31Z");
+        let e = AuthProviderGcpConfig::parse_expiry("2018-04-01T05:57:31Z");
         assert_eq!(
             e.unwrap(),
             DateTime::parse_from_rfc3339("2018-04-01T05:57:31Z").unwrap()
         );
 
-        let e = AuthProvider::parse_expiry("2018-04-01 5:57:31");
+        let e = AuthProviderGcpConfig::parse_expiry("2018-04-01 5:57:31");
         assert_eq!(
             e.unwrap(),
             Local
@@ -993,41 +961,31 @@ users:
                 .unwrap()
         );
 
-        let fe = AuthProvider::parse_expiry("INVALID");
+        let fe = AuthProviderGcpConfig::parse_expiry("INVALID");
         assert!(fe.is_err());
     }
 
     #[test]
     fn is_expired() {
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config = AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(Some(Local::now() - chrono::Duration::hours(1))),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: None,
+            token_key: None,
         };
-        assert!(ap.is_expired());
+        assert!(gcp_config.is_expired());
 
-        let ap = AuthProvider {
-            name: "name".to_string(),
-            token: RefCell::new(None),
+        let gcp_config = AuthProviderGcpConfig {
+            access_token: RefCell::new(None),
             expiry: RefCell::new(Some(Local::now() + chrono::Duration::hours(1))),
-            config: AuthProviderConfig {
-                access_token: None,
-                expiry: None,
-                cmd_args: None,
-                cmd_path: None,
-                expiry_key: None,
-                token_key: None,
-            },
+            cmd_args: None,
+            cmd_path: None,
+            expiry_key: None,
+            token_key: None,
         };
-        assert!(!ap.is_expired());
+        assert!(!gcp_config.is_expired());
     }
 
     #[test]

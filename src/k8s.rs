@@ -324,12 +324,9 @@ impl Context {
         let req = req.headers(parts.headers).body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {
-                UserAuth::AuthProvider(provider) => match provider.ensure_token() {
-                    Some(token) => req.bearer_auth(token),
-                    None => {
-                        print_token_err();
-                        req
-                    }
+                UserAuth::AuthProvider(provider) => {
+                    let token = provider.get_token()?;
+                    req.bearer_auth(token)
                 },
                 UserAuth::ExecProvider(ref exec_provider) => {
                     let (auth, _) = exec_provider.get_auth();
@@ -379,12 +376,9 @@ impl Context {
         let req = req.body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {
-                UserAuth::AuthProvider(provider) => match provider.ensure_token() {
-                    Some(token) => req.bearer_auth(token),
-                    None => {
-                        print_token_err();
-                        req
-                    }
+                UserAuth::AuthProvider(provider) => {
+                    let token = provider.get_token()?;
+                    req.bearer_auth(token)
                 },
                 UserAuth::ExecProvider(ref exec_provider) => {
                     let (auth, _) = exec_provider.get_auth();

@@ -285,7 +285,6 @@ impl Config {
                         K8SUserAuth::with_user_pass(username.to_string(), password.to_string());
                 }
                 UserAuth::AuthProvider(provider) => {
-                    provider.copy_up();
                     k8suser = K8SUserAuth::with_auth_provider(*provider.clone());
                 }
                 UserAuth::ExecProvider(provider) => {

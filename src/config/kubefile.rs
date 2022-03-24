@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 
-use crate::error::ClickError;
+use crate::error::{ClickError, ClickErrNo};
 
 // During testing we use a mock clock to be time independent.
 #[cfg(test)]
@@ -128,25 +128,21 @@ pub struct ContextConf {
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 pub struct AuthProvider {
     name: String,
-    // pub token: RefCell<Option<String>>,
-    // pub expiry: RefCell<Option<DateTime<Local>>>,
-    #[serde(tag = "name", content = "config")]
     config: AuthProviderConfig,
 }
 
 impl AuthProvider {
     /// Try to get a token from this provider. If the current token is expired, the provider will
     /// attempt to refresh it
-    fn get_token(&self) -> Result<String, ClickError> {
+    pub fn get_token(&self) -> Result<String, ClickError> {
         self.config.get_token()
     }
 }
 
 #[derive(PartialEq, Debug, Deserialize, Clone)]
+#[serde(untagged)]
 enum AuthProviderConfig {
-    #[serde(rename="gcp")]
     Gcp(AuthProviderGcpConfig),
-    #[serde(rename="oidc")]
     Oidc(AuthProviderOidcConfig),
 }
 
@@ -170,8 +166,8 @@ impl AuthProviderOidcConfig {
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 struct AuthProviderGcpConfig {
     #[serde(rename = "access-token")]
-    pub access_token: Option<RefCell<String>>,
-    expiry: Option<String>,
+    pub access_token: RefCell<Option<String>>,
+    expiry: RefCell<Option<DateTime<Local>>>,
 
     #[serde(rename = "cmd-args")]
     cmd_args: Option<String>,
@@ -184,18 +180,19 @@ struct AuthProviderGcpConfig {
 }
 
 impl AuthProviderGcpConfig {
-    // Copy the token and expiry out of the config into the refcells
-    pub fn copy_up(&self) {
-        let mut token = self.token.borrow_mut();
-        *token = self.config.access_token.clone();
-        let mut expiry = self.expiry.borrow_mut();
-        if let Some(expiry_str) = &self.config.expiry {
-            match AuthProvider::parse_expiry(expiry_str.as_str()) {
-                Ok(e) => *expiry = Some(e),
-                Err(e) => {
-                    eprintln!("Failed to parse expiry from config: {}", e);
-                }
-            }
+    /// Gets the token. This first checks that we have a valid token, and if not, attempts to update
+    /// it based on the config
+    pub fn get_token(&self) -> Result<String, ClickError> {
+        let mut token = self.access_token.borrow_mut();
+        if token.is_none() || self.is_expired() {
+            // update
+            let mut expiry = self.expiry.borrow_mut();
+            *token = None;
+            self.update_token(&mut token, &mut expiry)
+        }
+        match &*token {
+            Some(t) => Ok(t.clone()),
+            None => Err(ClickError::Kube(ClickErrNo::NoTokenAvailable))
         }
     }
 
@@ -248,9 +245,9 @@ impl AuthProviderGcpConfig {
     ) {
         let v: Value = serde_json::from_str(output).unwrap();
         let mut updated_token = false;
-        match self.config.token_key.as_ref() {
+        match self.token_key.as_ref() {
             Some(tk) => {
-                let token_pntr = AuthProvider::make_pointer(tk.as_str());
+                let token_pntr = AuthProviderGcpConfig::make_pointer(tk.as_str());
                 let extracted_token = v.pointer(token_pntr.as_str()).and_then(|tv| tv.as_str());
                 *token = extracted_token.map(|t| t.to_owned());
                 updated_token = true;
@@ -261,14 +258,14 @@ impl AuthProviderGcpConfig {
         }
 
         if updated_token {
-            match self.config.expiry_key.as_ref() {
+            match self.expiry_key.as_ref() {
                 Some(ek) => {
-                    let expiry_pntr = AuthProvider::make_pointer(ek.as_str());
+                    let expiry_pntr = AuthProviderGcpConfig::make_pointer(ek.as_str());
                     let extracted_expiry =
                         v.pointer(expiry_pntr.as_str()).and_then(|ev| ev.as_str());
                     match extracted_expiry {
                         Some(extracted_expiry) => {
-                            match AuthProvider::parse_expiry(extracted_expiry) {
+                            match AuthProviderGcpConfig::parse_expiry(extracted_expiry) {
                                 Ok(e) => *expiry = Some(e),
                                 Err(e) => {
                                     eprintln!("Failed to parse expiry from returned json: {}", e);
@@ -291,10 +288,9 @@ impl AuthProviderGcpConfig {
     }
 
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<DateTime<Local>>) {
-        match self.config.cmd_path {
+        match self.cmd_path {
             Some(ref conf_cmd) => {
                 let args = self
-                    .config
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
@@ -312,18 +308,6 @@ impl AuthProviderGcpConfig {
                 println!("No update command specified, can't update");
             }
         }
-    }
-
-    /// Checks that we have a valid token, and if not, attempts to update it based on the config
-    pub fn ensure_token(&self) -> Option<String> {
-        let mut token = self.token.borrow_mut();
-        if token.is_none() || self.is_expired() {
-            // update
-            let mut expiry = self.expiry.borrow_mut();
-            *token = None;
-            self.update_token(&mut token, &mut expiry)
-        }
-        token.clone()
     }
 }
 

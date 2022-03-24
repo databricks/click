@@ -22,6 +22,7 @@ pub enum ClickErrNo {
     InvalidContextName,
     InvalidCluster,
     InvalidUser,
+    NoTokenAvailable,
     Unauthorized,
     Unknown,
 }
@@ -32,6 +33,7 @@ impl fmt::Display for ClickErrNo {
             ClickErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             ClickErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             ClickErrNo::InvalidUser => write!(f, "Invalid User Name"),
+            ClickErrNo::NoTokenAvailable => write!(f, "Could not get token from AuthProvider"),
             ClickErrNo::Unauthorized => write!(
                 f,
                 "Not authorized to talk to cluster, check credentials in config"
@@ -47,6 +49,7 @@ impl error::Error for ClickErrNo {
             ClickErrNo::InvalidContextName => "Invalid Context Name",
             ClickErrNo::InvalidCluster => "Invalid Cluster Name",
             ClickErrNo::InvalidUser => "Invalid User Name",
+            ClickErrNo::NoTokenAvailable => "Could not get token from AuthProvider",
             ClickErrNo::Unauthorized => {
                 "Not authorized to talk to cluster, check credentials in config"
             }

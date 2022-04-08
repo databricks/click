@@ -140,7 +140,12 @@ where
             flags.push("namespace");
         }
 
-        command_def::add_extra_cols(&mut cols, matches.is_present("labels"), flags, ecm);
+        let labels_present = if matches.is_valid_subcommand("labels") {
+            matches.is_present("labels")
+        } else {
+            false
+        };
+        command_def::add_extra_cols(&mut cols, labels_present, flags, ecm);
     }
 
     handle_list_result(

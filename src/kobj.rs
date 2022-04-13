@@ -44,6 +44,7 @@ pub enum ObjType {
     Service,
     ReplicaSet,
     StatefulSet,
+    DaemonSet,
     ConfigMap,
     Secret,
     Job,
@@ -111,6 +112,7 @@ impl KObj {
             ObjType::Pod { .. } => "Pod",
             ObjType::Crd { _type, .. } => _type,
             ObjType::Node => "Node",
+            ObjType::DaemonSet => "DaemonSet",
             ObjType::Deployment => "Deployment",
             ObjType::Service => "Service",
             ObjType::ReplicaSet => "ReplicaSet",
@@ -131,6 +133,7 @@ impl KObj {
             ObjType::Pod { .. } => Yellow.bold().paint(self.name.as_str()),
             ObjType::Crd { .. } => Blue.bold().paint(self.name.as_str()),
             ObjType::Node => Blue.bold().paint(self.name.as_str()),
+            ObjType::DaemonSet => Yellow.bold().paint(self.name.as_str()),
             ObjType::Deployment => Purple.bold().paint(self.name.as_str()),
             ObjType::Service => Cyan.bold().paint(self.name.as_str()),
             ObjType::ReplicaSet => Green.bold().paint(self.name.as_str()),
@@ -291,6 +294,14 @@ impl KObj {
                     api::ConfigMap::read_namespaced_config_map,
                     api::ReadNamespacedConfigMapResponse,
                     api::ReadNamespacedConfigMapResponse::Ok,
+                    None
+                );
+            }
+            ObjType::DaemonSet => {
+                do_describe_with_namespace!(
+                    api_apps::DaemonSet::read_namespaced_daemon_set,
+                    api_apps::ReadNamespacedDaemonSetResponse,
+                    api_apps::ReadNamespacedDaemonSetResponse::Ok,
                     None
                 );
             }

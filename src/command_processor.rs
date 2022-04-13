@@ -186,6 +186,7 @@ impl CommandProcessor {
             Box::new(crate::command::configmaps::ConfigMaps::new()),
             Box::new(crate::command::copy::Copy::new()),
             Box::new(crate::command::crds::Crd::new()),
+            Box::new(crate::command::daemonsets::DaemonSets::new()),
             Box::new(crate::command::delete::Delete::new()),
             Box::new(crate::command::deployments::Deployments::new()),
             Box::new(crate::command::describe::Describe::new()),

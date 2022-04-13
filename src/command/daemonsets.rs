@@ -100,27 +100,38 @@ fn ds_images(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
 }
 
 fn ds_available(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
-    daemonset.status.as_ref().and_then(|stat| {
-        stat.number_available.map(|num| num.into())
-    })
+    daemonset
+        .status
+        .as_ref()
+        .and_then(|stat| stat.number_available.map(|num| num.into()))
 }
 
 fn ds_current(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
-    daemonset.status.as_ref().map(|status| status.current_number_scheduled.into())
+    daemonset
+        .status
+        .as_ref()
+        .map(|status| status.current_number_scheduled.into())
 }
 
 fn ds_desired(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
-    daemonset.status.as_ref().map(|status| status.desired_number_scheduled.into())
+    daemonset
+        .status
+        .as_ref()
+        .map(|status| status.desired_number_scheduled.into())
 }
 
 fn ds_ready(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
-    daemonset.status.as_ref().map(|stat| stat.number_ready.into())
+    daemonset
+        .status
+        .as_ref()
+        .map(|stat| stat.number_ready.into())
 }
 
 fn ds_up_to_date(daemonset: &apps_api::DaemonSet) -> Option<CellSpec<'_>> {
-    daemonset.status.as_ref().and_then(|stat| {
-        stat.updated_number_scheduled.map(|num| num.into())
-    })
+    daemonset
+        .status
+        .as_ref()
+        .and_then(|stat| stat.updated_number_scheduled.map(|num| num.into()))
 }
 
 list_command!(
@@ -158,12 +169,8 @@ list_command!(
     [].into_iter(),
     |matches, env, writer| {
         let (request, _response_body) = match &env.namespace {
-            Some(ns) => {
-                apps_api::DaemonSet::list_namespaced_daemon_set(ns, Default::default())?
-            }
-            None => {
-                apps_api::DaemonSet::list_daemon_set_for_all_namespaces(Default::default())?
-            }
+            Some(ns) => apps_api::DaemonSet::list_namespaced_daemon_set(ns, Default::default())?,
+            None => apps_api::DaemonSet::list_daemon_set_for_all_namespaces(Default::default())?,
         };
         let cols: Vec<&str> = COL_MAP.iter().map(|(_, col)| *col).collect();
 

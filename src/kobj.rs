@@ -113,20 +113,12 @@ fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     writeln!(
         writer,
         "Name:\t\t{}",
-        metadata
-            .name
-            .as_ref()
-            .map(|n| n.as_str())
-            .unwrap_or_else(|| "<Unknown>")
+        metadata.name.as_deref().unwrap_or("<Unknown>")
     )?;
     writeln!(
         writer,
         "Namespace:\t{}",
-        metadata
-            .namespace
-            .as_ref()
-            .map(|n| n.as_str())
-            .unwrap_or_else(|| "<Unknown>")
+        metadata.namespace.as_deref().unwrap_or("<Unknown>")
     )?;
     write!(
         writer,
@@ -315,7 +307,8 @@ impl KObj {
                 }
             }};
         }
-        macro_rules! do_describe_with_namespace { // TODO: It would be nice to merge these two
+        macro_rules! do_describe_with_namespace {
+            // TODO: It would be nice to merge these two
             ($read_func: expr, $resp_typ: ty, $resp_ok: path) => {
                 match self.namespace.as_ref() {
                     Some(ns) => {

@@ -131,7 +131,7 @@ fn service_selector(service: &api::Service) -> Option<CellSpec<'_>> {
     service
         .spec
         .as_ref()
-        .map(|spec| keyval_string(&spec.selector).into())
+        .map(|spec| keyval_string(&spec.selector, None, None).into())
 }
 
 list_command!(

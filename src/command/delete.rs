@@ -90,6 +90,15 @@ fn delete_obj(
                 .0;
                 send_delete::<api::ConfigMap>(env, writer, req)
             }
+            ObjType::DaemonSet => {
+                let req = api_apps::DaemonSet::delete_namespaced_daemon_set(
+                    obj.name.as_str(),
+                    ns.as_str(),
+                    options,
+                )?
+                .0;
+                send_delete::<api_apps::DaemonSet>(env, writer, req)
+            }
             ObjType::Deployment => {
                 let req = api_apps::Deployment::delete_namespaced_deployment(
                     obj.name.as_str(),

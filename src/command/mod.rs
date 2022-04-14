@@ -109,9 +109,13 @@ where
     }
     let list = list_res?;
 
-    let mut flags: Vec<&str> = match matches.values_of("show") {
-        Some(v) => v.collect(),
-        None => vec![],
+    let mut flags: Vec<&str> = if matches.is_valid_subcommand("show") {
+        match matches.values_of("show") {
+            Some(v) => v.collect(),
+            None => vec![],
+        }
+    } else {
+        vec![]
     };
 
     let sort = matches.value_of("sort").map(|s| {

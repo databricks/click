@@ -74,7 +74,7 @@ command!(
             |obj, writer| {
                 obj.describe(&matches, env, writer)?;
                 if include_events {
-                    clickwriteln!(writer, "Events:");
+                    clickwriteln!(writer, "\nEvents:");
                     print_events_for_obj(obj, env, writer)
                 } else {
                     Ok(())

@@ -25,7 +25,6 @@ use k8s_openapi::api::{
     apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api, storage::v1 as api_storage,
 };
 
-use serde::ser::Serialize;
 use serde_json::Value;
 
 use std::io::Write;
@@ -72,27 +71,6 @@ impl From<VecWrap> for Vec<KObj> {
         vw.items
     }
 }
-
-fn maybe_full_describe_output<T: ?Sized>(
-    matches: &ArgMatches,
-    value: &T,
-    writer: &mut ClickWriter,
-) -> bool
-where
-    T: Serialize,
-{
-    if matches.is_present("json") {
-        writer.pretty_color_json(value).unwrap_or(());
-        true
-    } else if matches.is_present("yaml") {
-        writer.print_yaml(value).unwrap_or(());
-        true
-    } else {
-        false
-    }
-}
-
-static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 impl KObj {
     pub fn from_value(value: &Value, typ: ObjType) -> Option<KObj> {
@@ -158,65 +136,6 @@ impl KObj {
         matches!(self.typ, ObjType::Pod { .. })
     }
 
-    // service is a bit more complex, so handle it here
-    fn service_describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
-        let ns = self.namespace.as_ref().unwrap();
-
-        let (request, _) =
-            api::Endpoints::read_namespaced_endpoints(&self.name, ns, Default::default()).unwrap();
-        let epval = match env.run_on_context(|c| c.read(request)).unwrap() {
-            api::ReadNamespacedEndpointsResponse::Ok(resp) => {
-                serde_json::value::to_value(&resp).ok()
-            }
-            _ => {
-                clickwriteln!(writer, "Error fetching endpoints");
-                None
-            }
-        };
-
-        let (request, _) =
-            api::Service::read_namespaced_service(&self.name, ns, Default::default()).unwrap();
-        match env.run_on_context(|c| c.read(request)).unwrap() {
-            api::ReadNamespacedServiceResponse::Ok(service) => {
-                if !maybe_full_describe_output(matches, &service, writer) {
-                    let val = serde_json::value::to_value(&service).unwrap();
-                    clickwriteln!(writer, "{}", describe::describe_format_service(val, epval));
-                }
-            }
-            _ => {
-                clickwriteln!(writer, "Invalid response trying to read service info");
-            }
-        }
-    }
-
-    // crd is a bit more complex, so handle it here
-    fn crd_describe(
-        &self,
-        _type: &str,
-        group_version: &str,
-        matches: &ArgMatches,
-        env: &Env,
-        writer: &mut ClickWriter,
-    ) -> Result<(), ClickError> {
-        let ns = self.namespace.as_ref().unwrap();
-        let (request, _) =
-            crate::crd::read_namespaced_resource(&self.name, ns, _type, group_version)?;
-        match env
-            .run_on_context(|c| c.read::<crate::crd::ReadResourceValueResponse>(request))
-            .unwrap()
-        {
-            crate::crd::ReadResourceValueResponse::Ok(t) => {
-                if !maybe_full_describe_output(matches, &t, writer) {
-                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
-                }
-            }
-            crate::crd::ReadResourceValueResponse::Other(e) => {
-                clickwriteln!(writer, "Error getting response: {:?}", e);
-            }
-        };
-        Ok(())
-    }
-
     /// describe the object represented by this kobj
     pub fn describe(
         &self,
@@ -227,24 +146,17 @@ impl KObj {
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {
-            ($read_func:expr, $resp_typ:ty, $resp_ok:path, $custom_desc: expr) => {{
+            ($read_func:expr, $resp_typ:ty, $resp_ok:path, $($desc_func: expr),*) => {{
                 let (request, _) = $read_func(&self.name, Default::default())?;
                 match env
                     .run_on_context(|c| c.read::<$resp_typ>(request))
                     .unwrap()
                 {
                     $resp_ok(t) => {
-                        if !maybe_full_describe_output(matches, &t, writer) {
-                            let desc_func: Option<fn(Value) -> String> = $custom_desc;
-                            match desc_func {
-                                Some(custom) => {
-                                    let val = serde_json::value::to_value(&t).unwrap();
-                                    clickwriteln!(writer, "{}", custom(val));
-                                }
-                                None => {
-                                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
-                                }
-                            }
+                        if !describe::maybe_full_describe_output(matches, &t, writer) {
+                            $(
+                                $desc_func(&t, writer)?;
+                            )*
                         }
                     }
                     _ => {} // TODO
@@ -252,7 +164,8 @@ impl KObj {
             }};
         }
         macro_rules! do_describe_with_namespace {
-            ($read_func: expr, $resp_typ: ty, $resp_ok: path, $custom_desc: expr) => {{
+            // TODO: It would be nice to merge these two
+            ($read_func: expr, $resp_typ: ty, $resp_ok: path, $($desc_func: expr),*) => {
                 match self.namespace.as_ref() {
                     Some(ns) => {
                         let (request, _) = $read_func(&self.name, ns, Default::default())?;
@@ -261,22 +174,10 @@ impl KObj {
                             .unwrap()
                         {
                             $resp_ok(t) => {
-                                if !maybe_full_describe_output(matches, &t, writer) {
-                                    let desc_func: Option<fn(Value) -> String> = $custom_desc;
-                                    match desc_func {
-                                        Some(custom) => {
-                                            let val = serde_json::value::to_value(&t).unwrap();
-                                            clickwriteln!(writer, "{}", custom(val));
-                                        }
-                                        None => {
-                                            clickwriteln!(
-                                                writer,
-                                                "{} {}",
-                                                self.type_str(),
-                                                NOTSUPPORTED
-                                            );
-                                        }
-                                    }
+                                if !describe::maybe_full_describe_output(matches, &t, writer) {
+                                    $(
+                                        $desc_func(&t, writer)?;
+                                    )*
                                 }
                             }
                             _ => {}
@@ -286,7 +187,7 @@ impl KObj {
                         clickwriteln!(writer, "No namespace for {}, cannot describe", self.name);
                     }
                 }
-            }};
+            };
         }
         match self.typ {
             ObjType::ConfigMap => {
@@ -294,7 +195,7 @@ impl KObj {
                     api::ConfigMap::read_namespaced_config_map,
                     api::ReadNamespacedConfigMapResponse,
                     api::ReadNamespacedConfigMapResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::DaemonSet => {
@@ -302,7 +203,7 @@ impl KObj {
                     api_apps::DaemonSet::read_namespaced_daemon_set,
                     api_apps::ReadNamespacedDaemonSetResponse,
                     api_apps::ReadNamespacedDaemonSetResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Deployment => {
@@ -310,7 +211,7 @@ impl KObj {
                     api_apps::Deployment::read_namespaced_deployment,
                     api_apps::ReadNamespacedDeploymentResponse,
                     api_apps::ReadNamespacedDeploymentResponse::Ok,
-                    Some(describe::describe_format_deployment)
+                    describe::legacy::describe_format_deployment
                 );
             }
             ObjType::Job => {
@@ -318,7 +219,7 @@ impl KObj {
                     api_batch::Job::read_namespaced_job,
                     api_batch::ReadNamespacedJobResponse,
                     api_batch::ReadNamespacedJobResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Namespace => {
@@ -326,7 +227,7 @@ impl KObj {
                     api::Namespace::read_namespace,
                     api::ReadNamespaceResponse,
                     api::ReadNamespaceResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Node => {
@@ -334,7 +235,7 @@ impl KObj {
                     api::Node::read_node,
                     api::ReadNodeResponse,
                     api::ReadNodeResponse::Ok,
-                    Some(describe::describe_format_node)
+                    describe::legacy::describe_format_node
                 );
             }
             ObjType::PersistentVolume => {
@@ -342,7 +243,7 @@ impl KObj {
                     api::PersistentVolume::read_persistent_volume,
                     api::ReadPersistentVolumeResponse,
                     api::ReadPersistentVolumeResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Pod { .. } => {
@@ -350,7 +251,7 @@ impl KObj {
                     api::Pod::read_namespaced_pod,
                     api::ReadNamespacedPodResponse,
                     api::ReadNamespacedPodResponse::Ok,
-                    Some(describe::describe_format_pod)
+                    describe::legacy::describe_format_pod
                 );
             }
             ObjType::ReplicaSet => {
@@ -358,7 +259,7 @@ impl KObj {
                     api_apps::ReplicaSet::read_namespaced_replica_set,
                     api_apps::ReadNamespacedReplicaSetResponse,
                     api_apps::ReadNamespacedReplicaSetResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Secret => {
@@ -366,18 +267,24 @@ impl KObj {
                     api::Secret::read_namespaced_secret,
                     api::ReadNamespacedSecretResponse,
                     api::ReadNamespacedSecretResponse::Ok,
-                    Some(describe::describe_format_secret)
+                    describe::legacy::describe_format_secret
                 );
             }
             ObjType::Service => {
-                self.service_describe(matches, env, writer);
+                describe::service::service_describe(
+                    &self.name,
+                    self.namespace.as_ref().unwrap(),
+                    matches,
+                    env,
+                    writer,
+                )?;
             }
             ObjType::StatefulSet => {
                 do_describe_with_namespace!(
                     api_apps::StatefulSet::read_namespaced_stateful_set,
                     api_apps::ReadNamespacedStatefulSetResponse,
                     api_apps::ReadNamespacedStatefulSetResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::StorageClass => {
@@ -385,14 +292,22 @@ impl KObj {
                     api_storage::StorageClass::read_storage_class,
                     api_storage::ReadStorageClassResponse,
                     api_storage::ReadStorageClassResponse::Ok,
-                    None
+                    describe::describe_metadata
                 );
             }
             ObjType::Crd {
                 ref _type,
                 ref group_version,
             } => {
-                self.crd_describe(_type, group_version, matches, env, writer)?;
+                describe::crd::crd_describe(
+                    &self.name,
+                    self.namespace.as_ref().unwrap(),
+                    _type,
+                    group_version,
+                    matches,
+                    env,
+                    writer,
+                )?;
             }
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => {
@@ -401,7 +316,7 @@ impl KObj {
                     rollouts::RolloutValue::read_namespaced_rollout,
                     rollouts::ReadNamespacedRolloutValueResponse,
                     rollouts::ReadNamespacedRolloutValueResponse::Ok,
-                    Some(describe::describe_format_rollout)
+                    describe::legacy::describe_format_rollout
                 );
             }
         }

@@ -15,16 +15,19 @@
 //!  Utility functions for the Describe command, used to output
 //!  information for supported kubernetes object types
 
+use crate::error::ClickError;
+use crate::output::ClickWriter;
 use crate::values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
+use k8s_openapi::api::{apps::v1 as api_apps, core::v1 as api};
 use serde_json::Value;
 
 use std::borrow::Cow;
-use std::fmt::Write;
+use std::io::Write;
 use std::str::{self, FromStr};
 
 pub enum DescItem<'a> {
@@ -50,7 +53,6 @@ pub enum DescItem<'a> {
         func: &'a (dyn Fn(&Value) -> Cow<str>),
         default: &'a str,
     },
-    StaticStr(Cow<'a, str>),
 }
 
 /// get key/vals out of a value
@@ -146,15 +148,16 @@ where
                     None => default.into(),
                 }
             }
-            DescItem::StaticStr(s) => s,
         };
+        use std::fmt::Write;
         writeln!(&mut res, "{}{}", title, val).unwrap();
     }
     res
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_pod(v: Value) -> String {
+pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(pod).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -216,7 +219,9 @@ pub fn describe_format_pod(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Get volume info out of volume array
@@ -294,7 +299,8 @@ fn pod_phase(v: &Value) -> Cow<str> {
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_node(v: Value) -> String {
+pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&node).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -341,7 +347,9 @@ pub fn describe_format_node(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 fn node_access_url(v: &Value) -> Cow<str> {
@@ -380,170 +388,12 @@ fn node_access_url(v: &Value) -> Cow<str> {
     }
 }
 
-/// Utility function for describe to print service info
-pub fn describe_format_service(v: Value, endpoint_val: Option<Value>) -> String {
-    let port_str = get_ports_str(v.pointer("/spec/ports"), endpoint_val);
-    let fields = vec![
-        (
-            "Name:\t\t",
-            DescItem::MetadataValStr {
-                path: "/name",
-                default: "<No Name>",
-            },
-        ),
-        (
-            "Labels:\t",
-            DescItem::KeyValStr {
-                parent: "/metadata/labels",
-                secret_vals: false,
-            },
-        ),
-        (
-            "Annotations:",
-            DescItem::KeyValStr {
-                parent: "/metadata/annotations",
-                secret_vals: false,
-            },
-        ),
-        ("Created at:\t", DescItem::ObjectCreated),
-        (
-            "Selector:",
-            DescItem::KeyValStr {
-                parent: "/spec/selector",
-                secret_vals: false,
-            },
-        ),
-        (
-            "Type:\t\t",
-            DescItem::ValStr {
-                path: "/spec/type",
-                default: "<No Type>",
-            },
-        ),
-        (
-            "IP:\t\t",
-            DescItem::ValStr {
-                path: "/spec/clusterIP",
-                default: "<No Type>",
-            },
-        ),
-        (
-            "LoadBalIngress:\t",
-            DescItem::ValStr {
-                path: "/status/loadBalancer/ingress/0/hostname",
-                default: "<No Ingress>",
-            },
-        ),
-        ("Ports:\n", DescItem::StaticStr(port_str)),
-        (
-            "SessionAffnity:\t",
-            DescItem::ValStr {
-                path: "/spec/sessionAffnity",
-                default: "<none>",
-            },
-        ),
-    ];
-    describe_object(&v, fields.into_iter())
-}
-
-/// Get ports info out of ports array
-fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
-    if v.is_none() {
-        return "<none>".into();
-    }
-    let mut buf = String::new();
-    match v.unwrap().as_array() {
-        // safe unwrap, checked above
-        Some(port_array) => {
-            for port in port_array.iter() {
-                let proto = val_str("/protocol", port, "<Unknown>");
-                let name = val_str("/name", port, "<No Name>");
-                let port_num = val_u64("/port", port, 0);
-                let endpoints = match endpoint_val {
-                    Some(ref ep) => {
-                        // to get all the endpoints, we need to check all subsets this port is in
-                        // TODO: This is complex, simplify and/or abstract
-                        let mut epbuf = String::from_str("  Endpoints:\t").unwrap();
-                        let mut found_one = false;
-                        ep.pointer("/subsets").map(|s| {
-                            s.as_array().map(|subsets| {
-                                for subset in subsets.iter() {
-                                    // see if this subset has this port by checking if any port in
-                                    // the ports array has the same port number
-                                    let contains = subset
-                                        .pointer("/ports")
-                                        .map(|p| {
-                                            p.as_array()
-                                                .map(|ports_array| {
-                                                    let mut c = false;
-                                                    for port in ports_array.iter() {
-                                                        if port_num == val_u64("/port", port, 0) {
-                                                            c = true;
-                                                        }
-                                                    }
-                                                    c
-                                                })
-                                                .unwrap_or(false)
-                                        })
-                                        .unwrap_or(false);
-                                    if contains {
-                                        // we do have this port, need to add all addresses as
-                                        // endpoints
-                                        found_one = true;
-                                        let port_num = val_u64("/targetPort", port, 0);
-                                        subset.pointer("/addresses").map(|a| {
-                                            a.as_array().map(|addr_array| {
-                                                let mut first = true;
-                                                for addr in addr_array.iter() {
-                                                    if first {
-                                                        first = false;
-                                                    } else {
-                                                        epbuf.push_str(", ");
-                                                    }
-                                                    epbuf.push_str(
-                                                        format!(
-                                                            "{}:{}",
-                                                            val_str("/ip", addr, "<No IP>"),
-                                                            port_num
-                                                        )
-                                                        .as_str(),
-                                                    );
-                                                }
-                                            })
-                                        });
-                                    }
-                                }
-                            })
-                        });
-                        if !found_one {
-                            epbuf.push_str("<none>");
-                        }
-                        epbuf
-                    }
-                    None => "<No Endpoints>".to_owned(),
-                };
-                buf.push_str(format!("  Port:\t\t{} {}/{}\n", name, port_num, proto).as_str());
-                buf.push_str(
-                    format!(
-                        "  NodePort:\t{} {}/{}\n",
-                        val_str("/name", port, "<No Name>"),
-                        val_u64("/nodePort", port, 0),
-                        proto
-                    )
-                    .as_str(),
-                );
-                buf.push_str(endpoints.as_str());
-                buf.push('\n');
-                buf.push('\n');
-            }
-        }
-        None => buf.push_str("<none>"),
-    }
-    buf.into()
-}
-
 /// Utility function to describe a secret
-pub fn describe_format_secret(v: Value) -> String {
+pub fn describe_format_secret(
+    secret: &api::Secret,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&secret).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -588,7 +438,9 @@ pub fn describe_format_secret(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Get container info out of container array
@@ -628,7 +480,11 @@ fn get_message_str(v: &Value) -> Cow<str> {
 }
 
 /// Utility function to describe a deployment
-pub fn describe_format_deployment(v: Value) -> String {
+pub fn describe_format_deployment(
+    deployment: &api_apps::Deployment,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&deployment).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -704,12 +560,20 @@ pub fn describe_format_deployment(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Utility function to describe a rollout
 #[cfg(feature = "argorollouts")]
-pub fn describe_format_rollout(v: Value) -> String {
+use crate::command::rollouts;
+#[cfg(feature = "argorollouts")]
+pub fn describe_format_rollout(
+    rollout: &rollouts::RolloutValue,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&rollout).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -785,5 +649,7 @@ pub fn describe_format_rollout(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }

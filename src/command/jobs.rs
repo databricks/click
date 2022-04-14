@@ -132,7 +132,7 @@ fn job_selector(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     job.spec.as_ref().and_then(|spec| {
         spec.selector
             .as_ref()
-            .map(|selector| keyval_string(&selector.match_labels).into())
+            .map(|selector| keyval_string(&selector.match_labels, None, None).into())
     })
 }
 

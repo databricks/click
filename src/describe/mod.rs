@@ -13,16 +13,17 @@
 // limitations under the License.
 
 /// This module contains code for handling how click describes various k8s objects
-
-use crate::{output::ClickWriter, error::ClickError, command::keyval_string};
+use crate::{command::keyval_string, error::ClickError, output::ClickWriter};
 use chrono::Local;
 use clap::ArgMatches;
-use k8s_openapi::{Metadata, apimachinery::pkg::apis::meta::v1::ObjectMeta, Resource};
+use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata, Resource};
 use serde::ser::Serialize;
 use std::{collections::HashSet, io::Write};
 
+pub mod crd;
 pub mod legacy;
 
+pub static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 pub fn maybe_full_describe_output<T: ?Sized>(
     matches: &ArgMatches,
@@ -56,7 +57,10 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     writer: &mut ClickWriter,
 ) -> Result<(), ClickError> {
     let metadata = value.metadata();
-    writeln!(writer, "Name:\t\t{}", metadata.name.as_deref().unwrap_or("<Unknown>")
+    writeln!(
+        writer,
+        "Name:\t\t{}",
+        metadata.name.as_deref().unwrap_or("<Unknown>")
     )?;
     writeln!(
         writer,
@@ -88,10 +92,29 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
         )?,
         None => writeln!(writer, "Created At:\t<Unknown>")?,
     }
-    writeln!(writer, "Generation\t{}",  metadata.generation.map(|g| format!("{}", g)).as_deref().unwrap_or("<none>"))?;
-    writeln!(writer, "ResourceVersn:\t{}", metadata.resource_version.as_deref().unwrap_or("<Unknown>"))?;
-    writeln!(writer, "Self Link:\t{}", metadata.self_link.as_deref().unwrap_or("<Unknown>"))?;
-    writeln!(writer, "UID:\t\t{}", metadata.uid.as_deref().unwrap_or("<Unknown>"))?;
+    writeln!(
+        writer,
+        "Generation\t{}",
+        metadata
+            .generation
+            .map(|g| format!("{}", g))
+            .as_deref()
+            .unwrap_or("<none>")
+    )?;
+    writeln!(
+        writer,
+        "ResourceVersn:\t{}",
+        metadata.resource_version.as_deref().unwrap_or("<Unknown>")
+    )?;
+    writeln!(
+        writer,
+        "Self Link:\t{}",
+        metadata.self_link.as_deref().unwrap_or("<Unknown>")
+    )?;
+    writeln!(
+        writer,
+        "UID:\t\t{}",
+        metadata.uid.as_deref().unwrap_or("<Unknown>")
+    )?;
     Ok(())
 }
-

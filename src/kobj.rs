@@ -29,8 +29,6 @@ use serde_json::Value;
 
 use std::io::Write;
 
-static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjType {
     Pod {
@@ -160,41 +158,17 @@ impl KObj {
             api::ReadNamespacedServiceResponse::Ok(service) => {
                 if !describe::maybe_full_describe_output(matches, &service, writer) {
                     let val = serde_json::value::to_value(&service).unwrap();
-                    clickwriteln!(writer, "{}", describe::legacy::describe_format_service(val, epval));
+                    clickwriteln!(
+                        writer,
+                        "{}",
+                        describe::legacy::describe_format_service(val, epval)
+                    );
                 }
             }
             _ => {
                 clickwriteln!(writer, "Invalid response trying to read service info");
             }
         }
-    }
-
-    // crd is a bit more complex, so handle it here
-    fn crd_describe(
-        &self,
-        _type: &str,
-        group_version: &str,
-        matches: &ArgMatches,
-        env: &Env,
-        writer: &mut ClickWriter,
-    ) -> Result<(), ClickError> {
-        let ns = self.namespace.as_ref().unwrap();
-        let (request, _) =
-            crate::crd::read_namespaced_resource(&self.name, ns, _type, group_version)?;
-        match env
-            .run_on_context(|c| c.read::<crate::crd::ReadResourceValueResponse>(request))
-            .unwrap()
-        {
-            crate::crd::ReadResourceValueResponse::Ok(t) => {
-                if !describe::maybe_full_describe_output(matches, &t, writer) {
-                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
-                }
-            }
-            crate::crd::ReadResourceValueResponse::Other(e) => {
-                clickwriteln!(writer, "Error getting response: {:?}", e);
-            }
-        };
-        Ok(())
     }
 
     /// describe the object represented by this kobj
@@ -222,7 +196,12 @@ impl KObj {
                                     clickwriteln!(writer, "{}", custom(val));
                                 }
                                 None => {
-                                    clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
+                                    clickwriteln!(
+                                        writer,
+                                        "{} {}",
+                                        self.type_str(),
+                                        describe::NOTSUPPORTED
+                                    );
                                 }
                             }
                         }
@@ -376,7 +355,15 @@ impl KObj {
                 ref _type,
                 ref group_version,
             } => {
-                self.crd_describe(_type, group_version, matches, env, writer)?;
+                describe::crd::crd_describe(
+                    &self.name,
+                    self.namespace.as_ref().unwrap(),
+                    _type,
+                    group_version,
+                    matches,
+                    env,
+                    writer,
+                )?;
             }
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => {

@@ -146,7 +146,7 @@ impl KObj {
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {
-            ($read_func:expr, $resp_typ:ty, $resp_ok:path) => {{
+            ($read_func:expr, $resp_typ:ty, $resp_ok:path, $($desc_func: expr),*) => {{
                 let (request, _) = $read_func(&self.name, Default::default())?;
                 match env
                     .run_on_context(|c| c.read::<$resp_typ>(request))
@@ -154,22 +154,9 @@ impl KObj {
                 {
                     $resp_ok(t) => {
                         if !describe::maybe_full_describe_output(matches, &t, writer) {
-                            describe::describe_metadata(&t, writer)?;
-                        }
-                    }
-                    _ => {} // TODO
-                }
-            }};
-            ($read_func:expr, $resp_typ:ty, $resp_ok:path, $custom_desc: expr) => {{
-                let (request, _) = $read_func(&self.name, Default::default())?;
-                match env
-                    .run_on_context(|c| c.read::<$resp_typ>(request))
-                    .unwrap()
-                {
-                    $resp_ok(t) => {
-                        if !describe::maybe_full_describe_output(matches, &t, writer) {
-                            let val = serde_json::value::to_value(&t).unwrap();
-                            clickwriteln!(writer, "{}", $custom_desc(val));
+                            $(
+                                $desc_func(&t, writer)?;
+                            )*
                         }
                     }
                     _ => {} // TODO
@@ -256,7 +243,8 @@ impl KObj {
                 do_describe!(
                     api::Namespace::read_namespace,
                     api::ReadNamespaceResponse,
-                    api::ReadNamespaceResponse::Ok
+                    api::ReadNamespaceResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Node => {
@@ -271,7 +259,8 @@ impl KObj {
                 do_describe!(
                     api::PersistentVolume::read_persistent_volume,
                     api::ReadPersistentVolumeResponse,
-                    api::ReadPersistentVolumeResponse::Ok
+                    api::ReadPersistentVolumeResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Pod { .. } => {
@@ -317,7 +306,8 @@ impl KObj {
                 do_describe!(
                     api_storage::StorageClass::read_storage_class,
                     api_storage::ReadStorageClassResponse,
-                    api_storage::ReadStorageClassResponse::Ok
+                    api_storage::ReadStorageClassResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Crd {

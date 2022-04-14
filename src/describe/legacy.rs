@@ -15,16 +15,19 @@
 //!  Utility functions for the Describe command, used to output
 //!  information for supported kubernetes object types
 
+use crate::error::ClickError;
+use crate::output::ClickWriter;
 use crate::values::{val_str, val_str_opt, val_u64};
 
 use ansi_term::Colour;
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
+use k8s_openapi::api::core::v1 as api;
 use serde_json::Value;
 
 use std::borrow::Cow;
-use std::fmt::Write;
+use std::io::Write;
 use std::str::{self, FromStr};
 
 pub enum DescItem<'a> {
@@ -148,6 +151,7 @@ where
             }
             DescItem::StaticStr(s) => s,
         };
+        use std::fmt::Write;
         writeln!(&mut res, "{}{}", title, val).unwrap();
     }
     res
@@ -294,7 +298,8 @@ fn pod_phase(v: &Value) -> Cow<str> {
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_node(v: Value) -> String {
+pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&node).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -341,7 +346,9 @@ pub fn describe_format_node(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 fn node_access_url(v: &Value) -> Cow<str> {

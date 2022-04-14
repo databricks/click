@@ -23,7 +23,9 @@ use ansi_term::Colour;
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
-use k8s_openapi::api::core::v1 as api;
+use k8s_openapi::api::{
+    apps::v1 as api_apps, core::v1 as api,
+};
 use serde_json::Value;
 
 use std::borrow::Cow;
@@ -53,7 +55,6 @@ pub enum DescItem<'a> {
         func: &'a (dyn Fn(&Value) -> Cow<str>),
         default: &'a str,
     },
-    StaticStr(Cow<'a, str>),
 }
 
 /// get key/vals out of a value
@@ -158,7 +159,8 @@ where
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_pod(v: Value) -> String {
+pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(pod).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -220,7 +222,9 @@ pub fn describe_format_pod(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Get volume info out of volume array
@@ -388,7 +392,11 @@ fn node_access_url(v: &Value) -> Cow<str> {
 }
 
 /// Utility function to describe a secret
-pub fn describe_format_secret(v: Value) -> String {
+pub fn describe_format_secret(
+    secret: &api::Secret,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&secret).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -433,7 +441,9 @@ pub fn describe_format_secret(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Get container info out of container array
@@ -473,7 +483,11 @@ fn get_message_str(v: &Value) -> Cow<str> {
 }
 
 /// Utility function to describe a deployment
-pub fn describe_format_deployment(v: Value) -> String {
+pub fn describe_format_deployment(
+    deployment: &api_apps::Deployment,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&deployment).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -549,12 +563,20 @@ pub fn describe_format_deployment(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }
 
 /// Utility function to describe a rollout
 #[cfg(feature = "argorollouts")]
-pub fn describe_format_rollout(v: Value) -> String {
+use crate::command::rollouts;
+#[cfg(feature = "argorollouts")]
+pub fn describe_format_rollout(
+    rollout: &rollouts::RolloutValue,
+    writer: &mut ClickWriter,
+) -> Result<(), ClickError> {
+    let v = serde_json::value::to_value(&rollout).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -630,5 +652,7 @@ pub fn describe_format_rollout(v: Value) -> String {
             },
         ),
     ];
-    describe_object(&v, fields.into_iter())
+    let s = describe_object(&v, fields.into_iter());
+    clickwriteln!(writer, "{}", s);
+    Ok(())
 }

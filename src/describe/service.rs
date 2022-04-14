@@ -108,9 +108,10 @@ fn describe_format_service(
                 buf.push_str("<none>");
             } else {
                 for ingress in load_bal.ingress.iter() {
-                    let istr = ingress.hostname.as_deref().unwrap_or(
-                        ingress.ip.as_deref().unwrap_or("<unknown>")
-                    );
+                    let istr = ingress
+                        .hostname
+                        .as_deref()
+                        .unwrap_or(ingress.ip.as_deref().unwrap_or("<unknown>"));
                     buf.push_str(istr);
                 }
             }

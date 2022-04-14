@@ -165,7 +165,7 @@ impl KObj {
         }
         macro_rules! do_describe_with_namespace {
             // TODO: It would be nice to merge these two
-            ($read_func: expr, $resp_typ: ty, $resp_ok: path) => {
+            ($read_func: expr, $resp_typ: ty, $resp_ok: path, $($desc_func: expr),*) => {
                 match self.namespace.as_ref() {
                     Some(ns) => {
                         let (request, _) = $read_func(&self.name, ns, Default::default())?;
@@ -175,29 +175,9 @@ impl KObj {
                         {
                             $resp_ok(t) => {
                                 if !describe::maybe_full_describe_output(matches, &t, writer) {
-                                    describe::describe_metadata(&t, writer)?;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    None => {
-                        clickwriteln!(writer, "No namespace for {}, cannot describe", self.name);
-                    }
-                }
-            };
-            ($read_func: expr, $resp_typ: ty, $resp_ok: path, $custom_desc: expr) => {
-                match self.namespace.as_ref() {
-                    Some(ns) => {
-                        let (request, _) = $read_func(&self.name, ns, Default::default())?;
-                        match env
-                            .run_on_context(|c| c.read::<$resp_typ>(request))
-                            .unwrap()
-                        {
-                            $resp_ok(t) => {
-                                if !describe::maybe_full_describe_output(matches, &t, writer) {
-                                    let val = serde_json::value::to_value(&t).unwrap();
-                                    clickwriteln!(writer, "{}", $custom_desc(val));
+                                    $(
+                                        $desc_func(&t, writer)?;
+                                    )*
                                 }
                             }
                             _ => {}
@@ -214,14 +194,16 @@ impl KObj {
                 do_describe_with_namespace!(
                     api::ConfigMap::read_namespaced_config_map,
                     api::ReadNamespacedConfigMapResponse,
-                    api::ReadNamespacedConfigMapResponse::Ok
+                    api::ReadNamespacedConfigMapResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::DaemonSet => {
                 do_describe_with_namespace!(
                     api_apps::DaemonSet::read_namespaced_daemon_set,
                     api_apps::ReadNamespacedDaemonSetResponse,
-                    api_apps::ReadNamespacedDaemonSetResponse::Ok
+                    api_apps::ReadNamespacedDaemonSetResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Deployment => {
@@ -236,7 +218,8 @@ impl KObj {
                 do_describe_with_namespace!(
                     api_batch::Job::read_namespaced_job,
                     api_batch::ReadNamespacedJobResponse,
-                    api_batch::ReadNamespacedJobResponse::Ok
+                    api_batch::ReadNamespacedJobResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Namespace => {
@@ -275,7 +258,8 @@ impl KObj {
                 do_describe_with_namespace!(
                     api_apps::ReplicaSet::read_namespaced_replica_set,
                     api_apps::ReadNamespacedReplicaSetResponse,
-                    api_apps::ReadNamespacedReplicaSetResponse::Ok
+                    api_apps::ReadNamespacedReplicaSetResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Secret => {
@@ -299,7 +283,8 @@ impl KObj {
                 do_describe_with_namespace!(
                     api_apps::StatefulSet::read_namespaced_stateful_set,
                     api_apps::ReadNamespacedStatefulSetResponse,
-                    api_apps::ReadNamespacedStatefulSetResponse::Ok
+                    api_apps::ReadNamespacedStatefulSetResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::StorageClass => {

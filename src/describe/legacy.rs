@@ -23,9 +23,7 @@ use ansi_term::Colour;
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
-use k8s_openapi::api::{
-    apps::v1 as api_apps, core::v1 as api,
-};
+use k8s_openapi::api::{apps::v1 as api_apps, core::v1 as api};
 use serde_json::Value;
 
 use std::borrow::Cow;
@@ -150,7 +148,6 @@ where
                     None => default.into(),
                 }
             }
-            DescItem::StaticStr(s) => s,
         };
         use std::fmt::Write;
         writeln!(&mut res, "{}{}", title, val).unwrap();

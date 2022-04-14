@@ -76,7 +76,7 @@ fn describe_format_service(
             .spec
             .as_ref()
             .map(|spec| { keyval_string(&spec.selector, Some("\t\t"), None) })
-            .unwrap_or("<none>".to_string())
+            .unwrap_or_else(|| "<none>".to_string())
     );
     clickwriteln!(
         writer,
@@ -111,7 +111,7 @@ fn describe_format_service(
                     let istr = ingress
                         .hostname
                         .as_deref()
-                        .unwrap_or(ingress.ip.as_deref().unwrap_or("<unknown>"));
+                        .unwrap_or_else(|| ingress.ip.as_deref().unwrap_or("<unknown>"));
                     buf.push_str(istr);
                 }
             }
@@ -151,7 +151,7 @@ fn describe_format_service(
                     Some(spec.load_balancer_source_ranges.join(", "))
                 }
             })
-            .unwrap_or("<none>".to_string())
+            .unwrap_or_else(|| "<none>".to_string())
     );
     clickwrite!(writer, "Ports:\n{}", port_str);
 }

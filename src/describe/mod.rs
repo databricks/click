@@ -22,6 +22,7 @@ use std::{collections::HashSet, io::Write};
 
 pub mod crd;
 pub mod legacy;
+pub mod service;
 
 pub static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 

@@ -136,41 +136,6 @@ impl KObj {
         matches!(self.typ, ObjType::Pod { .. })
     }
 
-    // service is a bit more complex, so handle it here
-    fn service_describe(&self, matches: &ArgMatches, env: &Env, writer: &mut ClickWriter) {
-        let ns = self.namespace.as_ref().unwrap();
-
-        let (request, _) =
-            api::Endpoints::read_namespaced_endpoints(&self.name, ns, Default::default()).unwrap();
-        let epval = match env.run_on_context(|c| c.read(request)).unwrap() {
-            api::ReadNamespacedEndpointsResponse::Ok(resp) => {
-                serde_json::value::to_value(&resp).ok()
-            }
-            _ => {
-                clickwriteln!(writer, "Error fetching endpoints");
-                None
-            }
-        };
-
-        let (request, _) =
-            api::Service::read_namespaced_service(&self.name, ns, Default::default()).unwrap();
-        match env.run_on_context(|c| c.read(request)).unwrap() {
-            api::ReadNamespacedServiceResponse::Ok(service) => {
-                if !describe::maybe_full_describe_output(matches, &service, writer) {
-                    let val = serde_json::value::to_value(&service).unwrap();
-                    clickwriteln!(
-                        writer,
-                        "{}",
-                        describe::legacy::describe_format_service(val, epval)
-                    );
-                }
-            }
-            _ => {
-                clickwriteln!(writer, "Invalid response trying to read service info");
-            }
-        }
-    }
-
     /// describe the object represented by this kobj
     pub fn describe(
         &self,
@@ -334,7 +299,13 @@ impl KObj {
                 );
             }
             ObjType::Service => {
-                self.service_describe(matches, env, writer);
+                describe::service::service_describe(
+                    &self.name,
+                    self.namespace.as_ref().unwrap(),
+                    matches,
+                    env,
+                    writer,
+                )?;
             }
             ObjType::StatefulSet => {
                 do_describe_with_namespace!(

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::command::keyval_string;
 use crate::describe;
 use crate::error::ClickError;
 use crate::output::ClickWriter;
@@ -21,19 +20,16 @@ use crate::Env;
 
 use ansi_term::ANSIString;
 use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
-use chrono::Local;
 use clap::ArgMatches;
 use k8s_openapi::api::{
     apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api, storage::v1 as api_storage,
 };
-use k8s_openapi::{Metadata, Resource};
 
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use serde::ser::Serialize;
 use serde_json::Value;
 
-use std::collections::HashSet;
 use std::io::Write;
+
+static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ObjType {
@@ -77,78 +73,6 @@ impl From<VecWrap> for Vec<KObj> {
         vw.items
     }
 }
-
-fn maybe_full_describe_output<T: ?Sized>(
-    matches: &ArgMatches,
-    value: &T,
-    writer: &mut ClickWriter,
-) -> bool
-where
-    T: Serialize,
-{
-    if matches.is_present("json") {
-        writer.pretty_color_json(value).unwrap_or(());
-        true
-    } else if matches.is_present("yaml") {
-        writer.print_yaml(value).unwrap_or(());
-        true
-    } else {
-        false
-    }
-}
-
-lazy_static! {
-    static ref DESCRIBE_SKIP_KEYS: HashSet<String> = {
-        let mut s: HashSet<String> = HashSet::new();
-        s.insert("kubectl.kubernetes.io/last-applied-configuration".to_string());
-        s
-    };
-}
-
-fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
-    value: &T,
-    writer: &mut ClickWriter,
-) -> Result<(), ClickError> {
-    let metadata = value.metadata();
-    writeln!(
-        writer,
-        "Name:\t\t{}",
-        metadata.name.as_deref().unwrap_or("<Unknown>")
-    )?;
-    writeln!(
-        writer,
-        "Namespace:\t{}",
-        metadata.namespace.as_deref().unwrap_or("<Unknown>")
-    )?;
-    write!(
-        writer,
-        "Labels:\t\t{}",
-        keyval_string(&metadata.labels, Some("\t\t"), None)
-    )?;
-    write!(
-        writer,
-        "Annotations:\t{}",
-        keyval_string(
-            &metadata.annotations,
-            Some("\t\t"),
-            Some(&DESCRIBE_SKIP_KEYS)
-        )
-    )?;
-    writeln!(writer, "API Version:\t{}", <T as Resource>::API_VERSION)?;
-    writeln!(writer, "Kind:\t\t{}", <T as Resource>::KIND)?;
-    match &metadata.creation_timestamp {
-        Some(created) => writeln!(
-            writer,
-            "Created At:\t{} ({})",
-            created.0,
-            created.0.with_timezone(&Local)
-        )?,
-        None => writeln!(writer, "Created At:\t<Unknown>")?,
-    }
-    Ok(())
-}
-
-static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
 impl KObj {
     pub fn from_value(value: &Value, typ: ObjType) -> Option<KObj> {
@@ -234,9 +158,9 @@ impl KObj {
             api::Service::read_namespaced_service(&self.name, ns, Default::default()).unwrap();
         match env.run_on_context(|c| c.read(request)).unwrap() {
             api::ReadNamespacedServiceResponse::Ok(service) => {
-                if !maybe_full_describe_output(matches, &service, writer) {
+                if !describe::maybe_full_describe_output(matches, &service, writer) {
                     let val = serde_json::value::to_value(&service).unwrap();
-                    clickwriteln!(writer, "{}", describe::describe_format_service(val, epval));
+                    clickwriteln!(writer, "{}", describe::legacy::describe_format_service(val, epval));
                 }
             }
             _ => {
@@ -262,7 +186,7 @@ impl KObj {
             .unwrap()
         {
             crate::crd::ReadResourceValueResponse::Ok(t) => {
-                if !maybe_full_describe_output(matches, &t, writer) {
+                if !describe::maybe_full_describe_output(matches, &t, writer) {
                     clickwriteln!(writer, "{} {}", self.type_str(), NOTSUPPORTED);
                 }
             }
@@ -290,7 +214,7 @@ impl KObj {
                     .unwrap()
                 {
                     $resp_ok(t) => {
-                        if !maybe_full_describe_output(matches, &t, writer) {
+                        if !describe::maybe_full_describe_output(matches, &t, writer) {
                             let desc_func: Option<fn(Value) -> String> = $custom_desc;
                             match desc_func {
                                 Some(custom) => {
@@ -318,8 +242,8 @@ impl KObj {
                             .unwrap()
                         {
                             $resp_ok(t) => {
-                                if !maybe_full_describe_output(matches, &t, writer) {
-                                    describe_metadata(&t, writer)?;
+                                if !describe::maybe_full_describe_output(matches, &t, writer) {
+                                    describe::describe_metadata(&t, writer)?;
                                 }
                             }
                             _ => {}
@@ -339,7 +263,7 @@ impl KObj {
                             .unwrap()
                         {
                             $resp_ok(t) => {
-                                if !maybe_full_describe_output(matches, &t, writer) {
+                                if !describe::maybe_full_describe_output(matches, &t, writer) {
                                     let val = serde_json::value::to_value(&t).unwrap();
                                     clickwriteln!(writer, "{}", $custom_desc(val));
                                 }
@@ -373,7 +297,7 @@ impl KObj {
                     api_apps::Deployment::read_namespaced_deployment,
                     api_apps::ReadNamespacedDeploymentResponse,
                     api_apps::ReadNamespacedDeploymentResponse::Ok,
-                    describe::describe_format_deployment
+                    describe::legacy::describe_format_deployment
                 );
             }
             ObjType::Job => {
@@ -396,7 +320,7 @@ impl KObj {
                     api::Node::read_node,
                     api::ReadNodeResponse,
                     api::ReadNodeResponse::Ok,
-                    Some(describe::describe_format_node)
+                    Some(describe::legacy::describe_format_node)
                 );
             }
             ObjType::PersistentVolume => {
@@ -412,7 +336,7 @@ impl KObj {
                     api::Pod::read_namespaced_pod,
                     api::ReadNamespacedPodResponse,
                     api::ReadNamespacedPodResponse::Ok,
-                    describe::describe_format_pod
+                    describe::legacy::describe_format_pod
                 );
             }
             ObjType::ReplicaSet => {
@@ -427,7 +351,7 @@ impl KObj {
                     api::Secret::read_namespaced_secret,
                     api::ReadNamespacedSecretResponse,
                     api::ReadNamespacedSecretResponse::Ok,
-                    describe::describe_format_secret
+                    describe::legacy::describe_format_secret
                 );
             }
             ObjType::Service => {
@@ -461,7 +385,7 @@ impl KObj {
                     rollouts::RolloutValue::read_namespaced_rollout,
                     rollouts::ReadNamespacedRolloutValueResponse,
                     rollouts::ReadNamespacedRolloutValueResponse::Ok,
-                    describe::describe_format_rollout
+                    describe::legacy::describe_format_rollout
                 );
             }
         }

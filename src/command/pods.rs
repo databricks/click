@@ -113,13 +113,13 @@ fn has_waiting(pod: &api::Pod) -> bool {
 fn phase_style_color(phase: &str) -> comfy_table::Color {
     use comfy_table::Color;
     match phase {
-        "Running" | "Active" => Color::Green,
-        "Terminated" | "Terminating" => Color::Red,
-        "Pending" | "ContainerCreating" => Color::Yellow,
-        "Succeeded" => Color::Blue,
-        "Failed" => Color::Red,
-        "Unknown" => Color::Red,
-        _ => Color::Red,
+        "Running" | "Active" => Color::DarkGreen,
+        "Terminated" | "Terminating" => Color::DarkRed,
+        "Pending" | "ContainerCreating" => Color::DarkYellow,
+        "Succeeded" => Color::DarkBlue,
+        "Failed" => Color::DarkRed,
+        "Unknown" => Color::DarkRed,
+        _ => Color::DarkRed,
     }
 }
 

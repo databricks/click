@@ -148,12 +148,12 @@ fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
         .and_then(|stat| stat.conditions.iter().find(|c| c.type_ == "Ready"));
     let (state, fg) = if let Some(cond) = readycond {
         if cond.status == "True" {
-            ("Ready", comfy_table::Color::Green)
+            ("Ready", comfy_table::Color::DarkGreen)
         } else {
-            ("Not Ready", comfy_table::Color::Red)
+            ("Not Ready", comfy_table::Color::DarkRed)
         }
     } else {
-        ("Unknown", comfy_table::Color::Yellow)
+        ("Unknown", comfy_table::Color::DarkYellow)
     };
 
     let state: Cow<'a, str> = match node.spec.as_ref().and_then(|spec| spec.unschedulable) {

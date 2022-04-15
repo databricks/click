@@ -143,6 +143,8 @@ impl KObj {
         env: &Env,
         writer: &mut ClickWriter,
     ) -> Result<(), ClickError> {
+        let mut table = comfy_table::Table::new();
+        table.load_preset(comfy_table::presets::NOTHING);
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {
@@ -155,7 +157,7 @@ impl KObj {
                     $resp_ok(t) => {
                         if !describe::maybe_full_describe_output(matches, &t, writer) {
                             $(
-                                $desc_func(&t, writer)?;
+                                $desc_func(&t, writer, &mut table)?;
                             )*
                         }
                     }
@@ -176,7 +178,7 @@ impl KObj {
                             $resp_ok(t) => {
                                 if !describe::maybe_full_describe_output(matches, &t, writer) {
                                     $(
-                                        $desc_func(&t, writer)?;
+                                        $desc_func(&t, writer, &mut table)?;
                                     )*
                                 }
                             }
@@ -277,6 +279,7 @@ impl KObj {
                     matches,
                     env,
                     writer,
+                    &mut table,
                 )?;
             }
             ObjType::StatefulSet => {
@@ -320,6 +323,7 @@ impl KObj {
                 );
             }
         }
+        writeln!(writer, "{table}")?;
         Ok(())
     }
 }

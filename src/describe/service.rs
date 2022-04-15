@@ -33,6 +33,7 @@ pub fn service_describe(
     matches: &ArgMatches,
     env: &Env,
     writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let (request, _) =
         api::Endpoints::read_namespaced_endpoints(name, namespace, Default::default()).unwrap();
@@ -49,7 +50,7 @@ pub fn service_describe(
     match env.run_on_context(|c| c.read(request)).unwrap() {
         api::ReadNamespacedServiceResponse::Ok(service) => {
             if !super::maybe_full_describe_output(matches, &service, writer) {
-                super::describe_metadata(&service, writer)?;
+                super::describe_metadata(&service, writer, table)?;
                 let val = serde_json::value::to_value(&service).unwrap();
                 describe_format_service(&service, val, epval, writer);
             }

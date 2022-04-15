@@ -156,7 +156,7 @@ where
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter) -> Result<(), ClickError> {
+pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter, table: &mut comfy_table::Table) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(pod).unwrap();
     let fields = vec![
         (
@@ -299,7 +299,7 @@ fn pod_phase(v: &Value) -> Cow<str> {
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter) -> Result<(), ClickError> {
+pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter, table: &mut comfy_table::Table) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(&node).unwrap();
     let fields = vec![
         (
@@ -392,6 +392,7 @@ fn node_access_url(v: &Value) -> Cow<str> {
 pub fn describe_format_secret(
     secret: &api::Secret,
     writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(&secret).unwrap();
     let fields = vec![
@@ -483,6 +484,7 @@ fn get_message_str(v: &Value) -> Cow<str> {
 pub fn describe_format_deployment(
     deployment: &api_apps::Deployment,
     writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(&deployment).unwrap();
     let fields = vec![
@@ -572,6 +574,7 @@ use crate::command::rollouts;
 pub fn describe_format_rollout(
     rollout: &rollouts::RolloutValue,
     writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(&rollout).unwrap();
     let fields = vec![

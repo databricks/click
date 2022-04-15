@@ -146,14 +146,14 @@ fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
         .status
         .as_ref()
         .and_then(|stat| stat.conditions.iter().find(|c| c.type_ == "Ready"));
-    let (state, state_style) = if let Some(cond) = readycond {
+    let (state, fg) = if let Some(cond) = readycond {
         if cond.status == "True" {
-            ("Ready", "Fg")
+            ("Ready", comfy_table::Color::Green)
         } else {
-            ("Not Ready", "Fr")
+            ("Not Ready", comfy_table::Color::Red)
         }
     } else {
-        ("Unknown", "Fy")
+        ("Unknown", comfy_table::Color::Yellow)
     };
 
     let state: Cow<'a, str> = match node.spec.as_ref().and_then(|spec| spec.unschedulable) {
@@ -166,7 +166,7 @@ fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
         }
         None => state.into(),
     };
-    Some(CellSpec::with_style(state, state_style))
+    Some(CellSpec::with_colors(state, Some(fg), None))
 }
 
 fn node_version(node: &api::Node) -> Option<CellSpec<'_>> {

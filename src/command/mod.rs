@@ -21,7 +21,6 @@ use k8s_openapi::{
     http::{self, Request},
     List, ListOptional, ListResponse, ListableResource, Metadata, RequestError, ResponseBody,
 };
-use prettytable::{Cell, Row};
 use regex::Regex;
 use serde::Deserialize;
 
@@ -221,10 +220,10 @@ where
 {
     let mut specs = build_specs(&cols, &list, extractors, true, regex, get_kobj);
 
-    let mut titles: Vec<Cell> = vec![Cell::new("####")];
+    let mut titles: Vec<&str> = vec!["####"];
     titles.reserve(cols.len());
     for col in cols.iter() {
-        titles.push(Cell::new(col));
+        titles.push(col);
     }
 
     if let Some(command_def::SortCol(colname)) = sort {
@@ -248,7 +247,7 @@ where
         specs.into_iter().unzip()
     };
 
-    crate::table::print_table(Row::new(titles), rows, writer);
+    crate::table::print_table(titles, rows, writer);
     env.set_last_objs(kobjs);
     Ok(())
 }

@@ -110,15 +110,16 @@ fn has_waiting(pod: &api::Pod) -> bool {
     }
 }
 
-fn phase_style_str(phase: &str) -> &'static str {
+fn phase_style_color(phase: &str) -> comfy_table::Color {
+    use comfy_table::Color;
     match phase {
-        "Running" | "Active" => "Fg",
-        "Terminated" | "Terminating" => "Fr",
-        "Pending" | "ContainerCreating" => "Fy",
-        "Succeeded" => "Fb",
-        "Failed" => "Fr",
-        "Unknown" => "Fr",
-        _ => "Fr",
+        "Running" | "Active" => Color::Green,
+        "Terminated" | "Terminating" => Color::Red,
+        "Pending" | "ContainerCreating" => Color::Yellow,
+        "Succeeded" => Color::Blue,
+        "Failed" => Color::Red,
+        "Unknown" => Color::Red,
+        _ => Color::Red,
     }
 }
 
@@ -220,8 +221,8 @@ fn pod_status(pod: &api::Pod) -> Option<CellSpec<'_>> {
             .and_then(|stat| stat.phase.as_deref())
             .unwrap_or("Unknown")
     };
-    let style = phase_style_str(status);
-    Some(CellSpec::with_style(status.into(), style))
+    let fg = phase_style_color(status);
+    Some(CellSpec::with_colors(status.into(), Some(fg), None))
 }
 
 list_command!(

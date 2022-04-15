@@ -15,7 +15,7 @@
 use ansi_term::Colour::Yellow;
 use chrono::offset::Utc;
 use clap::{Arg, Command as ClapCommand};
-use prettytable::Table;
+use comfy_table::Table;
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -55,12 +55,16 @@ fn print_contexts(env: &Env, writer: &mut ClickWriter) {
                 Some(c) => c.server.as_str(),
                 None => "[no cluster for context]",
             };
-            row.push(CellSpec::with_style((*context).clone().into(), "FR"));
+            row.push(CellSpec::with_colors(
+                (*context).clone().into(),
+                Some(comfy_table::Color::Red),
+                None,
+            ));
             row.push(cluster.into());
             row
         })
         .collect();
-    crate::table::print_table(row!["Context", "Api Server Address"], ctxs, writer);
+    crate::table::print_table(vec!["Context", "Api Server Address"], ctxs, writer);
 }
 
 command!(
@@ -148,13 +152,13 @@ command!(
     no_named_complete!(),
     |_, env, writer| {
         let mut table = Table::new();
-        table.set_titles(row!["Name", "Type", "Namespace"]);
+        table.set_header(vec!["Name", "Type", "Namespace"]);
         env.apply_to_selection(writer, None, |obj, _| {
-            table.add_row(row!(
+            table.add_row(vec![
                 obj.name(),
                 obj.type_str(),
-                obj.namespace.as_deref().unwrap_or("")
-            ));
+                obj.namespace.as_deref().unwrap_or(""),
+            ]);
             Ok(())
         })?;
         crate::table::print_filled_table(&mut table, writer);

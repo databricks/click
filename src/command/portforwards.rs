@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
-use comfy_table::{Cell, Table, CellAlignment};
+use comfy_table::{Cell, CellAlignment, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -200,7 +200,7 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
             "No active port forwards, see `port-forward -h` for help creating one"
         );
     } else {
-        println!("{table}");
+        clickwrite!(writer, "{table}");
     }
 }
 

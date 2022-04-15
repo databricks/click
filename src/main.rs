@@ -44,7 +44,6 @@ extern crate serde_with;
 extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;
-extern crate term;
 
 extern crate bytes;
 #[macro_use]

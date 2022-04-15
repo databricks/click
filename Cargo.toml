@@ -47,7 +47,6 @@ serde_yaml = "^0.8"
 strfmt = "0.1.6"
 reqwest = { version = "0.11", features = ["blocking", "json", "default-tls", "rustls-tls", "native-tls"] }
 tempdir = "^0.3"
-term = "^0.5" # requires prettytable to update to newer version
 tokio = { version = "1", features = ["full"] }
 url = "^2.2"
 yasna = "^0.4"

@@ -40,6 +40,10 @@ lazy_static! {
         .build();
 }
 
+// TODO: Add config to use acsii style
+//pub const ASCII_TABLE_STYLE: &str = "   - --       -    ";
+pub const UTF8_TABLE_STYLE: &str =  "   ─ ══       ─    ";
+
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
     DateTime(DateTime<Utc>),

@@ -31,6 +31,7 @@ extern crate base64;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
+extern crate comfy_table;
 extern crate ctrlc;
 extern crate dirs;
 extern crate duct_sh;

@@ -14,7 +14,7 @@
 
 use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
-use prettytable::{format, Cell, Row, Table};
+use comfy_table::{Cell, CellAlignment, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -175,13 +175,12 @@ Examples:
 /// Print out port forwards found in iterator
 fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWriter) {
     let mut table = Table::new();
-    table.set_titles(row!["####", "Pod", "Ports", "Status"]);
+    table.load_preset(crate::table::UTF8_TABLE_STYLE);
+    let mut empty = true;
+    table.set_header(vec!["####", "Pod", "Ports", "Status"]);
     for (i, pf) in pfs.enumerate() {
         let mut row = Vec::new();
-        row.push(Cell::new_align(
-            format!("{}", i).as_str(),
-            format::Alignment::RIGHT,
-        ));
+        row.push(Cell::new(format!("{}", i).as_str()).set_alignment(CellAlignment::Right));
         row.push(Cell::new(pf.pod.as_str()));
         row.push(Cell::new(pf.ports.join(", ").as_str()));
 
@@ -192,16 +191,16 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
         };
         row.push(Cell::new(status.as_str()));
 
-        table.add_row(Row::new(row));
+        table.add_row(row);
+        empty = false;
     }
-    if table.is_empty() {
+    if empty {
         clickwriteln!(
             writer,
             "No active port forwards, see `port-forward -h` for help creating one"
         );
     } else {
-        table.set_format(*crate::table::TBLFMT);
-        table.printstd();
+        clickwrite!(writer, "{table}");
     }
 }
 

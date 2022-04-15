@@ -87,12 +87,12 @@ impl K8sTable {
         group_version: &str,
         writer: &mut ClickWriter,
     ) -> Vec<KObj> {
-        let mut titles: Vec<prettytable::Cell> = vec![prettytable::Cell::new("####")];
+        let mut titles: Vec<&str> = vec!["####"];
         if show_namespace {
-            titles.push(prettytable::Cell::new("Namespace"));
+            titles.push("Namespace");
         }
         for col_def in self.column_definitions.iter() {
-            titles.push(prettytable::Cell::new(&col_def.name));
+            titles.push(&col_def.name);
         }
         let mut rows = vec![];
         let mut kobjs = vec![];
@@ -119,7 +119,7 @@ impl K8sTable {
                 },
             });
         }
-        crate::table::print_table(prettytable::Row::new(titles), rows, writer);
+        crate::table::print_table(titles, rows, writer);
         kobjs
     }
 }

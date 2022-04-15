@@ -19,8 +19,6 @@ extern crate duct;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
-extern crate prettytable;
-#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 mod output;
@@ -31,6 +29,7 @@ extern crate base64;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
+extern crate comfy_table;
 extern crate ctrlc;
 extern crate dirs;
 extern crate duct_sh;
@@ -45,7 +44,6 @@ extern crate serde_with;
 extern crate serde_yaml;
 extern crate strfmt;
 extern crate tempdir;
-extern crate term;
 
 extern crate bytes;
 #[macro_use]

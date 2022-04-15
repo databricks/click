@@ -20,25 +20,17 @@ use crate::output::ClickWriter;
 
 use chrono::{DateTime, Duration, Utc};
 use clap::ArgMatches;
+use comfy_table::{Cell, CellAlignment, Color};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use prettytable::Cell;
-use prettytable::Row;
-use prettytable::{format, Table};
 use regex::Regex;
 
 use std::borrow::Cow;
 use std::cmp::{Ordering, PartialEq, PartialOrd};
 use std::io::Write;
 
-lazy_static! {
-    pub static ref TBLFMT: format::TableFormat = format::FormatBuilder::new()
-        .separators(
-            &[format::LinePosition::Title, format::LinePosition::Bottom],
-            format::LineSeparator::new('-', '+', '+', '+')
-        )
-        .padding(1, 1)
-        .build();
-}
+// TODO: Add config to use acsii style
+//pub const ASCII_TABLE_STYLE: &str = "   - --       -    ";
+pub const UTF8_TABLE_STYLE: &str = "   ─ ══       ─    ";
 
 #[derive(Debug)]
 enum CellSpecTxt<'a> {
@@ -51,18 +43,20 @@ enum CellSpecTxt<'a> {
     Str(Cow<'a, str>),
 }
 
-/// Holds a specification for a prettytable cell
+/// Holds a specification for a table cell
 pub struct CellSpec<'a> {
     txt: CellSpecTxt<'a>,
-    pub style: Option<&'a str>,
-    pub align: Option<format::Alignment>,
+    pub fg: Option<Color>,
+    pub bg: Option<Color>,
+    pub align: Option<CellAlignment>,
 }
 
 impl<'a> CellSpec<'a> {
     pub fn new_index() -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Index,
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -70,52 +64,59 @@ impl<'a> CellSpec<'a> {
     pub fn new_int(num: i64) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Int(num),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
 
-    pub fn with_style(txt: Cow<'a, str>, style: &'a str) -> CellSpec<'a> {
+    pub fn with_colors(txt: Cow<'a, str>, fg: Option<Color>, bg: Option<Color>) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
-            style: Some(style),
+            fg,
+            bg,
             align: None,
         }
     }
 
-    pub fn _with_align(txt: Cow<'a, str>, align: format::Alignment) -> CellSpec<'a> {
+    pub fn _with_align(txt: Cow<'a, str>, align: CellAlignment) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
-            style: None,
+            fg: None,
+            bg: None,
             align: Some(align),
         }
     }
 
     pub fn to_cell(&self, index: usize) -> Cell {
-        let mut cell = match &self.txt {
+        let cell = match &self.txt {
             CellSpecTxt::DateTime(datetime) => Cell::new(&format_duration(time_since(*datetime))),
             CellSpecTxt::Duration(duration) => Cell::new(&format_duration(*duration)),
             CellSpecTxt::Index => {
-                let mut c = Cell::new(format!("{}", index).as_str());
-                c.align(format::Alignment::RIGHT);
-                c
+                Cell::new(format!("{}", index).as_str()).set_alignment(CellAlignment::Right)
             }
             CellSpecTxt::Int(num) => {
-                let mut c = Cell::new(format!("{}", num).as_str());
-                c.align(format::Alignment::RIGHT);
-                c
+                Cell::new(format!("{}", num).as_str()).set_alignment(CellAlignment::Right)
             }
             CellSpecTxt::None => Cell::new("Unknown/None"),
             CellSpecTxt::Quantity(quant) => Cell::new(&quant.0),
             CellSpecTxt::Str(s) => Cell::new(s),
         };
 
-        if let Some(a) = self.align {
-            cell.align(a);
-        }
+        let cell = if let Some(a) = self.align {
+            cell.set_alignment(a)
+        } else {
+            cell
+        };
 
-        if let Some(style) = self.style {
-            cell.style_spec(style)
+        let cell = if let Some(fg) = self.fg {
+            cell.fg(fg)
+        } else {
+            cell
+        };
+
+        if let Some(bg) = self.bg {
+            cell.bg(bg)
         } else {
             cell
         }
@@ -149,7 +150,8 @@ impl<'a> From<&'a str> for CellSpec<'a> {
     fn from(s: &'a str) -> Self {
         CellSpec {
             txt: CellSpecTxt::Str(Cow::Borrowed(s)),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -159,7 +161,8 @@ impl<'a> From<Cow<'a, str>> for CellSpec<'a> {
     fn from(c: Cow<'a, str>) -> Self {
         CellSpec {
             txt: CellSpecTxt::Str(c),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -169,7 +172,8 @@ impl<'a> From<String> for CellSpec<'a> {
     fn from(s: String) -> Self {
         CellSpec {
             txt: CellSpecTxt::Str(Cow::Owned(s)),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -197,7 +201,8 @@ impl<'a> From<Quantity> for CellSpec<'a> {
     fn from(quant: Quantity) -> Self {
         CellSpec {
             txt: CellSpecTxt::Quantity(quant),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -207,7 +212,8 @@ impl<'a> From<Duration> for CellSpec<'a> {
     fn from(duration: Duration) -> Self {
         CellSpec {
             txt: CellSpecTxt::Duration(duration),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -217,7 +223,8 @@ impl<'a> From<DateTime<Utc>> for CellSpec<'a> {
     fn from(dt: DateTime<Utc>) -> Self {
         CellSpec {
             txt: CellSpecTxt::DateTime(dt),
-            style: None,
+            fg: None,
+            bg: None,
             align: None,
         }
     }
@@ -232,7 +239,8 @@ where
             Some(v) => v.into(),
             None => CellSpec {
                 txt: CellSpecTxt::None,
-                style: None,
+                fg: None,
+                bg: None,
                 align: None,
             },
         }
@@ -394,35 +402,25 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
     }
 }
 
-fn term_print_table<T: Write>(table: &Table, writer: &mut T) -> bool {
-    match term::TerminfoTerminal::new(writer) {
-        Some(ref mut term) => {
-            table.print_term(term).unwrap_or(0);
-            true
-        }
-        None => false,
-    }
-}
-
-pub fn print_filled_table(table: &mut Table, writer: &mut ClickWriter) {
-    table.set_format(*TBLFMT);
-    if !term_print_table(table, writer) {
-        table.print(writer).unwrap_or(0);
-    }
+pub fn print_filled_table(table: &mut comfy_table::Table, writer: &mut ClickWriter) {
+    table.load_preset(UTF8_TABLE_STYLE);
+    clickwriteln!(writer, "{table}");
 }
 
 #[allow(clippy::ptr_arg)]
-pub fn print_table(titles: Row, specs: Vec<Vec<CellSpec<'_>>>, writer: &mut ClickWriter) {
-    let mut table = Table::new();
-    table.set_titles(titles);
+pub fn print_table<T: Into<comfy_table::Row>>(
+    titles: T,
+    specs: Vec<Vec<CellSpec<'_>>>,
+    writer: &mut ClickWriter,
+) {
+    let mut table = comfy_table::Table::new();
+    table.load_preset(UTF8_TABLE_STYLE);
+    table.set_header(titles);
     for (index, t_spec) in specs.iter().enumerate() {
         let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index)).collect();
-        table.add_row(Row::new(row_vec));
+        table.add_row(row_vec);
     }
-    table.set_format(*TBLFMT);
-    if !term_print_table(&table, writer) {
-        table.print(writer).unwrap_or(0);
-    }
+    clickwriteln!(writer, "{table}");
 }
 
 #[cfg(test)]

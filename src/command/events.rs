@@ -15,9 +15,9 @@
 use ansi_term::Colour::Yellow;
 use chrono::{offset::Utc, DateTime};
 use clap::Command as ClapCommand;
+use comfy_table::{Cell, Table};
 use k8s_openapi::ListOptional;
 use k8s_openapi::{api::core::v1 as api, http::Request, List};
-use prettytable::{Cell, Row, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::command::format_duration;
@@ -103,21 +103,20 @@ fn print_events(
     if !event_list.items.is_empty() {
         event_list.items.sort_by(event_cmp);
         let mut table = Table::new();
+        table.load_preset(crate::table::UTF8_TABLE_STYLE);
         let mut titles = if include_namespace {
-            vec![
-                cell!("Namespace"),
-                cell!("Last Seen"),
-                cell!("Type"),
-                cell!("Reason"),
-            ]
+            vec!["Namespace"]
         } else {
-            vec![cell!("Last Seen"), cell!("Type"), cell!("Reason")]
+            vec![]
         };
+        titles.push("Last Seen");
+        titles.push("Type");
+        titles.push("Reason");
         if include_object {
-            titles.push(cell!("Object"));
+            titles.push("Object");
         }
-        titles.push(cell!("Message"));
-        table.set_titles(Row::new(titles));
+        titles.push("Message");
+        table.set_header(titles);
         for event in event_list.items.iter() {
             let mut row: Vec<Cell> = Vec::new();
             if include_namespace {
@@ -138,10 +137,9 @@ fn print_events(
                 ));
             }
             row.push(Cell::new(event.message.as_deref().unwrap_or("<none>")));
-            table.add_row(Row::new(row));
+            table.add_row(row);
         }
-        table.set_format(*crate::table::TBLFMT);
-        table.print(writer).unwrap_or(0);
+        crate::table::print_filled_table(&mut table, writer);
     } else {
         clickwriteln!(writer, "No events");
     }

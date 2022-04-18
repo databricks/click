@@ -158,7 +158,7 @@ impl KObj {
                     $resp_ok(t) => {
                         if !describe::maybe_full_describe_output(matches, &t, writer) {
                             $(
-                                $desc_func(&t, writer, &mut table)?;
+                                $desc_func(&t, &mut table)?;
                             )*
                         }
                     }
@@ -179,7 +179,7 @@ impl KObj {
                             $resp_ok(t) => {
                                 if !describe::maybe_full_describe_output(matches, &t, writer) {
                                     $(
-                                        $desc_func(&t, writer, &mut table)?;
+                                        $desc_func(&t, &mut table)?;
                                     )*
                                 }
                             }

@@ -390,7 +390,7 @@ pub fn time_since(date: DateTime<Utc>) -> Duration {
 
 /// Build a multi-line string of the specified keyvals.
 /// keys in skip will be skipped
-pub fn keyval_string<'a, I, K, V>(keyvals: I, skip: Option<&HashSet<String>>) -> String
+pub fn keyval_string<I, K, V>(keyvals: I, skip: Option<&HashSet<String>>) -> String
 where
     I: Iterator<Item = (K, V)>,
     K: AsRef<str>,

@@ -55,7 +55,6 @@ lazy_static! {
 
 pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     value: &T,
-    writer: &mut ClickWriter,
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let metadata = value.metadata();

@@ -50,9 +50,9 @@ pub fn service_describe(
     match env.run_on_context(|c| c.read(request)).unwrap() {
         api::ReadNamespacedServiceResponse::Ok(service) => {
             if !super::maybe_full_describe_output(matches, &service, writer) {
-                super::describe_metadata(&service, writer, table)?;
+                super::describe_metadata(&service, table)?;
                 let val = serde_json::value::to_value(&service).unwrap();
-                describe_format_service(&service, val, epval, writer, table);
+                describe_format_service(&service, val, epval, table);
             }
         }
         _ => {
@@ -67,7 +67,6 @@ fn describe_format_service(
     service: &api::Service,
     v: Value,
     endpoint_val: Option<Value>,
-    writer: &mut ClickWriter,
     table: &mut comfy_table::Table,
 ) {
     let port_str = get_ports_str(v.pointer("/spec/ports"), endpoint_val);

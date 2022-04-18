@@ -103,7 +103,6 @@ fn print_events(
     if !event_list.items.is_empty() {
         event_list.items.sort_by(event_cmp);
         let mut table = Table::new();
-        table.load_preset(crate::table::UTF8_TABLE_STYLE);
         let mut titles = if include_namespace {
             vec!["Namespace"]
         } else {

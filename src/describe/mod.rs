@@ -18,7 +18,7 @@ use chrono::Local;
 use clap::ArgMatches;
 use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata, Resource};
 use serde::ser::Serialize;
-use std::{collections::HashSet, io::Write};
+use std::collections::HashSet;
 
 pub mod crd;
 pub mod legacy;
@@ -55,67 +55,56 @@ lazy_static! {
 
 pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     value: &T,
-    writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let metadata = value.metadata();
-    writeln!(
-        writer,
-        "Name:\t\t{}",
-        metadata.name.as_deref().unwrap_or("<Unknown>")
-    )?;
-    writeln!(
-        writer,
-        "Namespace:\t{}",
-        metadata.namespace.as_deref().unwrap_or("<Unknown>")
-    )?;
-    write!(
-        writer,
-        "Labels:\t\t{}",
-        keyval_string(&metadata.labels, Some("\t\t"), None)
-    )?;
-    write!(
-        writer,
-        "Annotations:\t{}",
-        keyval_string(
-            &metadata.annotations,
-            Some("\t\t"),
-            Some(&DESCRIBE_SKIP_KEYS)
-        )
-    )?;
-    writeln!(writer, "API Version:\t{}", <T as Resource>::API_VERSION)?;
-    writeln!(writer, "Kind:\t\t{}", <T as Resource>::KIND)?;
+    table.add_row(vec![
+        "Name:",
+        metadata.name.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec![
+        "Namespace:",
+        metadata.namespace.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec![
+        "Labels:",
+        &keyval_string(metadata.labels.iter(), None),
+    ]);
+    table.add_row(vec![
+        "Annotations:",
+        &keyval_string(metadata.annotations.iter(), Some(&DESCRIBE_SKIP_KEYS)),
+    ]);
+    table.add_row(vec!["API Version:", <T as Resource>::API_VERSION]);
+    table.add_row(vec!["Kind:", <T as Resource>::KIND]);
+
     match &metadata.creation_timestamp {
-        Some(created) => writeln!(
-            writer,
-            "Created At:\t{} ({})",
-            created.0,
-            created.0.with_timezone(&Local)
-        )?,
-        None => writeln!(writer, "Created At:\t<Unknown>")?,
+        Some(created) => {
+            table.add_row(vec![
+                "Created At:",
+                &format!("{} ({})", created.0, created.0.with_timezone(&Local)),
+            ]);
+        }
+        None => {
+            table.add_row(vec!["Created At:", "<Unknown>"]);
+        }
     }
-    writeln!(
-        writer,
-        "Generation\t{}",
+
+    table.add_row(vec![
+        "Generation:",
         metadata
             .generation
             .map(|g| format!("{}", g))
             .as_deref()
-            .unwrap_or("<none>")
-    )?;
-    writeln!(
-        writer,
-        "ResourceVersn:\t{}",
-        metadata.resource_version.as_deref().unwrap_or("<Unknown>")
-    )?;
-    writeln!(
-        writer,
-        "Self Link:\t{}",
-        metadata.self_link.as_deref().unwrap_or("<Unknown>")
-    )?;
-    writeln!(
-        writer,
-        "UID:\t\t{}",
-        metadata.uid.as_deref().unwrap_or("<Unknown>")
-    )?;
+            .unwrap_or("<none>"),
+    ]);
+    table.add_row(vec![
+        "Resource Version:",
+        metadata.resource_version.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec![
+        "Self Link:",
+        metadata.self_link.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec!["UID:", metadata.uid.as_deref().unwrap_or("<Unknown>")]);
     Ok(())
 }

@@ -31,7 +31,7 @@ use crate::output::ClickWriter;
 use crate::table::CellSpec;
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::io::{stderr, Write};
 
@@ -340,7 +340,7 @@ pub fn extract_namespace<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_
 /// An extractor for the Labels field. Extracts the labels out of the object metadata
 pub fn extract_labels<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
-    Some(keyval_string(&meta.labels, None, None).into())
+    Some(keyval_string(meta.labels.iter(), None).into())
 }
 
 // utility functions
@@ -388,36 +388,34 @@ pub fn time_since(date: DateTime<Utc>) -> Duration {
     now.signed_duration_since(date)
 }
 
-/// Build a multi-line string of the specified keyvals
-/// If prefix is not None, lines other than the first line will have prefix prepended
+/// Build a multi-line string of the specified keyvals.
 /// keys in skip will be skipped
-/// This function adds a newline after the last key (even if the map is empty)
-pub fn keyval_string(
-    keyvals: &BTreeMap<String, String>,
-    prefix: Option<&str>,
-    skip: Option<&HashSet<String>>,
-) -> String {
+pub fn keyval_string<I, K, V>(keyvals: I, skip: Option<&HashSet<String>>) -> String
+where
+    I: Iterator<Item = (K, V)>,
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
     let mut buf = String::new();
     let mut first = true;
-    for (key, val) in keyvals.iter() {
+    for (key, val) in keyvals {
         if let Some(skip_set) = skip {
-            if skip_set.contains(key) {
+            if skip_set.contains(key.as_ref()) {
                 continue;
             }
         }
-        if !first {
-            if let Some(prefix) = prefix {
-                buf.push_str(prefix);
-            }
+        if first {
+            first = false;
+        } else {
+            buf.push('\n');
         }
-        first = false;
-        buf.push_str(key);
+        buf.push_str(key.as_ref());
         buf.push('=');
-        buf.push_str(val);
-        buf.push('\n');
+        buf.push_str(val.as_ref());
     }
-    if keyvals.is_empty() {
-        buf.push_str("<none>\n");
+    if first {
+        // if first is still true, didn't have anything in the iter
+        buf.push_str("<none>");
     }
     buf
 }

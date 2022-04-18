@@ -57,7 +57,6 @@ pub enum DescItem<'a> {
 /// get key/vals out of a value
 /// If secret_vals is true, the actual vals are hidden and we show only the size of the value
 fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str> {
-    let mut outstr = String::new();
     match v.pointer(parent) {
         Some(p) => {
             if let Some(keyvals) = p.as_object() {
@@ -88,14 +87,15 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
 
                     (key.as_str(), computed_val)
                 });
-                return crate::command::keyval_string(iter, Some(&super::DESCRIBE_SKIP_KEYS)).into();
+                crate::command::keyval_string(iter, Some(&super::DESCRIBE_SKIP_KEYS)).into()
+            } else {
+                "<none>".into()
             }
         }
         None => {
-            outstr.push_str("\t<none>");
+            "<none>".into()
         }
     }
-    outstr.into()
 }
 
 /// Generic describe function
@@ -390,21 +390,21 @@ pub fn describe_format_secret(
     let v = serde_json::value::to_value(&secret).unwrap();
     let fields = vec![
         (
-            "Name:\t\t",
+            "Name:",
             DescItem::MetadataValStr {
                 path: "/name",
                 default: "<No Name>",
             },
         ),
         (
-            "Namespace:\t",
+            "Namespace:",
             DescItem::MetadataValStr {
                 path: "/namespace",
                 default: "<No Name>",
             },
         ),
         (
-            "Labels:\t",
+            "Labels:",
             DescItem::KeyValStr {
                 parent: "/metadata/labels",
                 secret_vals: false,
@@ -418,14 +418,14 @@ pub fn describe_format_secret(
             },
         ),
         (
-            "\nType:\t\t",
+            "Type:",
             DescItem::ValStr {
                 path: "/type",
                 default: "<No Type>",
             },
         ),
         (
-            "\nData:\n",
+            "Data:",
             DescItem::KeyValStr {
                 parent: "/data",
                 secret_vals: true,

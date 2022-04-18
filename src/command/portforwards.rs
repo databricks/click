@@ -175,7 +175,6 @@ Examples:
 /// Print out port forwards found in iterator
 fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWriter) {
     let mut table = Table::new();
-    table.load_preset(crate::table::UTF8_TABLE_STYLE);
     let mut empty = true;
     table.set_header(vec!["####", "Pod", "Ports", "Status"]);
     for (i, pf) in pfs.enumerate() {
@@ -200,7 +199,7 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
             "No active port forwards, see `port-forward -h` for help creating one"
         );
     } else {
-        clickwrite!(writer, "{table}");
+        crate::table::print_filled_table(&mut table, writer);
     }
 }
 

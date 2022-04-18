@@ -76,7 +76,7 @@ fn describe_format_service(
         service
             .spec
             .as_ref()
-            .map(|spec| { keyval_string(&spec.selector, None, None) })
+            .map(|spec| { keyval_string(&spec.selector, None) })
             .unwrap_or_else(|| "<none>".to_string()).as_str()
     ]);
     table.add_row(vec![

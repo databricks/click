@@ -126,7 +126,7 @@ fn rs_selector(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
     replicaset
         .spec
         .as_ref()
-        .map(|spec| keyval_string(&spec.selector.match_labels, None, None).into())
+        .map(|spec| keyval_string(&spec.selector.match_labels, None).into())
 }
 
 list_command!(

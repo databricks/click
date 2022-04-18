@@ -340,7 +340,7 @@ pub fn extract_namespace<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_
 /// An extractor for the Labels field. Extracts the labels out of the object metadata
 pub fn extract_labels<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
-    Some(keyval_string(&meta.labels, None, None).into())
+    Some(keyval_string(&meta.labels, None).into())
 }
 
 // utility functions
@@ -388,36 +388,31 @@ pub fn time_since(date: DateTime<Utc>) -> Duration {
     now.signed_duration_since(date)
 }
 
-/// Build a multi-line string of the specified keyvals
-/// If prefix is not None, lines other than the first line will have prefix prepended
+/// Build a multi-line string of the specified keyvals.
 /// keys in skip will be skipped
-/// This function adds a newline after the last key (even if the map is empty)
 pub fn keyval_string(
     keyvals: &BTreeMap<String, String>,
-    prefix: Option<&str>,
     skip: Option<&HashSet<String>>,
 ) -> String {
     let mut buf = String::new();
     let mut first = true;
     for (key, val) in keyvals.iter() {
+        if first {
+            first = false;
+        } else {
+            buf.push('\n');
+        }
         if let Some(skip_set) = skip {
             if skip_set.contains(key) {
                 continue;
             }
         }
-        if !first {
-            if let Some(prefix) = prefix {
-                buf.push_str(prefix);
-            }
-        }
-        first = false;
         buf.push_str(key);
         buf.push('=');
         buf.push_str(val);
-        buf.push('\n');
     }
     if keyvals.is_empty() {
-        buf.push_str("<none>\n");
+        buf.push_str("<none>");
     }
     buf
 }

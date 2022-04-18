@@ -61,10 +61,9 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     let metadata = value.metadata();
     table.add_row(vec!["Name:", metadata.name.as_deref().unwrap_or("<Unknown>")]);
     table.add_row(vec!["Namespace:", metadata.namespace.as_deref().unwrap_or("<Unknown>")]);
-    table.add_row(vec!["Labels:", &keyval_string(&metadata.labels, None, None)]);
+    table.add_row(vec!["Labels:", &keyval_string(&metadata.labels, None)]);
     table.add_row(vec!["Annotations:", &keyval_string(
         &metadata.annotations,
-        None,
         Some(&DESCRIBE_SKIP_KEYS)
     )]);
     table.add_row(vec!["API Version:", <T as Resource>::API_VERSION]);

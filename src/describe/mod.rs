@@ -18,7 +18,7 @@ use chrono::Local;
 use clap::ArgMatches;
 use k8s_openapi::{apimachinery::pkg::apis::meta::v1::ObjectMeta, Metadata, Resource};
 use serde::ser::Serialize;
-use std::{collections::HashSet, io::Write};
+use std::collections::HashSet;
 
 pub mod crd;
 pub mod legacy;
@@ -59,22 +59,30 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
     let metadata = value.metadata();
-    table.add_row(vec!["Name:", metadata.name.as_deref().unwrap_or("<Unknown>")]);
-    table.add_row(vec!["Namespace:", metadata.namespace.as_deref().unwrap_or("<Unknown>")]);
-    table.add_row(vec!["Labels:", &keyval_string(&metadata.labels, None)]);
-    table.add_row(vec!["Annotations:", &keyval_string(
-        &metadata.annotations,
-        Some(&DESCRIBE_SKIP_KEYS)
-    )]);
+    table.add_row(vec![
+        "Name:",
+        metadata.name.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec![
+        "Namespace:",
+        metadata.namespace.as_deref().unwrap_or("<Unknown>"),
+    ]);
+    table.add_row(vec![
+        "Labels:",
+        &keyval_string(metadata.labels.iter(), None),
+    ]);
+    table.add_row(vec![
+        "Annotations:",
+        &keyval_string(metadata.annotations.iter(), Some(&DESCRIBE_SKIP_KEYS)),
+    ]);
     table.add_row(vec!["API Version:", <T as Resource>::API_VERSION]);
     table.add_row(vec!["Kind:", <T as Resource>::KIND]);
 
     match &metadata.creation_timestamp {
         Some(created) => {
-            table.add_row(vec!["Created At:",
-                               &format!("{} ({})",
-                                        created.0,
-                                        created.0.with_timezone(&Local))
+            table.add_row(vec![
+                "Created At:",
+                &format!("{} ({})", created.0, created.0.with_timezone(&Local)),
             ]);
         }
         None => {
@@ -88,19 +96,16 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
             .generation
             .map(|g| format!("{}", g))
             .as_deref()
-            .unwrap_or("<none>")
+            .unwrap_or("<none>"),
     ]);
     table.add_row(vec![
         "Resource Version:",
-        metadata.resource_version.as_deref().unwrap_or("<Unknown>")
+        metadata.resource_version.as_deref().unwrap_or("<Unknown>"),
     ]);
     table.add_row(vec![
         "Self Link:",
-        metadata.self_link.as_deref().unwrap_or("<Unknown>")
+        metadata.self_link.as_deref().unwrap_or("<Unknown>"),
     ]);
-    table.add_row(vec![
-        "UID:",
-        metadata.uid.as_deref().unwrap_or("<Unknown>")
-    ]);
+    table.add_row(vec!["UID:", metadata.uid.as_deref().unwrap_or("<Unknown>")]);
     Ok(())
 }

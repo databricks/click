@@ -76,24 +76,25 @@ fn describe_format_service(
         service
             .spec
             .as_ref()
-            .map(|spec| { keyval_string(&spec.selector, None) })
-            .unwrap_or_else(|| "<none>".to_string()).as_str()
+            .map(|spec| keyval_string(spec.selector.iter(), None))
+            .unwrap_or_else(|| "<none>".to_string())
+            .as_str(),
     ]);
     table.add_row(vec![
         "Type:",
         service
             .spec
             .as_ref()
-            .and_then(|spec| { spec.type_.as_deref() })
-            .unwrap_or("<none>")
+            .and_then(|spec| spec.type_.as_deref())
+            .unwrap_or("<none>"),
     ]);
     table.add_row(vec![
         "IP:",
         service
             .spec
             .as_ref()
-            .and_then(|spec| { spec.cluster_ip.as_deref() })
-            .unwrap_or("<none>")
+            .and_then(|spec| spec.cluster_ip.as_deref())
+            .unwrap_or("<none>"),
     ]);
 
     let ingress = match service
@@ -124,16 +125,16 @@ fn describe_format_service(
         service
             .spec
             .as_ref()
-            .and_then(|spec| { spec.session_affinity.as_deref() })
-            .unwrap_or("<none>")
+            .and_then(|spec| spec.session_affinity.as_deref())
+            .unwrap_or("<none>"),
     ]);
     table.add_row(vec![
         "External Traffic Policy:",
         service
             .spec
             .as_ref()
-            .and_then(|spec| { spec.external_traffic_policy.as_deref() })
-            .unwrap_or("<none>")
+            .and_then(|spec| spec.external_traffic_policy.as_deref())
+            .unwrap_or("<none>"),
     ]);
     table.add_row(vec![
         "Load Balancer Source Ranges:",
@@ -147,11 +148,10 @@ fn describe_format_service(
                     Some(spec.load_balancer_source_ranges.join(", "))
                 }
             })
-            .unwrap_or_else(|| "<none>".to_string()).as_str()
+            .unwrap_or_else(|| "<none>".to_string())
+            .as_str(),
     ]);
-    table.add_row(vec![
-        "Ports:", port_str.as_ref()
-    ]);
+    table.add_row(vec!["Ports:", port_str.as_ref()]);
 }
 
 /// Get ports info out of ports array

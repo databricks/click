@@ -27,7 +27,6 @@ use k8s_openapi::api::{apps::v1 as api_apps, core::v1 as api};
 use serde_json::Value;
 
 use std::borrow::Cow;
-use std::io::Write;
 use std::str::{self, FromStr};
 
 pub enum DescItem<'a> {
@@ -62,18 +61,7 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
     match v.pointer(parent) {
         Some(p) => {
             if let Some(keyvals) = p.as_object() {
-                let mut first = true;
-                for key in keyvals.keys() {
-                    if !first {
-                        outstr.push('\n');
-                        if !secret_vals {
-                            outstr.push('\t');
-                        }
-                    }
-                    first = false;
-                    outstr.push('\t');
-                    outstr.push_str(key);
-
+                let iter = keyvals.into_iter().map(|(key, val)| {
                     let is_service_token = if secret_vals && key == "token" {
                         let typ = v.pointer("/type").and_then(|t| t.as_str()).unwrap_or("");
                         typ == "kubernetes.io/service-account-token"
@@ -81,24 +69,26 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
                         false
                     };
 
-                    if is_service_token {
-                        outstr.push_str(":\t");
-                        match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
-                            Ok(dec) => outstr
-                                .push_str(str::from_utf8(&dec[..]).unwrap_or("Invalid utf-8 data")),
-                            Err(_) => outstr.push_str("Could not decode secret"),
+                    let computed_val: Cow<'a, str> = if is_service_token {
+                        match ::base64::decode(val.as_str().unwrap()) {
+                            Ok(dec) => str::from_utf8(&dec[..])
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|_e| "Invalid utf-8 data".to_string())
+                                .into(),
+                            Err(_) => "Could not decode secret".into(),
                         }
                     } else if secret_vals {
-                        outstr.push_str(":\t");
-                        match ::base64::decode(keyvals.get(key).unwrap().as_str().unwrap()) {
-                            Ok(dec) => outstr.push_str(format!("{} bytes", dec.len()).as_str()),
-                            Err(_) => outstr.push_str("Could not decode secret"),
+                        match ::base64::decode(val.as_str().unwrap()) {
+                            Ok(dec) => format!("{} bytes", dec.len()).into(),
+                            Err(_) => "Could not decode secret".into(),
                         }
                     } else {
-                        outstr.push('=');
-                        outstr.push_str(keyvals.get(key).unwrap().as_str().unwrap());
-                    }
-                }
+                        val.as_str().unwrap_or("<unknown>").into()
+                    };
+
+                    (key.as_str(), computed_val)
+                });
+                return crate::command::keyval_string(iter, Some(&super::DESCRIBE_SKIP_KEYS)).into();
             }
         }
         None => {
@@ -110,11 +100,10 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
 
 /// Generic describe function
 /// TODO: Document
-pub fn describe_object<'a, I>(v: &Value, fields: I) -> String
+pub fn describe_object<'a, I>(v: &Value, fields: I, table: &mut comfy_table::Table)
 where
     I: Iterator<Item = (&'a str, DescItem<'a>)>,
 {
-    let mut res = String::new();
     let metadata = v.get("metadata").unwrap();
     for (title, item) in fields {
         let val = match item {
@@ -149,47 +138,49 @@ where
                 }
             }
         };
-        use std::fmt::Write;
-        writeln!(&mut res, "{}{}", title, val).unwrap();
+        table.add_row(vec![title, val.as_ref()]);
     }
-    res
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter, table: &mut comfy_table::Table) -> Result<(), ClickError> {
+pub fn describe_format_pod(
+    pod: &api::Pod,
+    writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
+) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(pod).unwrap();
     let fields = vec![
         (
-            "Name:\t\t",
+            "Name:",
             DescItem::MetadataValStr {
                 path: "/name",
                 default: "<No Name>",
             },
         ),
         (
-            "Namespace:\t",
+            "Namespace:",
             DescItem::MetadataValStr {
                 path: "/namespace",
                 default: "<No Name>",
             },
         ),
         (
-            "Node:\t\t",
+            "Node:",
             DescItem::ValStr {
                 path: "/spec/nodeName",
                 default: "<No NodeName>",
             },
         ),
         (
-            "IP:\t\t",
+            "IP:",
             DescItem::ValStr {
                 path: "/status/podIP",
                 default: "<No PodIP>",
             },
         ),
-        ("Created at:\t", DescItem::ObjectCreated),
+        ("Created at:", DescItem::ObjectCreated),
         (
-            "Status:\t\t",
+            "Status:",
             DescItem::CustomFunc {
                 path: None,
                 func: &pod_phase,
@@ -197,7 +188,7 @@ pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter, table: &mut
             },
         ),
         (
-            "Labels:\t",
+            "Labels:",
             DescItem::KeyValStr {
                 parent: "/metadata/labels",
                 secret_vals: false,
@@ -211,7 +202,7 @@ pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter, table: &mut
             },
         ),
         (
-            "Volumes:\n",
+            "Volumes:",
             DescItem::CustomFunc {
                 path: Some("/spec/volumes"),
                 func: &get_volume_str,
@@ -219,8 +210,7 @@ pub fn describe_format_pod(pod: &api::Pod, writer: &mut ClickWriter, table: &mut
             },
         ),
     ];
-    let s = describe_object(&v, fields.into_iter());
-    clickwriteln!(writer, "{}", s);
+    describe_object(&v, fields.into_iter(), table);
     Ok(())
 }
 
@@ -299,18 +289,22 @@ fn pod_phase(v: &Value) -> Cow<str> {
 }
 
 /// Utility function for describe to print out value
-pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter, table: &mut comfy_table::Table) -> Result<(), ClickError> {
+pub fn describe_format_node(
+    node: &api::Node,
+    writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
+) -> Result<(), ClickError> {
     let v = serde_json::value::to_value(&node).unwrap();
     let fields = vec![
         (
-            "Name:\t\t",
+            "Name:",
             DescItem::MetadataValStr {
                 path: "/name",
                 default: "<No Name>",
             },
         ),
         (
-            "Labels:\t",
+            "Labels:",
             DescItem::KeyValStr {
                 parent: "/metadata/labels",
                 secret_vals: false,
@@ -323,16 +317,16 @@ pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter, table: &
                 secret_vals: false,
             },
         ),
-        ("Created at:\t", DescItem::ObjectCreated),
+        ("Created at:", DescItem::ObjectCreated),
         (
-            "Provider Id:\t",
+            "Provider Id:",
             DescItem::ValStr {
                 path: "/spec/providerID",
                 default: "<No Provider Id>",
             },
         ),
         (
-            "External URL:\t",
+            "External URL:",
             DescItem::CustomFunc {
                 path: None,
                 func: &node_access_url,
@@ -340,15 +334,14 @@ pub fn describe_format_node(node: &api::Node, writer: &mut ClickWriter, table: &
             },
         ),
         (
-            "\nSystem Info:",
+            "System Info:",
             DescItem::KeyValStr {
                 parent: "/status/nodeInfo",
                 secret_vals: false,
             },
         ),
     ];
-    let s = describe_object(&v, fields.into_iter());
-    clickwriteln!(writer, "{}", s);
+    describe_object(&v, fields.into_iter(), table);
     Ok(())
 }
 
@@ -439,8 +432,7 @@ pub fn describe_format_secret(
             },
         ),
     ];
-    let s = describe_object(&v, fields.into_iter());
-    clickwriteln!(writer, "{}", s);
+    describe_object(&v, fields.into_iter(), table);
     Ok(())
 }
 
@@ -562,8 +554,7 @@ pub fn describe_format_deployment(
             },
         ),
     ];
-    let s = describe_object(&v, fields.into_iter());
-    clickwriteln!(writer, "{}", s);
+    describe_object(&v, fields.into_iter(), table);
     Ok(())
 }
 
@@ -652,7 +643,6 @@ pub fn describe_format_rollout(
             },
         ),
     ];
-    let s = describe_object(&v, fields.into_iter());
-    clickwriteln!(writer, "{}", s);
+    describe_object(&v, fields.into_iter(), table);
     Ok(())
 }

@@ -145,6 +145,7 @@ impl KObj {
     ) -> Result<(), ClickError> {
         let mut table = comfy_table::Table::new();
         table.load_preset(comfy_table::presets::NOTHING);
+        table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         // we use some macro hacking here as each read_x call returns different types that have no
         // common trait we could rely on to write generic code
         macro_rules! do_describe {

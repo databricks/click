@@ -52,7 +52,7 @@ pub fn service_describe(
             if !super::maybe_full_describe_output(matches, &service, writer) {
                 super::describe_metadata(&service, writer, table)?;
                 let val = serde_json::value::to_value(&service).unwrap();
-                describe_format_service(&service, val, epval, writer);
+                describe_format_service(&service, val, epval, writer, table);
             }
         }
         _ => {
@@ -68,35 +68,33 @@ fn describe_format_service(
     v: Value,
     endpoint_val: Option<Value>,
     writer: &mut ClickWriter,
+    table: &mut comfy_table::Table,
 ) {
     let port_str = get_ports_str(v.pointer("/spec/ports"), endpoint_val);
-    clickwrite!(
-        writer,
-        "Selector:\t{}",
+    table.add_row(vec![
+        "Selector:",
         service
             .spec
             .as_ref()
-            .map(|spec| { keyval_string(&spec.selector, Some("\t\t"), None) })
-            .unwrap_or_else(|| "<none>".to_string())
-    );
-    clickwriteln!(
-        writer,
-        "Type:\t\t{}",
+            .map(|spec| { keyval_string(&spec.selector, None, None) })
+            .unwrap_or_else(|| "<none>".to_string()).as_str()
+    ]);
+    table.add_row(vec![
+        "Type:",
         service
             .spec
             .as_ref()
             .and_then(|spec| { spec.type_.as_deref() })
             .unwrap_or("<none>")
-    );
-    clickwriteln!(
-        writer,
-        "IP:\t\t{}",
+    ]);
+    table.add_row(vec![
+        "IP:",
         service
             .spec
             .as_ref()
             .and_then(|spec| { spec.cluster_ip.as_deref() })
             .unwrap_or("<none>")
-    );
+    ]);
 
     let ingress = match service
         .status
@@ -120,28 +118,25 @@ fn describe_format_service(
         }
         None => "<none>".to_string(),
     };
-    clickwriteln!(writer, "LoadBalIngress:\t{}", ingress);
-    clickwriteln!(
-        writer,
-        "Session Affinity:\t\t{}",
+    table.add_row(vec!["LoadBalIngress:", ingress.as_str()]);
+    table.add_row(vec![
+        "Session Affinity:",
         service
             .spec
             .as_ref()
             .and_then(|spec| { spec.session_affinity.as_deref() })
             .unwrap_or("<none>")
-    );
-    clickwriteln!(
-        writer,
-        "External Traffic Policy:\t{}",
+    ]);
+    table.add_row(vec![
+        "External Traffic Policy:",
         service
             .spec
             .as_ref()
             .and_then(|spec| { spec.external_traffic_policy.as_deref() })
             .unwrap_or("<none>")
-    );
-    clickwriteln!(
-        writer,
-        "Load Balancer Source Ranges:\t{}",
+    ]);
+    table.add_row(vec![
+        "Load Balancer Source Ranges:",
         service
             .spec
             .as_ref()
@@ -152,9 +147,11 @@ fn describe_format_service(
                     Some(spec.load_balancer_source_ranges.join(", "))
                 }
             })
-            .unwrap_or_else(|| "<none>".to_string())
-    );
-    clickwrite!(writer, "Ports:\n{}", port_str);
+            .unwrap_or_else(|| "<none>".to_string()).as_str()
+    ]);
+    table.add_row(vec![
+        "Ports:", port_str.as_ref()
+    ]);
 }
 
 /// Get ports info out of ports array
@@ -174,7 +171,7 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
                     Some(ref ep) => {
                         // to get all the endpoints, we need to check all subsets this port is in
                         // TODO: This is complex, simplify and/or abstract
-                        let mut epbuf = String::from_str("  Endpoints:\t").unwrap();
+                        let mut epbuf = String::from_str("Endpoints:  ").unwrap();
                         let mut found_one = false;
                         ep.pointer("/subsets").map(|s| {
                             s.as_array().map(|subsets| {
@@ -229,14 +226,15 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
                         if !found_one {
                             epbuf.push_str("<none>");
                         }
+                        epbuf.push('\n');
                         epbuf
                     }
-                    None => "<No Endpoints>".to_owned(),
+                    None => "<No Endpoints>\n".to_owned(),
                 };
-                buf.push_str(format!("  Port:\t\t{} {}/{}\n", name, port_num, proto).as_str());
+                buf.push_str(format!("Port:  {} {}/{}\n", name, port_num, proto).as_str());
                 buf.push_str(
                     format!(
-                        "  NodePort:\t{} {}/{}\n",
+                        "NodePort:  {} {}/{}\n",
                         val_str("/name", port, "<No Name>"),
                         val_u64("/nodePort", port, 0),
                         proto
@@ -244,11 +242,14 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
                     .as_str(),
                 );
                 buf.push_str(endpoints.as_str());
-                buf.push('\n');
-                buf.push('\n');
             }
         }
         None => buf.push_str("<none>"),
+    }
+    if let Some(last) = buf.chars().last() {
+        if last == '\n' {
+            buf.pop();
+        }
     }
     buf.into()
 }

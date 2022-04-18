@@ -404,6 +404,7 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
 
 pub fn print_filled_table(table: &mut comfy_table::Table, writer: &mut ClickWriter) {
     table.load_preset(UTF8_TABLE_STYLE);
+    table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
     clickwriteln!(writer, "{table}");
 }
 
@@ -415,6 +416,7 @@ pub fn print_table<T: Into<comfy_table::Row>>(
 ) {
     let mut table = comfy_table::Table::new();
     table.load_preset(UTF8_TABLE_STYLE);
+    table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
     table.set_header(titles);
     for (index, t_spec) in specs.iter().enumerate() {
         let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index)).collect();

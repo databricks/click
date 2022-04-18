@@ -108,7 +108,7 @@ where
     }
     let list = list_res?;
 
-    let mut flags: Vec<&str> = if matches.is_valid_subcommand("show") {
+    let mut flags: Vec<&str> = if matches.is_valid_arg("show") {
         match matches.values_of("show") {
             Some(v) => v.collect(),
             None => vec![],
@@ -144,7 +144,7 @@ where
             flags.push("namespace");
         }
 
-        let labels_present = if matches.is_valid_subcommand("labels") {
+        let labels_present = if matches.is_valid_arg("labels") {
             matches.is_present("labels")
         } else {
             false

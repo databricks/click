@@ -81,6 +81,7 @@ fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {
             let end = stat.and_then(|s| s.completion_time.as_ref()).or_else(|| {
                 stat.and_then(|s| {
                     s.conditions
+                        .as_ref()
                         .and_then(|conditions| {
                             conditions.iter().find(|cond| {
                                 // we assume a succeeded job has a completion_time so here,

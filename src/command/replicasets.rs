@@ -123,10 +123,11 @@ fn rs_ready(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
 }
 
 fn rs_selector(replicaset: &apps_api::ReplicaSet) -> Option<CellSpec<'_>> {
-    replicaset
-        .spec
-        .as_ref()
-        .map(|spec| keyval_string(spec.selector.match_labels.iter(), None).into())
+    replicaset.spec.as_ref().and_then(|spec| {
+        spec.selector
+            .match_labels.as_ref()
+            .map(|match_labels| keyval_string(match_labels.iter(), None).into())
+    })
 }
 
 list_command!(

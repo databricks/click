@@ -75,7 +75,10 @@ fn describe_format_service(
         service
             .spec
             .as_ref()
-            .map(|spec| keyval_string(spec.selector.iter(), None))
+            .and_then(|spec| {
+                spec.selector.as_ref()
+                    .map(|selector| keyval_string(selector.iter(), None))
+            })
             .unwrap_or_else(|| "<none>".to_string())
             .as_str(),
     ]);
@@ -96,17 +99,18 @@ fn describe_format_service(
             .unwrap_or("<none>"),
     ]);
 
-    let ingress = match service
-        .status
-        .as_ref()
-        .and_then(|status| status.load_balancer.as_ref())
-    {
-        Some(load_bal) => {
+    let ingress = match service.status.as_ref().and_then(|status| {
+        status
+            .load_balancer
+            .as_ref()
+            .and_then(|load_bal| load_bal.ingress.as_ref())
+    }) {
+        Some(ingress) => {
             let mut buf = String::new();
-            if load_bal.ingress.is_empty() {
+            if ingress.is_empty() {
                 buf.push_str("<none>");
             } else {
-                for ingress in load_bal.ingress.iter() {
+                for ingress in ingress.iter() {
                     let istr = ingress
                         .hostname
                         .as_deref()
@@ -141,11 +145,13 @@ fn describe_format_service(
             .spec
             .as_ref()
             .and_then(|spec| {
-                if spec.load_balancer_source_ranges.is_empty() {
-                    None
-                } else {
-                    Some(spec.load_balancer_source_ranges.join(", "))
-                }
+                spec.load_balancer_source_ranges.as_ref().and_then(|lbsr| {
+                    if lbsr.is_empty() {
+                        None
+                    } else {
+                        Some(lbsr.join(", "))
+                    }
+                })
             })
             .unwrap_or_else(|| "<none>".to_string())
             .as_str(),

@@ -66,14 +66,30 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
         "Namespace:",
         metadata.namespace.as_deref().unwrap_or("<Unknown>"),
     ]);
-    table.add_row(vec![
-        "Labels:",
-        &keyval_string(metadata.labels.iter(), None),
-    ]);
-    table.add_row(vec![
-        "Annotations:",
-        &keyval_string(metadata.annotations.iter(), Some(&DESCRIBE_SKIP_KEYS)),
-    ]);
+    let mut label_vec = vec!["Labels:"];
+    match metadata.labels.as_ref() {
+        Some(labels) => {
+            let lstr = keyval_string(labels.iter(), None);
+            label_vec.push(&lstr);
+            table.add_row(label_vec);
+        }
+        None => {
+            label_vec.push("<none>");
+            table.add_row(label_vec);
+        }
+    }
+    let mut annot_vec = vec!["Annotations:"];
+    match metadata.annotations.as_ref() {
+        Some(annotations) => {
+            let astr = keyval_string(annotations.iter(), Some(&DESCRIBE_SKIP_KEYS));
+            annot_vec.push(&astr);
+            table.add_row(annot_vec);
+        }
+        None => {
+            annot_vec.push("<none>");
+            table.add_row(annot_vec);
+        }
+    }
     table.add_row(vec!["API Version:", <T as Resource>::API_VERSION]);
     table.add_row(vec!["Kind:", <T as Resource>::KIND]);
 

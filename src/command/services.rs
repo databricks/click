@@ -82,43 +82,47 @@ fn service_cluster_ip(service: &api::Service) -> Option<CellSpec<'_>> {
 
 fn service_external_ip(service: &api::Service) -> Option<CellSpec<'_>> {
     service.status.as_ref().and_then(|stat| {
-        stat.load_balancer.as_ref().map(|balancer| {
-            if balancer.ingress.is_empty() {
-                "<none>".into()
-            } else {
-                balancer
-                    .ingress
-                    .iter()
-                    .map(|ingress| {
-                        if let Some(hv) = ingress.hostname.as_deref() {
-                            hv
-                        } else if let Some(ipv) = ingress.ip.as_deref() {
-                            ipv
-                        } else {
-                            ""
-                        }
-                    })
-                    .collect::<Vec<&str>>()
-                    .join(", ")
-                    .into()
-            }
+        stat.load_balancer.as_ref().and_then(|balancer| {
+            balancer.ingress.as_ref().map(|ingress| {
+                if ingress.is_empty() {
+                    "<none>".into()
+                } else {
+                    ingress
+                        .iter()
+                        .map(|ingress| {
+                            if let Some(hv) = ingress.hostname.as_deref() {
+                                hv
+                            } else if let Some(ipv) = ingress.ip.as_deref() {
+                                ipv
+                            } else {
+                                ""
+                            }
+                        })
+                        .collect::<Vec<&str>>()
+                        .join(", ")
+                        .into()
+                }
+            })
         })
     })
 }
 
 fn service_ports(service: &api::Service) -> Option<CellSpec<'_>> {
     service.spec.as_ref().map(|spec| {
-        let pvec: Vec<String> = spec
-            .ports
-            .iter()
-            .map(|port| {
-                let protocol = port.protocol.as_deref().unwrap_or("TCP");
-                match port.node_port {
-                    Some(np) => format!("{}:{}/{}", port.port, np, protocol),
-                    None => format!("{}/{}", port.port, protocol),
-                }
-            })
-            .collect();
+        let pvec: Vec<String> = if let Some(ports) = spec.ports.as_ref() {
+            ports
+                .iter()
+                .map(|port| {
+                    let protocol = port.protocol.as_deref().unwrap_or("TCP");
+                    match port.node_port {
+                        Some(np) => format!("{}:{}/{}", port.port, np, protocol),
+                        None => format!("{}/{}", port.port, protocol),
+                    }
+                })
+                .collect()
+        } else {
+            vec![]
+        };
         if pvec.is_empty() {
             "<none>".into()
         } else {
@@ -128,10 +132,10 @@ fn service_ports(service: &api::Service) -> Option<CellSpec<'_>> {
 }
 
 fn service_selector(service: &api::Service) -> Option<CellSpec<'_>> {
-    service
-        .spec
-        .as_ref()
-        .map(|spec| keyval_string(spec.selector.iter(), None).into())
+    service.spec.as_ref().and_then(|spec| {
+        spec.selector.as_ref()
+            .map(|selector| keyval_string(selector.iter(), None).into())
+    })
 }
 
 list_command!(

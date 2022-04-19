@@ -65,7 +65,7 @@ fn secret_type(secret: &api::Secret) -> Option<CellSpec<'_>> {
 }
 
 fn secret_data(secret: &api::Secret) -> Option<CellSpec<'_>> {
-    Some(secret.data.len().into())
+    secret.data.as_ref().map(|data| data.len().into())
 }
 
 list_command!(

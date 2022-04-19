@@ -31,9 +31,9 @@ use crate::{
     table::CellSpec,
 };
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
+use std::{cell::RefCell, collections::BTreeMap};
 
 lazy_static! {
     static ref POD_EXTRACTORS: HashMap<String, Extractor<api::Pod>> = {
@@ -91,7 +91,11 @@ fn pod_to_kobj(pod: &api::Pod) -> KObj {
 
 // Check if a pod has a waiting container
 fn has_waiting(pod: &api::Pod) -> bool {
-    match pod.status.as_ref().map(|stat| &stat.container_statuses) {
+    match pod
+        .status
+        .as_ref()
+        .and_then(|stat| stat.container_statuses.as_ref())
+    {
         Some(stats) => {
             stats.iter().any(|cs| {
                 match cs.state.as_ref() {
@@ -149,10 +153,12 @@ fn ready_counts(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status.as_ref().map(|stat| {
         let mut count = 0;
         let mut ready = 0;
-        for cs in stat.container_statuses.iter() {
-            count += 1;
-            if cs.ready {
-                ready += 1;
+        if let Some(container_statuses) = &stat.container_statuses {
+            for cs in container_statuses.iter() {
+                count += 1;
+                if cs.ready {
+                    ready += 1;
+                }
             }
         }
         format!("{}/{}", ready, count).into()
@@ -160,45 +166,49 @@ fn ready_counts(pod: &api::Pod) -> Option<CellSpec<'_>> {
 }
 
 fn pod_readiness_gates(pod: &api::Pod) -> Option<CellSpec<'_>> {
-    pod.spec.as_ref().map(|spec| {
-        if spec.readiness_gates.is_empty() {
-            "<none>".into()
-        } else {
-            let gates: Vec<&str> = spec
-                .readiness_gates
-                .iter()
-                .map(|rg| rg.condition_type.as_str())
-                .collect();
-            gates.join(", ").into()
-        }
+    pod.spec.as_ref().and_then(|spec| {
+        spec.readiness_gates.as_ref().map(|readiness_gates| {
+            if readiness_gates.is_empty() {
+                "<none>".into()
+            } else {
+                let gates: Vec<&str> = readiness_gates
+                    .iter()
+                    .map(|rg| rg.condition_type.as_str())
+                    .collect();
+                gates.join(", ").into()
+            }
+        })
     })
 }
 
 fn restart_count(pod: &api::Pod) -> Option<CellSpec<'_>> {
-    pod.status.as_ref().map(|stat| {
-        let count = stat
-            .container_statuses
-            .iter()
-            .fold(0, |acc, cs| acc + cs.restart_count);
-        count.into()
+    pod.status.as_ref().and_then(|stat| {
+        stat.container_statuses.as_ref().map(|container_statuses| {
+            let count = container_statuses
+                .iter()
+                .fold(0, |acc, cs| acc + cs.restart_count);
+            count.into()
+        })
     })
 }
 
 fn last_restart(pod: &api::Pod) -> Option<CellSpec<'_>> {
     pod.status.as_ref().and_then(|stat| {
         let mut last_restart = None;
-        for cs in stat.container_statuses.iter() {
-            // TODO: Simplify if https://rust-lang.github.io/rfcs/2497-if-let-chains.html happens
-            if let Some(state) = &cs.last_state {
-                if let Some(terminated) = &state.terminated {
-                    if let Some(finished) = &terminated.finished_at {
-                        if last_restart.is_none() {
-                            last_restart = Some(finished.0)
-                        } else {
-                            // check which is more recent
-                            let last = last_restart.unwrap(); // okay: checked above
-                            if finished.0 > last {
+        if let Some(container_statuses) = &stat.container_statuses {
+            for cs in container_statuses.iter() {
+                // TODO: Simplify if https://rust-lang.github.io/rfcs/2497-if-let-chains.html happens
+                if let Some(state) = &cs.last_state {
+                    if let Some(terminated) = &state.terminated {
+                        if let Some(finished) = &terminated.finished_at {
+                            if last_restart.is_none() {
                                 last_restart = Some(finished.0)
+                            } else {
+                                // check which is more recent
+                                let last = last_restart.unwrap(); // okay: checked above
+                                if finished.0 > last {
+                                    last_restart = Some(finished.0)
+                                }
                             }
                         }
                     }
@@ -364,9 +374,12 @@ fn print_containers(
         .run_on_context(|c| c.read::<api::ReadNamespacedPodResponse>(request))
         .unwrap()
     {
-        api::ReadNamespacedPodResponse::Ok(pod) => match pod.status {
-            Some(status) => {
-                for cont in status.container_statuses.iter() {
+        api::ReadNamespacedPodResponse::Ok(pod) => match pod
+            .status
+            .and_then(|status| status.container_statuses)
+        {
+            Some(container_statuses) => {
+                for cont in container_statuses.iter() {
                     clickwrite!(writer, "Name:\t{}\n", Style::new().bold().paint(&cont.name));
                     clickwrite!(
                         writer,
@@ -387,17 +400,20 @@ fn print_containers(
                             match cont_spec.resources.as_ref() {
                                 Some(resources) => {
                                     clickwrite!(writer, "    Requests:\n");
-                                    for (resource, quant) in resources.requests.iter() {
+                                    let empty = BTreeMap::new();
+                                    let requests = resources.requests.as_ref().unwrap_or(&empty);
+                                    for (resource, quant) in requests.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
-                                    if resources.requests.is_empty() {
+                                    if requests.is_empty() {
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                     clickwrite!(writer, "    Limits:\n");
-                                    for (resource, quant) in resources.limits.iter() {
+                                    let limits = resources.limits.as_ref().unwrap_or(&empty);
+                                    for (resource, quant) in limits.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
-                                    if resources.limits.is_empty() {
+                                    if limits.is_empty() {
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                 }
@@ -409,8 +425,11 @@ fn print_containers(
                             if volumes {
                                 // print volumes
                                 clickwrite!(writer, "  Volumes:\n");
-                                if !cont_spec.volume_mounts.is_empty() {
-                                    for vol in cont_spec.volume_mounts.iter() {
+                                let empty = vec![];
+                                let volume_mounts =
+                                    cont_spec.volume_mounts.as_ref().unwrap_or(&empty);
+                                if !volume_mounts.is_empty() {
+                                    for vol in volume_mounts.iter() {
                                         clickwrite!(writer, "   {}\n", vol.name);
                                         clickwrite!(writer, "    Path:\t{}\n", vol.mount_path);
                                         clickwrite!(

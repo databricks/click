@@ -89,10 +89,12 @@ fn node_container_runtime(node: &api::Node) -> Option<CellSpec<'_>> {
 
 fn get_node_addr<'a>(node: &'a api::Node, type_: &str) -> Option<CellSpec<'a>> {
     node.status.as_ref().and_then(|stat| {
-        stat.addresses
-            .iter()
-            .find(|&addr| addr.type_ == type_)
-            .map(|addr| addr.address.as_str().into())
+        stat.addresses.as_ref().and_then(|addresses| {
+            addresses
+                .iter()
+                .find(|&addr| addr.type_ == type_)
+                .map(|addr| addr.address.as_str().into())
+        })
     })
 }
 
@@ -126,11 +128,13 @@ fn node_os_image(node: &api::Node) -> Option<CellSpec<'_>> {
 //   kubernetes.io/role="[role]"
 fn node_roles(node: &api::Node) -> Option<CellSpec<'_>> {
     let mut roles = vec![];
-    for (k, v) in node.metadata.labels.iter() {
-        if k.eq("kubernetes.io/role") {
-            roles.push(v.as_str());
-        } else if let Some(role) = k.strip_prefix("node-role.kubernetes.io/") {
-            roles.push(role);
+    if let Some(labels) = &node.metadata.labels {
+        for (k, v) in labels.iter() {
+            if k.eq("kubernetes.io/role") {
+                roles.push(v.as_str());
+            } else if let Some(role) = k.strip_prefix("node-role.kubernetes.io/") {
+                roles.push(role);
+            }
         }
     }
     if roles.is_empty() {
@@ -142,10 +146,11 @@ fn node_roles(node: &api::Node) -> Option<CellSpec<'_>> {
 
 fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
     // scope borrows
-    let readycond: Option<&api::NodeCondition> = node
-        .status
-        .as_ref()
-        .and_then(|stat| stat.conditions.iter().find(|c| c.type_ == "Ready"));
+    let readycond: Option<&api::NodeCondition> = node.status.as_ref().and_then(|stat| {
+        stat.conditions
+            .as_ref()
+            .and_then(|conditions| conditions.iter().find(|c| c.type_ == "Ready"))
+    });
     let (state, fg) = if let Some(cond) = readycond {
         if cond.status == "True" {
             ("Ready", comfy_table::Color::DarkGreen)

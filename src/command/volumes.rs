@@ -74,27 +74,31 @@ fn pv_to_kobj(volume: &api::PersistentVolume) -> KObj {
 
 fn volume_capacity(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
     volume.spec.as_ref().and_then(|spec| {
-        spec.capacity.get("storage").as_ref().map(|q| {
-            let quant = Quantity(q.0.clone());
-            quant.into()
+        spec.capacity.as_ref().and_then(|capacity| {
+            capacity.get("storage").as_ref().map(|q| {
+                let quant = Quantity(q.0.clone());
+                quant.into()
+            })
         })
     })
 }
 
 fn volume_access_modes(volume: &api::PersistentVolume) -> Option<CellSpec<'_>> {
-    volume.spec.as_ref().map(|spec| {
-        spec.access_modes
-            .iter()
-            .map(|mode| match mode.as_str() {
-                "ReadWriteOnce" => "RWO",
-                "ReadOnlyMany" => "ROX",
-                "ReadWriteMany" => "RWX",
-                "ReadWriteOncePod" => "RWOP",
-                _ => "Unknown",
-            })
-            .collect::<Vec<&str>>()
-            .join(", ")
-            .into()
+    volume.spec.as_ref().and_then(|spec| {
+        spec.access_modes.as_ref().map(|access_modes| {
+            access_modes
+                .iter()
+                .map(|mode| match mode.as_str() {
+                    "ReadWriteOnce" => "RWO",
+                    "ReadOnlyMany" => "ROX",
+                    "ReadWriteMany" => "RWX",
+                    "ReadWriteOncePod" => "RWOP",
+                    _ => "Unknown",
+                })
+                .collect::<Vec<&str>>()
+                .join(", ")
+                .into()
+        })
     })
 }
 

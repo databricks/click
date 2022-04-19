@@ -81,11 +81,13 @@ fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {
             let end = stat.and_then(|s| s.completion_time.as_ref()).or_else(|| {
                 stat.and_then(|s| {
                     s.conditions
-                        .iter()
-                        .find(|cond| {
-                            // we assume a succeeded job has a completion_time so here,
-                            // find the "failed" condition and find when it happened
-                            cond.type_ == "Failed" || cond.status == "True"
+                        .as_ref()
+                        .and_then(|conditions| {
+                            conditions.iter().find(|cond| {
+                                // we assume a succeeded job has a completion_time so here,
+                                // find the "failed" condition and find when it happened
+                                cond.type_ == "Failed" || cond.status == "True"
+                            })
                         })
                         .and_then(|cond| cond.last_transition_time.as_ref())
                 })
@@ -130,9 +132,12 @@ fn job_images(job: &batch_api::Job) -> Option<CellSpec<'_>> {
 
 fn job_selector(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     job.spec.as_ref().and_then(|spec| {
-        spec.selector
-            .as_ref()
-            .map(|selector| keyval_string(selector.match_labels.iter(), None).into())
+        spec.selector.as_ref().and_then(|selector| {
+            selector
+                .match_labels
+                .as_ref()
+                .map(|match_labels| keyval_string(match_labels.iter(), None).into())
+        })
     })
 }
 

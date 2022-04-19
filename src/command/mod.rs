@@ -340,7 +340,9 @@ pub fn extract_namespace<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_
 /// An extractor for the Labels field. Extracts the labels out of the object metadata
 pub fn extract_labels<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, str>> {
     let meta = obj.metadata();
-    Some(keyval_string(meta.labels.iter(), None).into())
+    meta.labels
+        .as_ref()
+        .map(|labels| keyval_string(labels.iter(), None).into())
 }
 
 // utility functions

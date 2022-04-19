@@ -303,7 +303,7 @@ command!(
                            This could allow an attacker to provide invalid logs. \
                            Useful if your kubelet serving certs have expired or similar.")
                     .takes_value(false)
-            )
+            );
         }
         ret
     },

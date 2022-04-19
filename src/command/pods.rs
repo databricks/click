@@ -401,8 +401,7 @@ fn print_containers(
                                 Some(resources) => {
                                     clickwrite!(writer, "    Requests:\n");
                                     let empty = BTreeMap::new();
-                                    let requests =
-                                        resources.requests.as_ref().unwrap_or(&empty);
+                                    let requests = resources.requests.as_ref().unwrap_or(&empty);
                                     for (resource, quant) in requests.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
@@ -410,8 +409,7 @@ fn print_containers(
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                     clickwrite!(writer, "    Limits:\n");
-                                    let limits =
-                                        resources.limits.as_ref().unwrap_or(&empty);
+                                    let limits = resources.limits.as_ref().unwrap_or(&empty);
                                     for (resource, quant) in limits.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }

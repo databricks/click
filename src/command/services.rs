@@ -133,7 +133,8 @@ fn service_ports(service: &api::Service) -> Option<CellSpec<'_>> {
 
 fn service_selector(service: &api::Service) -> Option<CellSpec<'_>> {
     service.spec.as_ref().and_then(|spec| {
-        spec.selector.as_ref()
+        spec.selector
+            .as_ref()
             .map(|selector| keyval_string(selector.iter(), None).into())
     })
 }

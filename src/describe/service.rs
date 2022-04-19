@@ -76,7 +76,8 @@ fn describe_format_service(
             .spec
             .as_ref()
             .and_then(|spec| {
-                spec.selector.as_ref()
+                spec.selector
+                    .as_ref()
                     .map(|selector| keyval_string(selector.iter(), None))
             })
             .unwrap_or_else(|| "<none>".to_string())

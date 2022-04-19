@@ -401,10 +401,8 @@ fn print_containers(
                                 Some(resources) => {
                                     clickwrite!(writer, "    Requests:\n");
                                     let empty = BTreeMap::new();
-                                    let requests = resources
-                                        .requests
-                                        .as_ref()
-                                        .unwrap_or_else(|| &empty);
+                                    let requests =
+                                        resources.requests.as_ref().unwrap_or(&empty);
                                     for (resource, quant) in requests.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
@@ -412,10 +410,8 @@ fn print_containers(
                                         clickwrite!(writer, "      <none>\n");
                                     }
                                     clickwrite!(writer, "    Limits:\n");
-                                    let limits = resources
-                                        .limits
-                                        .as_ref()
-                                        .unwrap_or_else(|| &empty);
+                                    let limits =
+                                        resources.limits.as_ref().unwrap_or(&empty);
                                     for (resource, quant) in limits.iter() {
                                         clickwrite!(writer, "      {}:\t{}\n", resource, quant.0)
                                     }
@@ -433,7 +429,7 @@ fn print_containers(
                                 clickwrite!(writer, "  Volumes:\n");
                                 let empty = vec![];
                                 let volume_mounts =
-                                    cont_spec.volume_mounts.as_ref().unwrap_or_else(|| &empty);
+                                    cont_spec.volume_mounts.as_ref().unwrap_or(&empty);
                                 if !volume_mounts.is_empty() {
                                     for vol in volume_mounts.iter() {
                                         clickwrite!(writer, "   {}\n", vol.name);

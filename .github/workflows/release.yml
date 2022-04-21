@@ -15,19 +15,25 @@ jobs:
   create_release:
     name: Create release
     runs-on: ubuntu-latest
-    # Note this. We are going to use that in further jobs.
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-      tag_name: ${{ github.ref }}
+      click_version: ${{ env.CLICK_VERSION }}
     steps:
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.CLICK_VERSION == ''
+        run: |
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "CLICK_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.CLICK_VERSION }}"
       - name: Create release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ env.CLICK_VERSION }}
+          release_name: ${{  env.CLICK_VERSION }}
 
   release_assets:
     name: Release assets
@@ -107,7 +113,7 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        staging=click-${{ needs.create_release.outputs.tag_name }}-${{ matrix.target }}"
+        staging=click-${{ needs.create_release.outputs.click_version }}-${{ matrix.target }}"
         mkdir "$staging"
 
         cp {README.md,CHANGELOG.md,LICENSE} "$staging/"

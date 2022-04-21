@@ -83,7 +83,8 @@ jobs:
     - name: Use Cross
       shell: bash
       run: |
-        cargo install cross
+        # see: https://github.com/cross-rs/cross/issues/229#issuecomment-590546949
+        cargo install --version 0.1.16 cross
         echo "CARGO=cross" >> $GITHUB_ENV
         echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
         echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV

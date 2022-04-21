@@ -114,7 +114,7 @@ jobs:
     - name: Build archive
       shell: bash
       run: |
-        staging=click-${{ needs.create_release.outputs.click_version }}-${{ matrix.target }}"
+        staging="click-${{ needs.create_release.outputs.click_version }}-${{ matrix.target }}"
         mkdir "$staging"
 
         cp {README.md,CHANGELOG.md,LICENSE} "$staging/"

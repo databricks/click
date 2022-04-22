@@ -1,3 +1,27 @@
+0.6.0
+=====
+Features:
+* Migrate to k8s-openapi
+  * This enabled a migration to reqwest and dropping of the old un-maintained http clients
+    previously in use
+* Update to Rust 2021 edition
+* Add a `cp` command to copy files to/from a pod
+* Add a `daemonsets` command
+* ADd a `persistentvolumes` command
+* Forward environment variables to exec'd commands (Thanks @wchau)
+* All objects have a basic describe for (at least) their metadata
+* Support azure and oidc auth providers (beta)
+* `pods` command can show last restart time of a pod
+* Migrate to comfy-table since prettytable is no longer maintained
+  * As a result wide tables should render much more pleasantly
+* `describe` also shows events
+* Add support to show CRDs (see `help crd`)
+
+Bug Fixes:
+* Tab completion works for most arguments
+* `exec` handles multi-argument commands properly
+* Events sort properly in time order
+
 0.5.4
 ======
 * Contexts complete in alphabetical order (thanks @markj-db)

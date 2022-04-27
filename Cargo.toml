@@ -18,13 +18,13 @@ travis-ci = { repository = "databricks/click" }
 argorollouts = [] # enable the `rollouts` command to view argo rollouts
 
 [dependencies]
-ansi_term = "^0.12"
 atomicwrites = "^0.3"
 base64 = "^0.13"
 bytes = "1.0.1"
 chrono = { version = "^0.4", features = ["serde"] }
 clap = { version = "^3.1", features = ["cargo", "color"] }
 comfy-table = "^5.0"
+crossterm = "^0.23"
 ctrlc = "^3.1"
 dirs = "^4.0"
 duct = "^0.13"
@@ -50,3 +50,4 @@ tempdir = "^0.3"
 tokio = { version = "1", features = ["full"] }
 url = "^2.2"
 yasna = "^0.5"
+derivative = "2.2.0"

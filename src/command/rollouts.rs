@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /// Support for argo rollouts https://argoproj.github.io/argo-rollouts/
-use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta, http, ListOptional, ListResponse,

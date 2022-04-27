@@ -219,9 +219,10 @@ macro_rules! command {
 
         impl $cmd_name {
             pub fn new() -> $cmd_name {
+                use crossterm::style::Stylize;
                 lazy_static! {
                     static ref ALIASES_STR: String =
-                        format!("{}:\n    {:?}", Yellow.paint("ALIASES"), $aliases);
+                        format!("{}:\n    {:?}", "ALIASES".yellow(), $aliases);
                 }
                 let clap = start_clap($name, $about, &ALIASES_STR, $trailing_var_arg);
                 let extra = $extra_args(clap);

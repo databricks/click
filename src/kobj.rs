@@ -18,8 +18,6 @@ use crate::output::ClickWriter;
 use crate::values::val_str_opt;
 use crate::Env;
 
-use ansi_term::ANSIString;
-use ansi_term::Colour::{Blue, Cyan, Green, Purple, Red, Yellow};
 use clap::ArgMatches;
 use k8s_openapi::api::{
     apps::v1 as api_apps, batch::v1 as api_batch, core::v1 as api, storage::v1 as api_storage,
@@ -103,27 +101,6 @@ impl KObj {
             ObjType::StorageClass => "StorageClass",
             #[cfg(feature = "argorollouts")]
             ObjType::Rollout => "Rollout",
-        }
-    }
-
-    pub fn prompt_str(&self) -> ANSIString {
-        match self.typ {
-            ObjType::Pod { .. } => Yellow.bold().paint(self.name.as_str()),
-            ObjType::Crd { .. } => Blue.bold().paint(self.name.as_str()),
-            ObjType::Node => Blue.bold().paint(self.name.as_str()),
-            ObjType::DaemonSet => Yellow.bold().paint(self.name.as_str()),
-            ObjType::Deployment => Purple.bold().paint(self.name.as_str()),
-            ObjType::Service => Cyan.bold().paint(self.name.as_str()),
-            ObjType::ReplicaSet => Green.bold().paint(self.name.as_str()),
-            ObjType::StatefulSet => Green.bold().paint(self.name.as_str()),
-            ObjType::ConfigMap => Purple.bold().paint(self.name.as_str()),
-            ObjType::Secret => Red.bold().paint(self.name.as_str()),
-            ObjType::Job => Purple.bold().paint(self.name.as_str()),
-            ObjType::Namespace => Green.bold().paint(self.name.as_str()),
-            ObjType::PersistentVolume => Blue.bold().paint(self.name.as_str()),
-            ObjType::StorageClass => Red.bold().paint(self.name.as_str()),
-            #[cfg(feature = "argorollouts")]
-            ObjType::Rollout => Purple.bold().paint(self.name.as_str()),
         }
     }
 

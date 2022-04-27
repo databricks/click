@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::{
-    Colour::{Green, Red, Yellow},
-    Style,
-};
 use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::api::core::v1 as api;
 use k8s_openapi::ListOptional;
@@ -28,6 +24,7 @@ use crate::{
     error::ClickError,
     kobj::{KObj, ObjType},
     output::ClickWriter,
+    styles::Styles,
     table::CellSpec,
 };
 
@@ -380,14 +377,14 @@ fn print_containers(
         {
             Some(container_statuses) => {
                 for cont in container_statuses.iter() {
-                    clickwrite!(writer, "Name:\t{}\n", Style::new().bold().paint(&cont.name));
+                    clickwrite!(writer, "Name:\t{}\n", env.styles.bold(cont.name.as_str()));
                     clickwrite!(
                         writer,
                         "  ID:\t\t{}\n",
                         cont.container_id.as_deref().unwrap_or("<none>")
                     );
                     clickwrite!(writer, "  Image:\t{}\n", cont.image_id);
-                    print_state_string(&cont.state, writer);
+                    print_state_string(&cont.state, &env.styles, writer);
                     clickwrite!(writer, "  Ready:\t{}\n", cont.ready);
                     clickwrite!(writer, "  Restarts:\t{}\n", cont.restart_count);
 
@@ -465,12 +462,16 @@ fn print_containers(
     }
 }
 
-fn print_state_string(state: &Option<api::ContainerState>, writer: &mut ClickWriter) {
+fn print_state_string(
+    state: &Option<api::ContainerState>,
+    styles: &Styles,
+    writer: &mut ClickWriter,
+) {
     clickwrite!(writer, "  State:\t");
     match state {
         Some(state) => {
             if let Some(running) = state.running.as_ref() {
-                clickwrite!(writer, "{}\n", Green.paint("Running"));
+                clickwrite!(writer, "{}\n", styles.success("Running"));
                 match &running.started_at {
                     Some(start) => clickwrite!(writer, "\t\t  started at: {}\n", start.0),
                     None => clickwrite!(writer, "\t\t  since unknown\n"),
@@ -483,7 +484,7 @@ fn print_state_string(state: &Option<api::ContainerState>, writer: &mut ClickWri
                     .as_ref()
                     .map(|fa| fa.0.to_string())
                     .unwrap_or_else(|| "<unknown>".to_string());
-                clickwrite!(writer, "{}\n", Red.paint("Terminated"));
+                clickwrite!(writer, "{}\n", styles.danger("Terminated"));
                 clickwrite!(writer, "\t\t  at: {}\n", tsr);
                 clickwrite!(writer, "\t\t  code: {}\n", terminated.exit_code);
                 clickwrite!(writer, "\t\t  message: {}\n", message);
@@ -491,14 +492,14 @@ fn print_state_string(state: &Option<api::ContainerState>, writer: &mut ClickWri
             } else if let Some(waiting) = state.waiting.as_ref() {
                 let message = waiting.message.as_deref().unwrap_or("no message");
                 let reason = waiting.reason.as_deref().unwrap_or("no reason");
-                clickwrite!(writer, "{}\n", Yellow.paint("Waiting"));
+                clickwrite!(writer, "{}\n", styles.warning("Waiting"));
                 clickwrite!(writer, "\t\t  message: {}\n", message);
                 clickwrite!(writer, "\t\t  reason: {}\n", reason);
             } else {
                 clickwrite!(
                     writer,
                     "{}",
-                    format!("{} (reason unknown)\n", Yellow.paint("Waiting"))
+                    format!("{} (reason unknown)\n", styles.warning("Waiting"))
                 );
             }
         }

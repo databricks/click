@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::Colour::Yellow;
 use chrono::offset::Utc;
 use clap::{Arg, Command as ClapCommand};
 use comfy_table::Table;
@@ -57,7 +56,7 @@ fn print_contexts(env: &Env, writer: &mut ClickWriter) {
             };
             row.push(CellSpec::with_colors(
                 (*context).clone().into(),
-                Some(comfy_table::Color::Red),
+                Some(env.styles.context_table_color()),
                 None,
             ));
             row.push(cluster.into());

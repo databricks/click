@@ -24,6 +24,7 @@ use serde::Deserializer;
 use serde_json::Value;
 
 use crate::{
+    env::Env,
     kobj::{KObj, ObjType},
     output::ClickWriter,
     table::CellSpec,
@@ -82,6 +83,7 @@ pub struct K8sTable {
 impl K8sTable {
     pub fn print_to(
         &self,
+        env: &Env,
         show_namespace: bool,
         _type: &str,
         group_version: &str,
@@ -119,7 +121,7 @@ impl K8sTable {
                 },
             });
         }
-        crate::table::print_table(titles, rows, writer);
+        crate::table::print_table(titles, rows, env, writer);
         kobjs
     }
 }

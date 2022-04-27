@@ -14,6 +14,7 @@
 
 use crate::command::format_duration;
 use crate::command::time_since;
+use crate::env::Env;
 /// Stuff to handle outputting a table of resources, including
 /// applying filters and sorting
 use crate::output::ClickWriter;
@@ -43,11 +44,50 @@ enum CellSpecTxt<'a> {
     Str(Cow<'a, str>),
 }
 
+pub enum ColorType {
+    Info,
+    Success,
+    Warn,
+    Danger,
+}
+
+// An enum to hold either an actual color, or a color type like "success"
+pub enum TableColor {
+    Color(Color),
+    ColorType(ColorType),
+}
+
+impl TableColor {
+    fn to_color(&self, env: &Env) -> Color {
+        match self {
+            TableColor::Color(color) => *color,
+            TableColor::ColorType(color_type) => match color_type {
+                ColorType::Info => env.styles.info_color(),
+                ColorType::Success => env.styles.success_color(),
+                ColorType::Warn => env.styles.warning_color(),
+                ColorType::Danger => env.styles.danger_color(),
+            },
+        }
+    }
+}
+
+impl From<Color> for TableColor {
+    fn from(color: Color) -> Self {
+        TableColor::Color(color)
+    }
+}
+
+impl From<ColorType> for TableColor {
+    fn from(color_type: ColorType) -> Self {
+        TableColor::ColorType(color_type)
+    }
+}
+
 /// Holds a specification for a table cell
 pub struct CellSpec<'a> {
     txt: CellSpecTxt<'a>,
-    pub fg: Option<Color>,
-    pub bg: Option<Color>,
+    pub fg: Option<TableColor>,
+    pub bg: Option<TableColor>,
     pub align: Option<CellAlignment>,
 }
 
@@ -70,7 +110,11 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn with_colors(txt: Cow<'a, str>, fg: Option<Color>, bg: Option<Color>) -> CellSpec<'a> {
+    pub fn with_colors(
+        txt: Cow<'a, str>,
+        fg: Option<TableColor>,
+        bg: Option<TableColor>,
+    ) -> CellSpec<'a> {
         CellSpec {
             txt: CellSpecTxt::Str(txt),
             fg,
@@ -88,7 +132,7 @@ impl<'a> CellSpec<'a> {
         }
     }
 
-    pub fn to_cell(&self, index: usize) -> Cell {
+    pub fn to_cell(&self, index: usize, env: &Env) -> Cell {
         let cell = match &self.txt {
             CellSpecTxt::DateTime(datetime) => Cell::new(&format_duration(time_since(*datetime))),
             CellSpecTxt::Duration(duration) => Cell::new(&format_duration(*duration)),
@@ -109,14 +153,14 @@ impl<'a> CellSpec<'a> {
             cell
         };
 
-        let cell = if let Some(fg) = self.fg {
-            cell.fg(fg)
+        let cell = if let Some(fg) = &self.fg {
+            cell.fg(fg.to_color(env))
         } else {
             cell
         };
 
-        if let Some(bg) = self.bg {
-            cell.bg(bg)
+        if let Some(bg) = &self.bg {
+            cell.bg(bg.to_color(env))
         } else {
             cell
         }
@@ -412,6 +456,7 @@ pub fn print_filled_table(table: &mut comfy_table::Table, writer: &mut ClickWrit
 pub fn print_table<T: Into<comfy_table::Row>>(
     titles: T,
     specs: Vec<Vec<CellSpec<'_>>>,
+    env: &Env,
     writer: &mut ClickWriter,
 ) {
     let mut table = comfy_table::Table::new();
@@ -419,7 +464,7 @@ pub fn print_table<T: Into<comfy_table::Row>>(
     table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
     table.set_header(titles);
     for (index, t_spec) in specs.iter().enumerate() {
-        let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index)).collect();
+        let row_vec: Vec<Cell> = t_spec.iter().map(|spec| spec.to_cell(index, env)).collect();
         table.add_row(row_vec);
     }
     clickwriteln!(writer, "{table}");

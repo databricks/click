@@ -102,13 +102,29 @@ impl Styles {
     style!(config_val, s {s.yellow()});
 
     // other colors
-    pub fn success_color(&self) -> Color { Color::DarkGreen }
-    pub fn warning_color(&self) -> Color { Color::DarkYellow }
-    pub fn danger_color(&self) -> Color { Color::DarkRed }
-    pub fn info_color(&self) -> Color { Color::DarkBlue }
+    pub fn success_color(&self) -> Color {
+        Color::DarkGreen
+    }
+    pub fn warning_color(&self) -> Color {
+        Color::DarkYellow
+    }
+    pub fn danger_color(&self) -> Color {
+        Color::DarkRed
+    }
+    pub fn info_color(&self) -> Color {
+        Color::DarkBlue
+    }
 
-    pub fn context_table_color(&self) -> Color { Color::Red }
+    pub fn context_table_color(&self) -> Color {
+        Color::Red
+    }
 
     // attributes
     style!(bold, s {s.bold()});
+}
+
+impl Default for Styles {
+    fn default() -> Self {
+        Self::new()
+    }
 }

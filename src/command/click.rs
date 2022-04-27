@@ -56,14 +56,14 @@ fn print_contexts(env: &Env, writer: &mut ClickWriter) {
             };
             row.push(CellSpec::with_colors(
                 (*context).clone().into(),
-                Some(env.styles.context_table_color()),
+                Some(env.styles.context_table_color().into()),
                 None,
             ));
             row.push(cluster.into());
             row
         })
         .collect();
-    crate::table::print_table(vec!["Context", "Api Server Address"], ctxs, writer);
+    crate::table::print_table(vec!["Context", "Api Server Address"], ctxs, env, writer);
 }
 
 command!(

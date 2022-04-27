@@ -25,7 +25,7 @@ use crate::{
     kobj::{KObj, ObjType},
     output::ClickWriter,
     styles::Styles,
-    table::CellSpec,
+    table::{CellSpec, ColorType},
 };
 
 use std::collections::HashMap;
@@ -111,16 +111,15 @@ fn has_waiting(pod: &api::Pod) -> bool {
     }
 }
 
-fn phase_style_color(phase: &str) -> comfy_table::Color {
-    use comfy_table::Color;
+fn phase_style_color(phase: &str) -> ColorType {
     match phase {
-        "Running" | "Active" => Color::DarkGreen,
-        "Terminated" | "Terminating" => Color::DarkRed,
-        "Pending" | "ContainerCreating" => Color::DarkYellow,
-        "Succeeded" => Color::DarkBlue,
-        "Failed" => Color::DarkRed,
-        "Unknown" => Color::DarkRed,
-        _ => Color::DarkRed,
+        "Running" | "Active" => ColorType::Success,
+        "Terminated" | "Terminating" => ColorType::Danger,
+        "Pending" | "ContainerCreating" => ColorType::Warn,
+        "Succeeded" => ColorType::Info,
+        "Failed" => ColorType::Danger,
+        "Unknown" => ColorType::Danger,
+        _ => ColorType::Danger,
     }
 }
 
@@ -229,7 +228,7 @@ fn pod_status(pod: &api::Pod) -> Option<CellSpec<'_>> {
             .unwrap_or("Unknown")
     };
     let fg = phase_style_color(status);
-    Some(CellSpec::with_colors(status.into(), Some(fg), None))
+    Some(CellSpec::with_colors(status.into(), Some(fg.into()), None))
 }
 
 list_command!(

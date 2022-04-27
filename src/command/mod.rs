@@ -247,7 +247,7 @@ where
         specs.into_iter().unzip()
     };
 
-    crate::table::print_table(titles, rows, writer);
+    crate::table::print_table(titles, rows, env, writer);
     env.set_last_objs(kobjs);
     Ok(())
 }

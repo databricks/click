@@ -14,7 +14,7 @@
 
 /// Module to handle writing data to stdout, and/or copying/writing it
 /// to files etc
-use ansi_term::Colour::{Blue, Green};
+use crossterm::style::{Attribute, Color, ResetColor, SetAttribute, SetForegroundColor};
 use duct::Handle;
 use duct_sh::sh_dangerous;
 use os_pipe::{pipe, PipeWriter};
@@ -288,7 +288,7 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         W: Write,
     {
         if self.invalue && !self.iskey {
-            write!(writer, "{}", Green.prefix()).unwrap_or(());
+            write!(writer, "{}", SetForegroundColor(Color::Green)).unwrap_or(());
         }
         self.pretty.begin_string(writer)
     }
@@ -299,7 +299,7 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
     {
         let r = self.pretty.end_string(writer);
         if self.invalue && !self.iskey {
-            write!(writer, "{}", Green.suffix()).unwrap_or(());
+            write!(writer, "{}", ResetColor).unwrap_or(());
         }
         r
     }
@@ -370,7 +370,8 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
     {
         self.iskey = true;
         let r = self.pretty.begin_object_key(writer, first);
-        write!(writer, "{}", Blue.bold().prefix()).unwrap_or(());
+        write!(writer, "{}", SetForegroundColor(Color::Blue)).unwrap_or(());
+        write!(writer, "{}", SetAttribute(Attribute::Bold)).unwrap_or(());
         r
     }
 
@@ -380,7 +381,7 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
     {
         let r = self.pretty.end_object_key(writer);
         self.iskey = false;
-        write!(writer, "{}", Blue.bold().suffix()).unwrap_or(());
+        write!(writer, "{}", ResetColor).unwrap_or(());
         r
     }
 

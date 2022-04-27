@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::Colour::Yellow;
 use chrono::{offset::Utc, DateTime};
 use clap::Command as ClapCommand;
 use comfy_table::{Cell, Table};

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
 
 use rustyline::completion::Pair as RustlinePair;
@@ -106,6 +105,7 @@ command!(
                 match env.run_on_context::<_, GetTableResponse>(|c| c.read(request))? {
                     GetTableResponse::Ok(resp) => {
                         let kobjs = resp.print_to(
+                            env,
                             env.namespace.is_none(),
                             &desc.name,
                             &desc.group_version,

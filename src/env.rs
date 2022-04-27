@@ -16,8 +16,8 @@ use crate::config::{self, Alias, ClickConfig, Config};
 use crate::error::ClickError;
 use crate::kobj::{KObj, ObjType};
 use crate::output::ClickWriter;
+use crate::styles::Styles;
 
-use ansi_term::Colour::{Blue, Green, Red, Yellow};
 use rustyline::config as rustyconfig;
 use strfmt::strfmt;
 use tempdir::TempDir;
@@ -57,6 +57,7 @@ pub enum ObjectSelection {
 pub struct Env {
     pub config: Config,
     pub click_config: ClickConfig,
+    pub styles: Styles,
     click_config_path: PathBuf,
     pub quit: bool,
     pub need_new_editor: bool,
@@ -87,9 +88,16 @@ impl Env {
     pub fn new(config: Config, click_config: ClickConfig, click_config_path: PathBuf) -> Env {
         let namespace = click_config.namespace.clone();
         let context = click_config.context.clone();
+        let styles = Styles::new();
+        let nones = (
+            styles.prompt_context("none"),
+            styles.prompt_namespace("none"),
+            styles.prompt_select_none("none"),
+        );
         let mut env = Env {
             config,
             click_config,
+            styles,
             click_config_path,
             quit: false,
             need_new_editor: false,
@@ -99,12 +107,7 @@ impl Env {
             last_objs: None,
             ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
-            prompt: format!(
-                "[{}] [{}] [{}] > ",
-                Red.paint("none"),
-                Green.paint("none"),
-                Yellow.paint("none")
-            ),
+            prompt: format!("[{}] [{}] [{}] > ", nones.0, nones.1, nones.2,),
             range_str: None,
             tempdir: TempDir::new("click"),
         };
@@ -129,19 +132,22 @@ impl Env {
         self.prompt = format!(
             "[{}] [{}] [{}] > ",
             if let Some(ref c) = self.context {
-                Red.bold().paint(c.name.as_str())
+                self.styles.prompt_context(c.name.as_str())
             } else {
-                Red.paint("none")
+                self.styles.prompt_context("none")
             },
             if let Some(ref n) = self.namespace {
-                Green.bold().paint(n.as_str())
+                self.styles.prompt_namespace(n.as_str())
             } else {
-                Green.paint("none")
+                self.styles.prompt_namespace("none")
             },
             match self.current_selection {
-                ObjectSelection::Single(ref obj) => obj.prompt_str(),
-                ObjectSelection::Range(_) => Blue.paint(self.range_str.as_ref().unwrap()),
-                ObjectSelection::None => Yellow.paint("none"),
+                ObjectSelection::Single(ref obj) =>
+                    self.styles.prompt_object(obj.name.as_str(), obj.type_str()),
+                ObjectSelection::Range(_) => self
+                    .styles
+                    .prompt_range(self.range_str.as_ref().unwrap().as_str()),
+                ObjectSelection::None => self.styles.prompt_select_none("none"),
             }
         );
     }
@@ -481,34 +487,42 @@ impl fmt::Display for Env {
   Describe Shows Events: {}
 }}",
             if let Some(ref c) = self.context {
-                Green.bold().paint(c.name.as_str())
+                self.styles.config_val(c.name.as_str())
             } else {
-                Green.paint("none")
+                self.styles.config_val("none")
             },
             self.config.contexts.keys(),
-            Green.paint(&self.config.source_file),
+            self.styles.config_val(self.config.source_file.as_str()),
             {
                 let ctstr: String = (&self.click_config.completiontype).into();
-                Green.paint(ctstr)
+                self.styles.config_val_string(ctstr)
             },
             {
                 let emstr: String = (&self.click_config.editmode).into();
-                Green.paint(emstr)
+                self.styles.config_val_string(emstr)
             },
-            Green.paint(
+            self.styles.config_val(
                 self.click_config
                     .editor
                     .as_ref()
                     .unwrap_or(&"<unset, will use $EDITOR>".to_owned())
+                    .as_str()
             ),
-            Green.paint(
+            self.styles.config_val(
                 self.click_config
                     .terminal
                     .as_ref()
                     .unwrap_or(&"<unset, will use xterm>".to_owned())
+                    .as_str()
             ),
-            Green.paint(&self.click_config.range_separator),
-            Green.paint(&self.click_config.describe_include_events.to_string()),
+            self.styles
+                .config_val(self.click_config.range_separator.as_str()),
+            self.styles.config_val(
+                self.click_config
+                    .describe_include_events
+                    .to_string()
+                    .as_str()
+            ),
         )
     }
 }

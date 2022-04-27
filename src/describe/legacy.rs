@@ -18,10 +18,10 @@
 use crate::error::ClickError;
 use crate::values::{val_str, val_str_opt, val_u64};
 
-use ansi_term::Colour;
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
+use crossterm::style::Stylize;
 use k8s_openapi::api::{apps::v1 as api_apps, core::v1 as api};
 use serde_json::Value;
 
@@ -355,14 +355,14 @@ fn get_volume_str(v: &Value) -> Cow<str> {
 }
 
 fn pod_phase(v: &Value) -> Cow<str> {
+    // TODO: How to get an env in here for the colors
     let phase_str = val_str("/status/phase", v, "<No Phase>");
-    let colour = match &*phase_str {
-        "Pending" | "Unknown" => Colour::Yellow,
-        "Running" | "Succeeded" => Colour::Green,
-        "Failed" => Colour::Red,
-        _ => Colour::Yellow,
-    };
-    colour.paint(phase_str).to_string().into()
+    match &*phase_str {
+        "Pending" | "Unknown" => phase_str.yellow().to_string().into(),
+        "Running" | "Succeeded" => phase_str.green().to_string().into(),
+        "Failed" => phase_str.red().to_string().into(),
+        _ => phase_str.yellow().to_string().into(),
+    }
 }
 
 /// Utility function for describe to print out value
@@ -537,11 +537,7 @@ fn get_message_str(v: &Value) -> Cow<str> {
     if let Some(condition_array) = v.as_array() {
         for condition in condition_array.iter() {
             let msg = val_str("/message", condition, "<No Message>");
-            let colour = match &*msg {
-                "Deployment has minimum availability." => Colour::Green,
-                _ => Colour::Yellow,
-            };
-            buf.push_str(format!("  Message: {}\n", colour.paint(msg)).as_str());
+            buf.push_str(format!("  Message: {}\n", msg).as_str());
         }
     }
     buf.into()

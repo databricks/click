@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::api::core::v1 as api;
 use rustyline::completion::Pair as RustlinePair;

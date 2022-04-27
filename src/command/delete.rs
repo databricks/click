@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ansi_term::Colour::Yellow;
 use clap::{Arg, Command as ClapCommand};
 use k8s_openapi::{
     api::apps::v1 as api_apps, api::batch::v1 as api_batch, api::core::v1 as api,

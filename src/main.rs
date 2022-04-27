@@ -23,14 +23,15 @@ extern crate serde_derive;
 #[macro_use]
 mod output;
 
-extern crate ansi_term;
 extern crate atomicwrites;
 extern crate base64;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate comfy_table;
+extern crate crossterm;
 extern crate ctrlc;
+extern crate derivative;
 extern crate dirs;
 extern crate duct_sh;
 extern crate humantime;
@@ -66,6 +67,7 @@ mod k8s;
 mod k8s_table;
 mod kobj;
 mod parser;
+mod styles;
 mod table;
 mod values;
 

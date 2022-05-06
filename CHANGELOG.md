@@ -1,3 +1,9 @@
+0.6.1
+=====
+Bugfix release:
+* Reqwest on osx seems to not support parsing multiple certs in one string, so we split them up and
+  add them to the reqwest client one at a time
+
 0.6.0
 =====
 Features:

@@ -355,7 +355,7 @@ dcZfHeFhVYAA1IFLezEPI2PnPfMD+fQ2qLvZ46WXTeorKeDWanOB5sCJo9Px4KWl
 IjeaY8JIILTbcuPI9tl8vrGvU9oUtCG41tWW4/5ODFlitppK+ULdjG+BqXH/9Apy
 bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
 -----END CERTIFICATE-----";
-    
+
     pub fn get_test_config() -> Config {
         Config {
             source_file: "/tmp/test.conf".to_string(),

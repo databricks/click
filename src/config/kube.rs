@@ -260,10 +260,10 @@ impl Config {
             .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
         let endpoint = reqwest::Url::parse(&cluster.server)?;
-        let ca_cert = match &cluster.cert {
+        let ca_certs = match &cluster.cert {
             Some(cert) => {
-                let reqwest_cert = get_reqwest_cert(cert)?;
-                Some(reqwest_cert)
+                let reqwest_certs = get_reqwest_certs(cert)?;
+                Some(reqwest_certs)
             }
             None => None,
         };
@@ -310,7 +310,7 @@ impl Config {
             crate::k8s::Context::new(
                 context_name,
                 endpoint,
-                ca_cert,
+                ca_certs,
                 Some(user),
                 click_conf.connect_timeout_secs,
                 click_conf.read_timeout_secs,
@@ -319,8 +319,43 @@ impl Config {
     }
 }
 
-fn get_reqwest_cert(data: &str) -> Result<reqwest::Certificate, ClickError> {
-    reqwest::Certificate::from_pem(data.as_bytes()).map_err(|e| e.into())
+// on osx, if data has more than one certificate, it causes an error, so we split at
+// -----BEGIN CERTIFICATE----- and -----END CERTIFICATE-----
+// note that https://www.rfc-editor.org/rfc/rfc7468 specifies these MUST be the begin/end separators
+const CERT_START_PATTERN: &str = "-----BEGIN CERTIFICATE-----";
+const CERT_START_LEN: usize = 27;
+const CERT_END_PATTERN: &str = "-----END CERTIFICATE-----";
+const CERT_END_LEN: usize = 25;
+fn get_reqwest_certs(data: &str) -> Result<Vec<reqwest::Certificate>, ClickError> {
+    let mut bidx_cur = data.find(CERT_START_PATTERN);
+    let mut ret = vec![];
+    while bidx_cur.is_some() {
+        let bidx = bidx_cur.unwrap(); // safe, checked in loop cond
+        let eidx = data[(bidx + CERT_START_LEN)..].find(CERT_END_PATTERN);
+        match eidx {
+            Some(eidx) => {
+                let end_idx = bidx + CERT_START_LEN + eidx + CERT_END_LEN;
+                let data_str = &data[bidx..end_idx];
+                let cert = reqwest::Certificate::from_pem(data_str.as_bytes())?;
+                ret.push(cert);
+                bidx_cur = data[end_idx..].find(CERT_START_PATTERN);
+                bidx_cur = bidx_cur.map(|idx| idx + end_idx);
+            }
+            None => {
+                return Err(ClickError::ParseErr(format!(
+                    "Found start of cert, but not end in: {}",
+                    &data[bidx..]
+                )));
+            }
+        }
+    }
+    if ret.is_empty() {
+        return Err(ClickError::ParseErr(format!(
+            "No start cert marker found in: {}",
+            data
+        )));
+    }
+    Ok(ret)
 }
 
 #[cfg(test)]
@@ -393,7 +428,7 @@ bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
 
     #[test]
     fn parse_multiple_certs() {
-        let certs = get_reqwest_cert(TEST_CA_CERTS);
+        let certs = get_reqwest_certs(TEST_CA_CERTS);
         assert!(certs.is_ok());
         //assert!(certs.unwrap().len() == 2);
     }

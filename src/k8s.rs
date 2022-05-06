@@ -169,7 +169,7 @@ pub struct Context {
     endpoint: Url,
     client: RefCell<Client>,
     log_client: RefCell<Client>,
-    root_ca: Option<Certificate>,
+    root_cas: Option<Vec<Certificate>>,
     auth: RefCell<Option<UserAuth>>,
     connect_timeout_secs: u32,
     read_timeout_secs: u32,
@@ -179,14 +179,14 @@ impl Context {
     pub fn new<S: Into<String>>(
         name: S,
         endpoint: Url,
-        root_ca: Option<Certificate>,
+        root_cas: Option<Vec<Certificate>>,
         auth: Option<UserAuth>,
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
     ) -> Context {
         let (client, client_auth) = Context::get_client(
             &endpoint,
-            root_ca.clone(),
+            root_cas.clone(),
             auth.clone(),
             None,
             connect_timeout_secs,
@@ -196,7 +196,7 @@ impl Context {
         // https://github.com/seanmonstar/reqwest/issues/1380
         // is resolved
         let (log_client, _) =
-            Context::get_client(&endpoint, root_ca.clone(), auth, None, u32::MAX, u32::MAX);
+            Context::get_client(&endpoint, root_cas.clone(), auth, None, u32::MAX, u32::MAX);
         let client = RefCell::new(client);
         let log_client = RefCell::new(log_client);
         let client_auth = RefCell::new(client_auth);
@@ -205,7 +205,7 @@ impl Context {
             endpoint,
             client,
             log_client,
-            root_ca,
+            root_cas,
             auth: client_auth,
             connect_timeout_secs,
             read_timeout_secs,
@@ -214,7 +214,7 @@ impl Context {
 
     fn get_client(
         endpoint: &Url,
-        root_ca: Option<Certificate>,
+        root_cas: Option<Vec<Certificate>>,
         auth: Option<UserAuth>,
         id: Option<Identity>,
         connect_timeout_secs: u32,
@@ -225,8 +225,14 @@ impl Context {
             Host::Domain(_) => Client::builder().use_rustls_tls(),
             _ => Client::builder().use_native_tls(),
         };
-        let client = match root_ca {
-            Some(ca) => client.add_root_certificate(ca),
+        let client = match root_cas {
+            Some(cas) => {
+                let mut client = client;
+                for ca in cas.into_iter() {
+                    client = client.add_root_certificate(ca);
+                }
+                client
+            }
             None => client,
         };
         let (client, auth) = match auth {
@@ -272,7 +278,7 @@ impl Context {
                     let auth = self.auth.take();
                     let (new_client, new_auth) = Context::get_client(
                         &self.endpoint,
-                        self.root_ca.clone(),
+                        self.root_cas.clone(),
                         auth.clone(),
                         Some(id.clone()),
                         self.connect_timeout_secs,
@@ -280,7 +286,7 @@ impl Context {
                     );
                     let (new_log_client, _) = Context::get_client(
                         &self.endpoint,
-                        self.root_ca.clone(),
+                        self.root_cas.clone(),
                         auth,
                         Some(id),
                         u32::MAX,

@@ -260,10 +260,10 @@ impl Config {
             .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
         let endpoint = reqwest::Url::parse(&cluster.server)?;
-        let ca_cert = match &cluster.cert {
+        let ca_certs = match &cluster.cert {
             Some(cert) => {
-                let reqwest_cert = get_reqwest_cert(cert)?;
-                Some(reqwest_cert)
+                let reqwest_certs = get_reqwest_certs(cert)?;
+                Some(reqwest_certs)
             }
             None => None,
         };
@@ -310,7 +310,7 @@ impl Config {
             crate::k8s::Context::new(
                 context_name,
                 endpoint,
-                ca_cert,
+                ca_certs,
                 Some(user),
                 click_conf.connect_timeout_secs,
                 click_conf.read_timeout_secs,
@@ -319,14 +319,77 @@ impl Config {
     }
 }
 
-fn get_reqwest_cert(data: &str) -> Result<reqwest::Certificate, ClickError> {
-    reqwest::Certificate::from_pem(data.as_bytes()).map_err(|e| e.into())
+// on osx, if data has more than one certificate, it causes an error, so we split at
+// -----BEGIN CERTIFICATE----- and -----END CERTIFICATE-----
+// note that https://www.rfc-editor.org/rfc/rfc7468 specifies these MUST be the begin/end separators
+const CERT_START_PATTERN: &str = "-----BEGIN CERTIFICATE-----";
+const CERT_START_LEN: usize = 27;
+const CERT_END_PATTERN: &str = "-----END CERTIFICATE-----";
+const CERT_END_LEN: usize = 25;
+fn get_reqwest_certs(data: &str) -> Result<Vec<reqwest::Certificate>, ClickError> {
+    let mut bidx_cur = data.find(CERT_START_PATTERN);
+    let mut ret = vec![];
+    while bidx_cur.is_some() {
+        let bidx = bidx_cur.unwrap(); // safe, checked in loop cond
+        let eidx = data[(bidx + CERT_START_LEN)..].find(CERT_END_PATTERN);
+        match eidx {
+            Some(eidx) => {
+                let end_idx = bidx + CERT_START_LEN + eidx + CERT_END_LEN;
+                let data_str = &data[bidx..end_idx];
+                let cert = reqwest::Certificate::from_pem(data_str.as_bytes())?;
+                ret.push(cert);
+                bidx_cur = data[end_idx..].find(CERT_START_PATTERN);
+                bidx_cur = bidx_cur.map(|idx| idx + end_idx);
+            }
+            None => {
+                return Err(ClickError::ParseErr(format!(
+                    "Found start of cert, but not end in: {}",
+                    &data[bidx..]
+                )));
+            }
+        }
+    }
+    if ret.is_empty() {
+        return Err(ClickError::ParseErr(format!(
+            "No start cert marker found in: {}",
+            data
+        )));
+    }
+    Ok(ret)
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
     use std::collections::BTreeMap;
+
+    static TEST_CA_CERTS: &str = r"-----BEGIN CERTIFICATE-----
+MIICNDCCAaECEAKtZn5ORf5eV288mBle3cAwDQYJKoZIhvcNAQECBQAwXzELMAkG
+A1UEBhMCVVMxIDAeBgNVBAoTF1JTQSBEYXRhIFNlY3VyaXR5LCBJbmMuMS4wLAYD
+VQQLEyVTZWN1cmUgU2VydmVyIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MB4XDTk0
+MTEwOTAwMDAwMFoXDTEwMDEwNzIzNTk1OVowXzELMAkGA1UEBhMCVVMxIDAeBgNV
+BAoTF1JTQSBEYXRhIFNlY3VyaXR5LCBJbmMuMS4wLAYDVQQLEyVTZWN1cmUgU2Vy
+dmVyIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MIGbMA0GCSqGSIb3DQEBAQUAA4GJ
+ADCBhQJ+AJLOesGugz5aqomDV6wlAXYMra6OLDfO6zV4ZFQD5YRAUcm/jwjiioII
+0haGN1XpsSECrXZogZoFokvJSyVmIlZsiAeP94FZbYQHZXATcXY+m3dM41CJVphI
+uR2nKRoTLkoRWZweFdVJVCxzOmmCsZc5nG1wZ0jl3S3WyB57AgMBAAEwDQYJKoZI
+hvcNAQECBQADfgBl3X7hsuyw4jrg7HFGmhkRuNPHoLQDQCYCPgmc4RKz0Vr2N6W3
+YQO2WxZpO8ZECAyIUwxrl0nHPjXcbLm7qt9cuzovk2C2qUtN8iD3zV9/ZHuO3ABc
+1/p3yjkWWW8O6tO1g39NTUJWdrTJXwT4OPjr0l91X817/OWOgHz8UA==
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+MIIB+jCCAWMCAgGjMA0GCSqGSIb3DQEBBAUAMEUxCzAJBgNVBAYTAlVTMRgwFgYD
+VQQKEw9HVEUgQ29ycG9yYXRpb24xHDAaBgNVBAMTE0dURSBDeWJlclRydXN0IFJv
+b3QwHhcNOTYwMjIzMjMwMTAwWhcNMDYwMjIzMjM1OTAwWjBFMQswCQYDVQQGEwJV
+UzEYMBYGA1UEChMPR1RFIENvcnBvcmF0aW9uMRwwGgYDVQQDExNHVEUgQ3liZXJU
+cnVzdCBSb290MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC45k+625h8cXyv
+RLfTD0bZZOWTwUKOx7pJjTUteueLveUFMVnGsS8KDPufpz+iCWaEVh43KRuH6X4M
+ypqfpX/1FZSj1aJGgthoTNE3FQZor734sLPwKfWVWgkWYXcKIiXUT0Wqx73llt/5
+1KiOQswkwB6RJ0q1bQaAYznEol44AwIDAQABMA0GCSqGSIb3DQEBBAUAA4GBABKz
+dcZfHeFhVYAA1IFLezEPI2PnPfMD+fQ2qLvZ46WXTeorKeDWanOB5sCJo9Px4KWl
+IjeaY8JIILTbcuPI9tl8vrGvU9oUtCG41tWW4/5ODFlitppK+ULdjG+BqXH/9Apy
+bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
+-----END CERTIFICATE-----";
 
     pub fn get_test_config() -> Config {
         Config {
@@ -361,5 +424,12 @@ pub mod tests {
         let conf = get_config_from_kubefile_test_conf();
         let click_conf = crate::config::click::tests::get_parsed_test_click_config();
         assert!(conf.get_context("c1ctx", &click_conf).is_err()); // don't have certs
+    }
+
+    #[test]
+    fn parse_multiple_certs() {
+        let certs = get_reqwest_certs(TEST_CA_CERTS);
+        assert!(certs.is_ok());
+        //assert!(certs.unwrap().len() == 2);
     }
 }

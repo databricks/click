@@ -430,6 +430,6 @@ bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
     fn parse_multiple_certs() {
         let certs = get_reqwest_certs(TEST_CA_CERTS);
         assert!(certs.is_ok());
-        //assert!(certs.unwrap().len() == 2);
+        assert!(certs.unwrap().len() == 2);
     }
 }

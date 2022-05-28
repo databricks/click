@@ -47,6 +47,11 @@ fn do_exec(
     writer: &mut ClickWriter,
 ) -> Result<(), ClickError> {
     let ns = pod.namespace.as_ref().unwrap();
+    let kubectl_binary = env
+        .click_config
+        .kubectl_binary
+        .as_deref()
+        .unwrap_or("kubectl");
     if do_terminal {
         let terminal = if let Some(t) = term_opt {
             t
@@ -57,7 +62,7 @@ fn do_exec(
         };
         let mut targs: Vec<&str> = terminal.split_whitespace().collect();
         let mut kubectl_args = vec![
-            "kubectl",
+            kubectl_binary,
             "--namespace",
             ns,
             "--context",
@@ -77,7 +82,7 @@ fn do_exec(
         duct::cmd(targs[0], &targs[1..]).start()?;
         Ok(())
     } else {
-        let mut command = Command::new("kubectl");
+        let mut command = Command::new(kubectl_binary);
         command
             .arg("--namespace")
             .arg(ns)
@@ -103,9 +108,18 @@ fn do_exec(
             }
             Err(e) => {
                 if let io::ErrorKind::NotFound = e.kind() {
-                    Err(ClickError::CommandError(
-                        "Could not find kubectl binary. Is it in your PATH?".to_string(),
-                    ))
+                    let msg = if kubectl_binary.starts_with('/') {
+                        format!(
+                            "Could not find kubectl binary: '{}'. Does it exist?",
+                            kubectl_binary
+                        )
+                    } else {
+                        format!(
+                            "Could not find kubectl binary: '{}'. Is it in your PATH?",
+                            kubectl_binary
+                        )
+                    };
+                    Err(ClickError::CommandError(msg))
                 } else {
                     Err(ClickError::Io(e))
                 }

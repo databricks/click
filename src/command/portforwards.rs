@@ -102,7 +102,12 @@ Examples:
             return Err(ClickError::CommandError("No active context".to_string()));
         };
 
-        match Command::new("kubectl")
+        let kubectl_binary = env
+            .click_config
+            .kubectl_binary
+            .as_deref()
+            .unwrap_or("kubectl");
+        match Command::new(kubectl_binary)
             .arg("--namespace")
             .arg(ns)
             .arg("--context")
@@ -151,11 +156,21 @@ Examples:
             }
             Err(e) => match e.kind() {
                 io::ErrorKind::NotFound => {
-                    writeln!(
-                        stderr(),
-                        "Could not find kubectl binary. Is it in your PATH?"
-                    )
-                    .unwrap_or(());
+                    if kubectl_binary.starts_with('/') {
+                        writeln!(
+                            stderr(),
+                            "Could not find kubectl binary '{}'. Does it exist?",
+                            kubectl_binary
+                        )
+                        .unwrap_or(());
+                    } else {
+                        writeln!(
+                            stderr(),
+                            "Could not find kubectl binary '{}'. Is it in your PATH.",
+                            kubectl_binary
+                        )
+                        .unwrap_or(());
+                    }
                 }
                 _ => {
                     write!(

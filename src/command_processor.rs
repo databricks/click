@@ -182,6 +182,7 @@ impl CommandProcessor {
             Box::new(crate::command::click::Quit::new()),
             Box::new(crate::command::click::Range::new()),
             Box::new(crate::command::click::SetCmd::new()),
+            Box::new(crate::command::click::UnSetCmd::new()),
             Box::new(crate::command::click::UtcCmd::new()),
             Box::new(crate::command::configmaps::ConfigMaps::new()),
             Box::new(crate::command::copy::Copy::new()),

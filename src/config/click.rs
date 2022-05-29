@@ -90,7 +90,7 @@ impl From<&CompletionType> for String {
     }
 }
 
-fn default_range_sep() -> String {
+pub fn default_range_sep() -> String {
     "--- {name} ---".to_string()
 }
 

@@ -16,6 +16,7 @@ mod click;
 mod kube;
 mod kubefile;
 
+pub use self::click::default_range_sep;
 pub use self::click::Alias;
 pub use self::click::ClickConfig;
 pub use self::click::CompletionType;

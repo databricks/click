@@ -473,6 +473,26 @@ impl Env {
 
 impl fmt::Display for Env {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let kubectl_binary = self
+            .click_config
+            .kubectl_binary
+            .as_deref()
+            .unwrap_or("kubectl");
+        let kubectl_path = std::process::Command::new("which")
+            .arg(kubectl_binary)
+            .output()
+            .map(|output| {
+                std::str::from_utf8(&output.stdout)
+                    .unwrap_or("Failed to parse 'which' output")
+                    .to_string()
+            })
+            .unwrap_or_else(|_| {
+                if kubectl_binary.starts_with('/') {
+                    format!("{} not found. Does it exist?", kubectl_binary)
+                } else {
+                    format!("{} not found. Is it in your PATH?", kubectl_binary)
+                }
+            });
         write!(
             f,
             "Env {{
@@ -483,6 +503,7 @@ impl fmt::Display for Env {
   Edit Mode: {}
   Editor: {}
   Terminal: {}
+  kubectl Binary: {}
   Range Separator: {}
   Describe Shows Events: {}
 }}",
@@ -504,17 +525,16 @@ impl fmt::Display for Env {
             self.styles.config_val(
                 self.click_config
                     .editor
-                    .as_ref()
-                    .unwrap_or(&"<unset, will use $EDITOR>".to_owned())
-                    .as_str()
+                    .as_deref()
+                    .unwrap_or("<unset, will use $EDITOR>")
             ),
             self.styles.config_val(
                 self.click_config
                     .terminal
-                    .as_ref()
-                    .unwrap_or(&"<unset, will use xterm>".to_owned())
-                    .as_str()
+                    .as_deref()
+                    .unwrap_or("<unset, will use xterm>")
             ),
+            self.styles.config_val(&kubectl_path),
             self.styles
                 .config_val(self.click_config.range_separator.as_str()),
             self.styles.config_val(

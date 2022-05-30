@@ -169,6 +169,7 @@ pub const SET_OPTS: &[&str] = &[
     "completion_type",
     "edit_mode",
     "editor",
+    "kubectl_binary",
     "terminal",
     "range_separator",
     "describe_include_events",
@@ -240,6 +241,9 @@ Example:
             "terminal" => {
                 env.set_terminal(Some(value));
             }
+            "kubectl_binary" => {
+                env.set_kubectl_binary(Some(value));
+            }
             "range_separator" => {
                 env.click_config.range_separator = value.to_string();
             }
@@ -261,6 +265,53 @@ Example:
         }
         if !failed {
             clickwriteln!(writer, "Set {} to '{}'", option, value);
+        }
+        Ok(())
+    }
+);
+
+pub const UNSET_OPTS: &[&str] = &["editor", "kubectl_binary", "terminal", "range_separator"];
+
+command!(
+    UnSetCmd,
+    "unset",
+    "Unset a click option. This returns to option to its default value.",
+    |clap: ClapCommand<'static>| {
+        clap.arg(
+            Arg::new("option")
+                .help("The click option to unset")
+                .required(true)
+                .index(1)
+                .possible_values(UNSET_OPTS),
+        )
+    },
+    vec!["unset"],
+    vec![&completer::unsetoptions_values_completer],
+    no_named_complete!(),
+    |matches, env, writer| {
+        let option = matches.value_of("option").unwrap(); // safe, required
+        let mut failed = false;
+        match option {
+            "editor" => {
+                env.set_editor(None);
+            }
+            "terminal" => {
+                env.set_terminal(None);
+            }
+            "kubectl_binary" => {
+                env.set_kubectl_binary(None);
+            }
+            "range_separator" => {
+                env.click_config.range_separator = crate::config::default_range_sep();
+            }
+            _ => {
+                // this shouldn't happen
+                write!(stderr(), "Invalid option\n").unwrap_or(());
+                failed = true;
+            }
+        }
+        if !failed {
+            clickwriteln!(writer, "Unset {}", option);
         }
         Ok(())
     }

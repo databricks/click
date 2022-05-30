@@ -90,7 +90,7 @@ impl From<&CompletionType> for String {
     }
 }
 
-fn default_range_sep() -> String {
+pub fn default_range_sep() -> String {
     "--- {name} ---".to_string()
 }
 
@@ -112,6 +112,7 @@ pub struct ClickConfig {
     pub context: Option<String>,
     pub editor: Option<String>,
     pub terminal: Option<String>,
+    pub kubectl_binary: Option<String>,
     #[serde(default = "EditMode::default")]
     pub editmode: EditMode,
     #[serde(default = "CompletionType::default")]
@@ -137,6 +138,7 @@ impl Default for ClickConfig {
             context: None,
             editor: None,
             terminal: None,
+            kubectl_binary: None,
             editmode: EditMode::default(),
             completiontype: CompletionType::default(),
             aliases: vec![],
@@ -196,6 +198,7 @@ pub mod tests {
 namespace: ns
 context: ctx
 editor: emacs
+kubectl_binary: /opt/bin/kubectl
 terminal: alacritty -e
 editmode: Vi
 completiontype: List
@@ -216,6 +219,7 @@ aliases:
         assert_eq!(config.context, Some("ctx".to_owned()));
         assert_eq!(config.editor, Some("emacs".to_owned()));
         assert_eq!(config.terminal, Some("alacritty -e".to_owned()));
+        assert_eq!(config.kubectl_binary, Some("/opt/bin/kubectl".to_owned()));
         assert_eq!(config.editmode, EditMode::Vi);
         assert_eq!(config.completiontype, CompletionType::List);
         assert_eq!(config.aliases.len(), 1);

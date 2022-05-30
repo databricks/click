@@ -328,6 +328,10 @@ macro_rules! possible_values_completer {
 }
 
 possible_values_completer!(setoptions_values_completer, crate::command::click::SET_OPTS);
+possible_values_completer!(
+    unsetoptions_values_completer,
+    crate::command::click::UNSET_OPTS
+);
 
 possible_values_completer!(
     portforwardaction_values_completer,

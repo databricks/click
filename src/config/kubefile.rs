@@ -228,12 +228,16 @@ impl AuthProviderConfig {
     }
 }
 
+fn default_none() -> Option<SystemTime> {
+    None
+}
+
 #[serde_with::serde_as]
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 struct AuthProviderAzureConfig {
     #[serde(rename = "access-token")]
     access_token: Option<String>,
-    #[serde(rename = "expires-on")]
+    #[serde(rename = "expires-on", default = "default_none")]
     #[serde_as(as = "Option<TimestampSeconds<String,Flexible>>")]
     expires_on: Option<SystemTime>,
 }

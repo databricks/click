@@ -27,7 +27,7 @@ use serde_json::Value;
 
 use std::io::Write;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ObjType {
     Pod {
         containers: Vec<String>,
@@ -53,7 +53,7 @@ pub enum ObjType {
 }
 
 /// An object we can have as a "current" thing
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KObj {
     pub name: String,
     pub namespace: Option<String>,

@@ -22,13 +22,13 @@ use std::io::Read;
 
 use crate::error::ClickError;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Alias {
     pub alias: String,
     pub expanded: String,
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum EditMode {
     Emacs,
     Vi,
@@ -59,7 +59,7 @@ impl From<&EditMode> for String {
     }
 }
 
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub enum CompletionType {
     Circular,
     List,

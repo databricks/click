@@ -228,12 +228,16 @@ impl AuthProviderConfig {
     }
 }
 
+fn default_none() -> Option<SystemTime> {
+    None
+}
+
 #[serde_with::serde_as]
 #[derive(PartialEq, Debug, Deserialize, Clone)]
 struct AuthProviderAzureConfig {
     #[serde(rename = "access-token")]
     access_token: Option<String>,
-    #[serde(rename = "expires-on")]
+    #[serde(rename = "expires-on", default = "default_none")]
     #[serde_as(as = "Option<TimestampSeconds<String,Flexible>>")]
     expires_on: Option<SystemTime>,
 }
@@ -438,7 +442,7 @@ impl AuthProviderGcpConfig {
     }
 }
 
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Clone)]
 pub struct NameValue {
     name: String,
     value: String,
@@ -446,7 +450,7 @@ pub struct NameValue {
 
 /// config for running a command, as defined here:
 /// https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/client-go/tools/clientcmd/api/v1/types.go#L183
-#[derive(PartialEq, Debug, Deserialize, Clone)]
+#[derive(Eq, PartialEq, Debug, Deserialize, Clone)]
 pub struct ExecConfig {
     command: Option<String>,
     args: Option<Vec<String>>,
@@ -504,7 +508,7 @@ impl ExecConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExecAuth {
     Token(String),
     ClientCertKey { cert_data: String, key_data: String },

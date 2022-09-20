@@ -350,7 +350,7 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
     }
 
     // find location of first non-digit
-    let mut split = match chars.position(|c| !c.is_digit(10)) {
+    let mut split = match chars.position(|c| !c.is_ascii_digit()) {
         Some(pos) => pos,
         None => {
             // no non digit, just parse as a raw number, set split to end of string

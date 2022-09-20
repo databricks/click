@@ -46,7 +46,7 @@ pub struct ExpandedAlias<'a> {
     pub rest: &'a str,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ObjectSelection {
     Single(KObj),
     Range(Vec<KObj>),

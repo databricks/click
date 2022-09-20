@@ -158,11 +158,11 @@ impl ClickHelper {
             if let Some(ref env) = self.env {
                 match last_opt {
                     Some(opt) => {
-                        let opts = cmd.try_completed_named(pos, opt, prefix, &*env);
+                        let opts = cmd.try_completed_named(pos, opt, prefix, env);
                         (cmd_len, opts)
                     }
                     None => {
-                        let opts = cmd.try_complete(pos, prefix, &*env);
+                        let opts = cmd.try_complete(pos, prefix, env);
                         (cmd_len, opts)
                     }
                 }

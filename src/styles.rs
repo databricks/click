@@ -31,6 +31,7 @@ macro_rules! obj_style {
         ContentStyle {
             foreground_color: Some($fg),
             background_color: None,
+            underline_color: None,
             attributes: Attributes::default(),
         }
     };
@@ -38,6 +39,7 @@ macro_rules! obj_style {
         ContentStyle {
             foreground_color: Some($fg),
             background_color: None,
+            underline_color: None,
             attributes: $attrs,
         }
     };

@@ -119,7 +119,7 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
 fn get_editor(config: rustyconfig::Config, hist_path: &Path) -> Editor<ClickHelper> {
-    let mut rl = Editor::<ClickHelper>::with_config(config);
+    let mut rl = Editor::<ClickHelper>::with_config(config).expect("Could not make editor");
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
         vec![

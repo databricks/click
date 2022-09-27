@@ -1,3 +1,12 @@
+0.6.2
+=====
+Features:
+* Allow setting the path to the kubectl binary that click uses via `set kubectl_binary <path>`
+* Print the full path the kubectl binary in `env`
+
+Bug Fixes:
+* Don't panic if an "azure-auth-provider" doesn't include `expires-by`
+
 0.6.1
 =====
 Bugfix release:

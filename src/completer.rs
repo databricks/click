@@ -83,12 +83,7 @@ impl ClickHelper {
 
     #[allow(clippy::borrowed_box)]
     fn get_exact_command(&self, line: &str) -> Option<&Box<dyn Cmd>> {
-        for cmd in self.commands.iter() {
-            if cmd.is(line) {
-                return Some(cmd);
-            }
-        }
-        None
+        self.commands.iter().find(|&cmd| cmd.is(line))
     }
 
     /// complete a line that starts with a full command. This should only be called when we know

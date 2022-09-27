@@ -379,7 +379,7 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
 
     if suffix.len() > 1 && (suffix.starts_with('e') || suffix.starts_with('E')) {
         // our suffix has more than one char and starts with e/E, so it should be a decimal exponent
-        match (&suffix[1..]).parse::<u32>() {
+        match (suffix[1..]).parse::<u32>() {
             Ok(exp) => {
                 let famt = (amt * base10.pow(exp)) as f64;
                 if has_neg {

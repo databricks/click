@@ -181,6 +181,7 @@ impl CommandProcessor {
             Box::new(crate::command::click::EnvCmd::new()),
             Box::new(crate::command::click::Quit::new()),
             Box::new(crate::command::click::Range::new()),
+            Box::new(crate::command::click::Last::new()),
             Box::new(crate::command::click::SetCmd::new()),
             Box::new(crate::command::click::UnSetCmd::new()),
             Box::new(crate::command::click::UtcCmd::new()),

@@ -14,7 +14,7 @@
 
 use chrono::offset::Utc;
 use clap::{Arg, Command as ClapCommand};
-use comfy_table::Table;
+use comfy_table::{Cell, CellAlignment, Table};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -161,6 +161,32 @@ command!(
             Ok(())
         })?;
         crate::table::print_filled_table(&mut table, writer);
+        Ok(())
+    }
+);
+
+command!(
+    Last,
+    "last",
+    "List target objects from the last executed query",
+    identity,
+    vec!["last"],
+    noop_complete!(),
+    no_named_complete!(),
+    |_, env, writer| {
+        let mut table = Table::new();
+        table.set_header(vec!["####", "Name", "Type", "Namespace"]);
+        if let Some(objs) = env.get_last_objs() {
+            for (idx, obj) in objs.iter().enumerate() {
+                table.add_row(vec![
+                    Cell::new(idx).set_alignment(CellAlignment::Right),
+                    Cell::new(obj.name()),
+                    Cell::new(obj.type_str()),
+                    Cell::new(obj.namespace.as_deref().unwrap_or("")),
+                ]);
+            }
+            crate::table::print_filled_table(&mut table, writer);
+        }
         Ok(())
     }
 );

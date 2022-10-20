@@ -253,6 +253,10 @@ impl Env {
         self.last_objs = None;
     }
 
+    pub fn get_last_objs(&self) -> Option<&[KObj]> {
+        self.last_objs.as_ref().map(|objs| &objs[..])
+    }
+
     pub fn clear_current(&mut self) {
         self.current_selection = ObjectSelection::None;
         self.range_str = None;

@@ -65,6 +65,7 @@ pub struct Env {
     pub namespace: Option<String>,
     current_selection: ObjectSelection,
     last_objs: Option<Vec<KObj>>,
+    last_table: Option<comfy_table::Table>,
     pub ctrlcbool: Arc<AtomicBool>,
     port_forwards: Vec<PortForward>,
     pub prompt: String,
@@ -105,6 +106,7 @@ impl Env {
             namespace,
             current_selection: ObjectSelection::None,
             last_objs: None,
+            last_table: None,
             ctrlcbool: CTC_BOOL.clone(),
             port_forwards: Vec::new(),
             prompt: format!("[{}] [{}] [{}] > ", nones.0, nones.1, nones.2,),
@@ -245,16 +247,22 @@ impl Env {
         }
     }
 
-    pub fn set_last_objs<T: Into<Vec<KObj>>>(&mut self, objs: T) {
+    pub fn set_last_objs<T: Into<Vec<KObj>>>(
+        &mut self,
+        objs: T,
+        table: Option<comfy_table::Table>,
+    ) {
         self.last_objs = Some(objs.into());
+        self.last_table = table;
     }
 
     pub fn clear_last_objs(&mut self) {
         self.last_objs = None;
+        self.last_table = None;
     }
 
-    pub fn get_last_objs(&self) -> Option<&[KObj]> {
-        self.last_objs.as_ref().map(|objs| &objs[..])
+    pub fn get_last_table(&self) -> Option<&comfy_table::Table> {
+        self.last_table.as_ref()
     }
 
     pub fn clear_current(&mut self) {

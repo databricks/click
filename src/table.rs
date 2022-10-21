@@ -458,7 +458,7 @@ pub fn print_table<T: Into<comfy_table::Row>>(
     specs: Vec<Vec<CellSpec<'_>>>,
     env: &Env,
     writer: &mut ClickWriter,
-) {
+) -> comfy_table::Table {
     let mut table = comfy_table::Table::new();
     table.load_preset(UTF8_TABLE_STYLE);
     table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
@@ -468,6 +468,7 @@ pub fn print_table<T: Into<comfy_table::Row>>(
         table.add_row(row_vec);
     }
     clickwriteln!(writer, "{table}");
+    table
 }
 
 #[cfg(test)]

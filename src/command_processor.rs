@@ -685,7 +685,7 @@ Other help topics (type 'help [TOPIC]' for details)
             PathBuf::from("/tmp/click.conf"),
         );
         let nodelist = vec![make_node_kobj("ns1")];
-        env.set_last_objs(nodelist);
+        env.set_last_objs(nodelist, None);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),
@@ -718,7 +718,7 @@ Other help topics (type 'help [TOPIC]' for details)
         let node3 = make_node_kobj("ns3");
         let nodelist = vec![node1, node2, node3];
 
-        env.set_last_objs(nodelist);
+        env.set_last_objs(nodelist, None);
         let mut p = CommandProcessor::new_with_commands(
             env,
             PathBuf::from("/tmp/click.test.hist"),

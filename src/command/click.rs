@@ -176,6 +176,8 @@ command!(
     |_, env, writer| {
         if let Some(table) = env.get_last_table() {
             clickwriteln!(writer, "{table}");
+        } else {
+            clickwriteln!(writer, "no last objects to display");
         }
         Ok(())
     }

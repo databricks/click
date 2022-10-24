@@ -165,6 +165,24 @@ command!(
     }
 );
 
+command!(
+    Last,
+    "last",
+    "List target objects from the last executed query",
+    identity,
+    vec!["last"],
+    noop_complete!(),
+    no_named_complete!(),
+    |_, env, writer| {
+        if let Some(table) = env.get_last_table() {
+            clickwriteln!(writer, "{table}");
+        } else {
+            clickwriteln!(writer, "no last objects to display");
+        }
+        Ok(())
+    }
+);
+
 pub const SET_OPTS: &[&str] = &[
     "completion_type",
     "edit_mode",

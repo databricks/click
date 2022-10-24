@@ -111,7 +111,7 @@ command!(
                             &desc.group_version,
                             writer,
                         );
-                        env.set_last_objs(kobjs);
+                        env.set_last_objs(kobjs, None);
                     }
                     GetTableResponse::Other(_) => println!("Other error"),
                 }

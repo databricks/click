@@ -112,6 +112,15 @@ fn delete_obj(
                         .0;
                 send_delete::<api_batch::Job>(env, writer, req)
             }
+            ObjType::CronJob => {
+                let req = api_batch::CronJob::delete_namespaced_cron_job(
+                    obj.name.as_str(),
+                    ns.as_str(),
+                    options,
+                )?
+                .0;
+                send_delete::<api_batch::Job>(env, writer, req)
+            }
             ObjType::Namespace => {
                 clickwriteln!(
                     writer,

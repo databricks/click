@@ -67,6 +67,7 @@ impl Styles {
             ("StatefulSet", obj_style!(Color::Green, *BOLD)),
             ("ConfigMap", obj_style!(Color::Magenta, *BOLD)),
             ("Secret", obj_style!(Color::Red, *BOLD)),
+            ("CronJob", obj_style!(Color::Green, *BOLD)),
             ("Job", obj_style!(Color::Magenta, *BOLD)),
             ("PersistentVolume", obj_style!(Color::Blue, *BOLD)),
             ("StorageClass", obj_style!(Color::Red, *BOLD)),

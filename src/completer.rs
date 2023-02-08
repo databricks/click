@@ -186,7 +186,7 @@ impl ClickHelper {
             if opt.starts_with(line) {
                 candidates.push(Pair {
                     display: opt.clone(),
-                    replacement: format!("{} ", opt),
+                    replacement: format!("{opt} "),
                 });
             }
         }
@@ -212,7 +212,7 @@ impl ClickHelper {
             .iter()
             .map(|s| Pair {
                 display: s.clone(),
-                replacement: format!("{} ", s),
+                replacement: format!("{s} "),
             })
             .collect()
     }

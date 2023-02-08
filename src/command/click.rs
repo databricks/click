@@ -83,7 +83,7 @@ command!(
     |matches, env, writer| {
         if matches.is_present("context") {
             let context = matches.value_of("context");
-            if let (&Some(ref cur), Some(c)) = (&env.context, context) {
+            if let (Some(cur), Some(c)) = (&env.context, context) {
                 if cur.name == c {
                     // no-op if we're already in the specified context1
                     return Ok(());
@@ -277,7 +277,7 @@ Example:
             },
             _ => {
                 // this shouldn't happen
-                write!(stderr(), "Invalid option\n").unwrap_or(());
+                writeln!(stderr(), "Invalid option").unwrap_or(());
                 failed = true;
             }
         }
@@ -324,7 +324,7 @@ command!(
             }
             _ => {
                 // this shouldn't happen
-                write!(stderr(), "Invalid option\n").unwrap_or(());
+                writeln!(stderr(), "Invalid option").unwrap_or(());
                 failed = true;
             }
         }

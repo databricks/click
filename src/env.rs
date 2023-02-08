@@ -168,9 +168,8 @@ impl Env {
                 Ok(context) => Some(context),
                 Err(e) => {
                     println!(
-                        "[WARN] Couldn't find/load context {}, now no current context. \
-                         Error: {}",
-                        cname, e
+                        "[WARN] Couldn't find/load context {cname}, now no current context. \
+                         Error: {e}"
                     );
                     None
                 }
@@ -182,7 +181,7 @@ impl Env {
 
     pub fn set_namespace(&mut self, namespace: Option<&str>) {
         let mut do_clear = false;
-        if let (&Some(ref my_ns), Some(new_ns)) = (&self.namespace, namespace) {
+        if let (Some(my_ns), Some(new_ns)) = (&self.namespace, namespace) {
             if my_ns.as_str() != new_ns {
                 do_clear = true; // need to use bool since self is borrowed here
             }
@@ -503,15 +502,14 @@ impl fmt::Display for Env {
                         .unwrap_or("Failed to parse 'which' output")
                         .to_string()
                 } else if kubectl_binary.starts_with('/') {
-                    format!("{} not found. Does it exist?", kubectl_binary)
+                    format!("{kubectl_binary} not found. Does it exist?")
                 } else {
-                    format!("{} not found. Is it in your PATH?", kubectl_binary)
+                    format!("{kubectl_binary} not found. Is it in your PATH?")
                 }
             })
             .unwrap_or_else(|e| {
                 format!(
-                    "Error searching for kubectl_binary (which is set to {}): {}",
-                    kubectl_binary, e
+                    "Error searching for kubectl_binary (which is set to {kubectl_binary}): {e}"
                 )
             });
         write!(

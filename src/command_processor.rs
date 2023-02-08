@@ -250,7 +250,7 @@ impl CommandProcessor {
         let env = Rc::get_mut(&mut self.env).unwrap();
         env.save_click_config();
         if let Err(e) = self.rl.save_history(self.hist_path.as_path()) {
-            println!("Couldn't save command history: {}", e);
+            println!("Couldn't save command history: {e}");
         }
         env.stop_all_forwards();
     }
@@ -282,7 +282,7 @@ impl CommandProcessor {
                     RightExpr::None => {} // do nothing
                     RightExpr::Pipe(cmd) => {
                         if let Err(e) = writer.setup_pipe(cmd) {
-                            println!("{}", e);
+                            println!("{e}");
                             return writer.finish_output();
                         }
                     }
@@ -291,7 +291,7 @@ impl CommandProcessor {
                             writer.set_output_file(out_file);
                         }
                         Err(ref e) => {
-                            println!("Can't open output file: {}", e);
+                            println!("Can't open output file: {e}");
                             return writer.finish_output();
                         }
                     },
@@ -301,7 +301,7 @@ impl CommandProcessor {
                                 writer.set_output_file(out_file);
                             }
                             Err(ref e) => {
-                                println!("Can't open output file: {}", e);
+                                println!("Can't open output file: {e}");
                                 return writer.finish_output();
                             }
                         }
@@ -367,7 +367,7 @@ impl CommandProcessor {
                 writer.finish_output()
             }
             Err(err) => {
-                println!("{}", err);
+                println!("{err}");
                 None
             }
         }

@@ -164,7 +164,7 @@ fn node_state<'a>(node: &'a api::Node) -> Option<CellSpec<'a>> {
     let state: Cow<'a, str> = match node.spec.as_ref().and_then(|spec| spec.unschedulable) {
         Some(unsched) => {
             if unsched {
-                format!("{}\nSchedulingDisabled", state).into()
+                format!("{state}\nSchedulingDisabled").into()
             } else {
                 state.into()
             }

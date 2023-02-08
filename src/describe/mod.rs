@@ -109,7 +109,7 @@ pub fn describe_metadata<T: ?Sized + Metadata<Ty = ObjectMeta> + Resource>(
         "Generation:",
         metadata
             .generation
-            .map(|g| format!("{}", g))
+            .map(|g| format!("{g}"))
             .as_deref()
             .unwrap_or("<none>"),
     ]);

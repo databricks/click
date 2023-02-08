@@ -70,7 +70,7 @@ fn job_to_kobj(job: &batch_api::Job) -> KObj {
 fn job_completions(job: &batch_api::Job) -> Option<CellSpec<'_>> {
     let completions = job.spec.as_ref().and_then(|s| s.completions).unwrap_or(0);
     let succeeded = job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0);
-    Some(format!("{}/{}", succeeded, completions).into())
+    Some(format!("{succeeded}/{completions}").into())
 }
 
 fn job_duration(job: &batch_api::Job) -> Option<CellSpec<'_>> {

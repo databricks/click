@@ -38,7 +38,7 @@ pub fn service_describe(
     let (request, _) =
         api::Endpoints::read_namespaced_endpoints(name, namespace, Default::default()).unwrap();
     let epval = match env.run_on_context(|c| c.read(request)).unwrap() {
-        api::ReadNamespacedEndpointsResponse::Ok(resp) => serde_json::value::to_value(&resp).ok(),
+        api::ReadNamespacedEndpointsResponse::Ok(resp) => serde_json::value::to_value(resp).ok(),
         _ => {
             clickwriteln!(writer, "Error fetching endpoints");
             None
@@ -237,7 +237,7 @@ fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
                     }
                     None => "<No Endpoints>\n".to_owned(),
                 };
-                buf.push_str(format!("Port:  {} {}/{}\n", name, port_num, proto).as_str());
+                buf.push_str(format!("Port:  {name} {port_num}/{proto}\n").as_str());
                 buf.push_str(
                     format!(
                         "NodePort:  {} {}/{}\n",

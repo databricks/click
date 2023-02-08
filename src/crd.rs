@@ -42,7 +42,7 @@ pub fn get_api_group_resources(
     ),
     RequestError,
 > {
-    let url = format!("/apis/{}", group_version);
+    let url = format!("/apis/{group_version}");
     let request = Request::get(url);
     let body = vec![];
     match request.body(body) {
@@ -98,8 +98,7 @@ pub fn read_namespaced_resource(
     RequestError,
 > {
     let url = format!(
-        "/apis/{}/namespaces/{}/{}/{}",
-        group_version, namespace, _type, name
+        "/apis/{group_version}/namespaces/{namespace}/{_type}/{name}"
     );
     let request = Request::get(url);
     let body = vec![];

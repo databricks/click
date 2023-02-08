@@ -331,7 +331,7 @@ fn get_volume_str(v: &Value) -> Cow<str> {
                         pnum = p;
                     }
                 }
-                buf.push_str(format!("  Partition#: {}\n", pnum).as_str());
+                buf.push_str(format!("  Partition#: {pnum}\n").as_str());
                 buf.push_str(get_read_only(aws));
             }
             if let Some(pvc) = vol.get("persistentVolumeClaim") {
@@ -370,7 +370,7 @@ pub fn describe_format_node(
     node: &api::Node,
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
-    let v = serde_json::value::to_value(&node).unwrap();
+    let v = serde_json::value::to_value(node).unwrap();
     let fields = vec![
         (
             "Name:",
@@ -440,7 +440,7 @@ fn node_access_url(v: &Value) -> Cow<str> {
                 ip_opt.map_or("Not Found".into(), |ip| {
                     let octs: Vec<&str> = ip.split('.').collect();
                     if octs.len() < 4 {
-                        format!("Unexpected ip format: {}", ip).into()
+                        format!("Unexpected ip format: {ip}").into()
                     } else {
                         format!(
                             "ec2-{}-{}-{}-{}.us-west-2.compute.amazonaws.com ({})",
@@ -462,7 +462,7 @@ pub fn describe_format_secret(
     secret: &api::Secret,
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
-    let v = serde_json::value::to_value(&secret).unwrap();
+    let v = serde_json::value::to_value(secret).unwrap();
     let fields = vec![
         (
             "Name:",
@@ -537,7 +537,7 @@ fn get_message_str(v: &Value) -> Cow<str> {
     if let Some(condition_array) = v.as_array() {
         for condition in condition_array.iter() {
             let msg = val_str("/message", condition, "<No Message>");
-            buf.push_str(format!("  Message: {}\n", msg).as_str());
+            buf.push_str(format!("  Message: {msg}\n").as_str());
         }
     }
     buf.into()
@@ -548,7 +548,7 @@ pub fn describe_format_deployment(
     deployment: &api_apps::Deployment,
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
-    let v = serde_json::value::to_value(&deployment).unwrap();
+    let v = serde_json::value::to_value(deployment).unwrap();
     let fields = vec![
         (
             "Name:\t\t",
@@ -636,7 +636,7 @@ pub fn describe_format_rollout(
     rollout: &rollouts::RolloutValue,
     table: &mut comfy_table::Table,
 ) -> Result<(), ClickError> {
-    let v = serde_json::value::to_value(&rollout).unwrap();
+    let v = serde_json::value::to_value(rollout).unwrap();
     let fields = vec![
         (
             "Name:",

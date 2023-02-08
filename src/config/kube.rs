@@ -192,8 +192,7 @@ impl Config {
                             cert.retain(|&i| i != 0);
                             let cert_pem = String::from_utf8(cert).map_err(|e| {
                                 ClickError::ConfigFileError(format!(
-                                    "Invalid utf8 data in certificate: {}",
-                                    e
+                                    "Invalid utf8 data in certificate: {e}"
                                 ))
                             })?;
                             cluster_map.insert(
@@ -202,7 +201,7 @@ impl Config {
                             );
                         }
                         Err(e) => {
-                            println!("Invalid certificate data, could not base64 decode: {}", e);
+                            println!("Invalid certificate data, could not base64 decode: {e}");
                         }
                     },
                     (None, None) => {
@@ -351,8 +350,7 @@ fn get_reqwest_certs(data: &str) -> Result<Vec<reqwest::Certificate>, ClickError
     }
     if ret.is_empty() {
         return Err(ClickError::ParseErr(format!(
-            "No start cert marker found in: {}",
-            data
+            "No start cert marker found in: {data}"
         )));
     }
     Ok(ret)

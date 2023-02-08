@@ -243,9 +243,7 @@ impl RolloutValue {
         ),
         RequestError,
     > {
-        let url = format!(
-            "/apis/argoproj.io/v1alpha1/namespaces/{namespace}/rollouts",
-        );
+        let url = format!("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/rollouts",);
         get_list_request_for_url(url, optional)
     }
 
@@ -275,9 +273,7 @@ impl RolloutValue {
         ),
         RequestError,
     > {
-        let url = format!(
-            "/apis/argoproj.io/v1alpha1/namespaces/{namespace}/rollouts/{name}",
-        );
+        let url = format!("/apis/argoproj.io/v1alpha1/namespaces/{namespace}/rollouts/{name}",);
         get_read_request_for_url(url)
     }
 }

@@ -696,9 +696,12 @@ users:
 
     fn contains_cluster(config: &Config, cluster: Cluster) -> bool {
         for c in config.clusters.iter() {
-            if c.name == cluster.name && c.conf.cert == cluster.conf.cert
-                    && c.conf.cert_data == cluster.conf.cert_data
-                    && c.conf.skip_tls == cluster.conf.skip_tls && c.conf.server == cluster.conf.server {
+            if c.name == cluster.name
+                && c.conf.cert == cluster.conf.cert
+                && c.conf.cert_data == cluster.conf.cert_data
+                && c.conf.skip_tls == cluster.conf.skip_tls
+                && c.conf.server == cluster.conf.server
+            {
                 return true;
             }
         }
@@ -707,8 +710,11 @@ users:
 
     fn contains_context(config: &Config, context: Context) -> bool {
         for c in config.contexts.iter() {
-            if c.name == context.name && c.conf.cluster == context.conf.cluster
-                    && c.conf.user == context.conf.user && c.conf.namespace == context.conf.namespace {
+            if c.name == context.name
+                && c.conf.cluster == context.conf.cluster
+                && c.conf.user == context.conf.user
+                && c.conf.namespace == context.conf.namespace
+            {
                 return true;
             }
         }
@@ -717,13 +723,16 @@ users:
 
     fn contains_user(config: &Config, user: User) -> bool {
         for u in config.users.iter() {
-            if u.name == user.name && u.conf.token == user.conf.token
-                    && u.conf.client_cert == user.conf.client_cert
-                    && u.conf.client_key == user.conf.client_key
-                    && u.conf.client_cert_data == user.conf.client_cert_data
-                    && u.conf.client_key_data == user.conf.client_key_data
-                    && u.conf.username == user.conf.username
-                    && u.conf.password == user.conf.password && u.conf.auth_provider == user.conf.auth_provider {
+            if u.name == user.name
+                && u.conf.token == user.conf.token
+                && u.conf.client_cert == user.conf.client_cert
+                && u.conf.client_key == user.conf.client_key
+                && u.conf.client_cert_data == user.conf.client_cert_data
+                && u.conf.client_key_data == user.conf.client_key_data
+                && u.conf.username == user.conf.username
+                && u.conf.password == user.conf.password
+                && u.conf.auth_provider == user.conf.auth_provider
+            {
                 return true;
             }
         }

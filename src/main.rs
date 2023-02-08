@@ -170,9 +170,7 @@ fn main() {
     let config = match Config::from_files(&config_paths) {
         Ok(c) => c,
         Err(e) => {
-            println!(
-                "Could not load kubernetes config. Cannot continue.  Error was: {e}"
-            );
+            println!("Could not load kubernetes config. Cannot continue.  Error was: {e}");
             return;
         }
     };

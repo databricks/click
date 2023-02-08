@@ -182,10 +182,9 @@ impl ClickConfig {
     /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), ClickError> {
         let af = AtomicFile::new(path, AllowOverwrite);
-        af.write(|f| serde_yaml::to_writer(f, &self))
-            .map_err(|e| {
-                ClickError::ConfigFileError(format!("Failed to write config file: {e}"))
-            })?;
+        af.write(|f| serde_yaml::to_writer(f, &self)).map_err(|e| {
+            ClickError::ConfigFileError(format!("Failed to write config file: {e}"))
+        })?;
         Ok(())
     }
 }

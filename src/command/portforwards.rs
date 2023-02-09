@@ -44,8 +44,7 @@ command!(
                     let parts: Vec<&str> = s.split(':').collect();
                     if parts.len() > 2 {
                         Err(format!(
-                            "Invalid port specification '{}', can only contain one ':'",
-                            s
+                            "Invalid port specification '{s}', can only contain one ':'"
                         ))
                     } else {
                         for part in parts {
@@ -131,13 +130,13 @@ Examples:
                                 if read > 0 {
                                     let readstr = String::from_utf8_lossy(&buffer[0..read]);
                                     let mut res = output_clone.lock().unwrap();
-                                    res.push_str(&*readstr);
+                                    res.push_str(&readstr);
                                 } else {
                                     break;
                                 }
                             }
                             Err(e) => {
-                                write!(stderr(), "Error reading child output: {}", e).unwrap_or(());
+                                write!(stderr(), "Error reading child output: {e}").unwrap_or(());
                                 break;
                             }
                         }
@@ -159,15 +158,13 @@ Examples:
                     if kubectl_binary.starts_with('/') {
                         writeln!(
                             stderr(),
-                            "Could not find kubectl binary '{}'. Does it exist?",
-                            kubectl_binary
+                            "Could not find kubectl binary '{kubectl_binary}'. Does it exist?"
                         )
                         .unwrap_or(());
                     } else {
                         writeln!(
                             stderr(),
-                            "Could not find kubectl binary '{}'. Is it in your PATH.",
-                            kubectl_binary
+                            "Could not find kubectl binary '{kubectl_binary}'. Is it in your PATH."
                         )
                         .unwrap_or(());
                     }
@@ -175,8 +172,7 @@ Examples:
                 _ => {
                     write!(
                         stderr(),
-                        "Couldn't execute kubectl, not forwarding.  Error is: {}",
-                        e
+                        "Couldn't execute kubectl, not forwarding.  Error is: {e}"
                     )
                     .unwrap_or(());
                 }
@@ -193,14 +189,14 @@ fn print_pfs(pfs: std::slice::IterMut<env::PortForward>, writer: &mut ClickWrite
     table.set_header(vec!["####", "Pod", "Ports", "Status"]);
     for (i, pf) in pfs.enumerate() {
         let mut row = Vec::new();
-        row.push(Cell::new(format!("{}", i).as_str()).set_alignment(CellAlignment::Right));
+        row.push(Cell::new(format!("{i}").as_str()).set_alignment(CellAlignment::Right));
         row.push(Cell::new(pf.pod.as_str()));
         row.push(Cell::new(pf.ports.join(", ").as_str()));
 
         let status = match pf.child.try_wait() {
-            Ok(Some(stat)) => format!("Exited with code {}", stat),
+            Ok(Some(stat)) => format!("Exited with code {stat}"),
             Ok(None) => "Running".to_string(),
-            Err(e) => format!("Error: {}", e),
+            Err(e) => format!("Error: {e}"),
         };
         row.push(Cell::new(status.as_str()));
 
@@ -226,7 +222,7 @@ command!(
             Arg::new("action")
                 .help("Action to take")
                 .required(false)
-                .possible_values(&["list", "output", "stop"])
+                .possible_values(["list", "output", "stop"])
                 .index(1)
         )
         .arg(
@@ -281,7 +277,7 @@ command!(
                                 clickwriteln!(writer, "Stopped");
                             }
                             Err(e) => {
-                                write!(stderr(), "Failed to stop: {}", e).unwrap_or(());
+                                write!(stderr(), "Failed to stop: {e}").unwrap_or(());
                             }
                         }
                     } else {

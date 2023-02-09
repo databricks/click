@@ -185,9 +185,8 @@ impl<'de> Deserialize<'de> for AuthProvider {
             }
             _ => {
                 println!(
-                    "[Warning] found an authprovider with name {}, which isn't supported. \
-                          Clusters using this provider will not be able to authenticate",
-                    name
+                    "[Warning] found an authprovider with name {name}, which isn't supported. \
+                          Clusters using this provider will not be able to authenticate"
                 );
                 Ok(AuthProvider {
                     name: Some(name.to_string()),
@@ -200,10 +199,9 @@ impl<'de> Deserialize<'de> for AuthProvider {
 
 fn print_refresh_warn(name: &str) {
     println!(
-        "[Warning] Click does not support refreshing tokens for '{}' auth-providers. \
+        "[Warning] Click does not support refreshing tokens for '{name}' auth-providers. \
          If you get permission denied, try running a kubectl command against a cluster to \
-         refresh it.",
-        name
+         refresh it."
     );
 }
 
@@ -336,8 +334,7 @@ impl AuthProviderGcpConfig {
             Ok(expiry)
         } else {
             Err(ClickError::ParseErr(format!(
-                "Cannot parse expiry: {}",
-                expiry_str
+                "Cannot parse expiry: {expiry_str}"
             )))
         }
     }
@@ -399,12 +396,12 @@ impl AuthProviderGcpConfig {
                             match AuthProviderGcpConfig::parse_expiry(extracted_expiry) {
                                 Ok(e) => *expiry = Some(e),
                                 Err(e) => {
-                                    eprintln!("Failed to parse expiry from returned json: {}", e);
+                                    eprintln!("Failed to parse expiry from returned json: {e}");
                                 }
                             }
                         }
                         None => {
-                            eprintln!("Config did not contain an expiry at: {}", expiry_pntr);
+                            eprintln!("Config did not contain an expiry at: {expiry_pntr}");
                         }
                     }
                 }
@@ -431,7 +428,7 @@ impl AuthProviderGcpConfig {
                         self.parse_output_and_update(output.as_str(), token, expiry);
                     }
                     Err(e) => {
-                        println!("Failed to run update command: {}", e);
+                        println!("Failed to run update command: {e}");
                     }
                 }
             }
@@ -578,7 +575,7 @@ impl ExecProvider {
                 }
             },
             Err(e) => {
-                println!("Error running specified exec command: {}", e);
+                println!("Error running specified exec command: {e}");
             }
         }
     }
@@ -699,57 +696,54 @@ users:
 
     fn contains_cluster(config: &Config, cluster: Cluster) -> bool {
         for c in config.clusters.iter() {
-            if c.name == cluster.name {
-                if c.conf.cert == cluster.conf.cert
-                    && c.conf.cert_data == cluster.conf.cert_data
-                    && c.conf.skip_tls == cluster.conf.skip_tls
-                    && c.conf.server == cluster.conf.server
-                {
-                    return true;
-                }
+            if c.name == cluster.name
+                && c.conf.cert == cluster.conf.cert
+                && c.conf.cert_data == cluster.conf.cert_data
+                && c.conf.skip_tls == cluster.conf.skip_tls
+                && c.conf.server == cluster.conf.server
+            {
+                return true;
             }
         }
-        return false;
+        false
     }
 
     fn contains_context(config: &Config, context: Context) -> bool {
         for c in config.contexts.iter() {
-            if c.name == context.name {
-                if c.conf.cluster == context.conf.cluster
-                    && c.conf.user == context.conf.user
-                    && c.conf.namespace == context.conf.namespace
-                {
-                    return true;
-                }
+            if c.name == context.name
+                && c.conf.cluster == context.conf.cluster
+                && c.conf.user == context.conf.user
+                && c.conf.namespace == context.conf.namespace
+            {
+                return true;
             }
         }
-        return false;
+        false
     }
 
     fn contains_user(config: &Config, user: User) -> bool {
         for u in config.users.iter() {
-            if u.name == user.name {
-                if u.conf.token == user.conf.token
-                    && u.conf.client_cert == user.conf.client_cert
-                    && u.conf.client_key == user.conf.client_key
-                    && u.conf.client_cert_data == user.conf.client_cert_data
-                    && u.conf.client_key_data == user.conf.client_key_data
-                    && u.conf.username == user.conf.username
-                    && u.conf.password == user.conf.password
-                    && u.conf.auth_provider == user.conf.auth_provider
-                {
-                    return true;
-                }
+            if u.name == user.name
+                && u.conf.token == user.conf.token
+                && u.conf.client_cert == user.conf.client_cert
+                && u.conf.client_key == user.conf.client_key
+                && u.conf.client_cert_data == user.conf.client_cert_data
+                && u.conf.client_key_data == user.conf.client_key_data
+                && u.conf.username == user.conf.username
+                && u.conf.password == user.conf.password
+                && u.conf.auth_provider == user.conf.auth_provider
+            {
+                return true;
             }
         }
-        return false;
+        false
     }
 
     #[test]
     fn test_parse_config() {
         let config = Config::from_reader(TEST_CONFIG.as_bytes());
         if config.is_err() {
-            println!("Failed to parse config: {:?}", config);
+            println!("Failed to parse config: {config:?}");
             assert!(config.is_ok()); // will always fail
         }
         let config = config.unwrap();

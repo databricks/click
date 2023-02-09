@@ -122,10 +122,10 @@ impl ClickWriter {
             WriterOutput::Pipe(pipe_proc) => {
                 match pipe_proc.finish() {
                     Ok(out) => {
-                        print!("{}", out);
+                        print!("{out}");
                     }
                     Err(e) => {
-                        eprint!("Failed to execute command: {}", e);
+                        eprint!("Failed to execute command: {e}");
                     }
                 }
                 None
@@ -299,7 +299,7 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
     {
         let r = self.pretty.end_string(writer);
         if self.invalue && !self.iskey {
-            write!(writer, "{}", ResetColor).unwrap_or(());
+            write!(writer, "{ResetColor}").unwrap_or(());
         }
         r
     }
@@ -381,7 +381,7 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
     {
         let r = self.pretty.end_object_key(writer);
         self.iskey = false;
-        write!(writer, "{}", ResetColor).unwrap_or(());
+        write!(writer, "{ResetColor}").unwrap_or(());
         r
     }
 

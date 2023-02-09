@@ -56,7 +56,7 @@ command!(
                      Default can be set by 'set describe_include_events [true/false]'",
                 )
                 .takes_value(true)
-                .possible_values(&["true", "false"]),
+                .possible_values(["true", "false"]),
         )
     },
     vec!["describe"],

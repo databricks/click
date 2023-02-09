@@ -55,7 +55,7 @@ impl fmt::Display for EditMode {
 
 impl From<&EditMode> for String {
     fn from(e: &EditMode) -> String {
-        format!("{}", e)
+        format!("{e}")
     }
 }
 
@@ -86,7 +86,7 @@ impl fmt::Display for CompletionType {
 
 impl From<&CompletionType> for String {
     fn from(ct: &CompletionType) -> String {
-        format!("{}", ct)
+        format!("{ct}")
     }
 }
 
@@ -182,10 +182,9 @@ impl ClickConfig {
     /// of Click, since we use an AtomicFile
     pub fn save_to_file(&self, path: &str) -> Result<(), ClickError> {
         let af = AtomicFile::new(path, AllowOverwrite);
-        af.write(|mut f| serde_yaml::to_writer(&mut f, &self))
-            .map_err(|e| {
-                ClickError::ConfigFileError(format!("Failed to write config file: {}", e))
-            })?;
+        af.write(|f| serde_yaml::to_writer(f, &self)).map_err(|e| {
+            ClickError::ConfigFileError(format!("Failed to write config file: {e}"))
+        })?;
         Ok(())
     }
 }

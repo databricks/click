@@ -157,7 +157,7 @@ fn ready_counts(pod: &api::Pod) -> Option<CellSpec<'_>> {
                 }
             }
         }
-        format!("{}/{}", ready, count).into()
+        format!("{ready}/{count}").into()
     })
 }
 
@@ -287,7 +287,7 @@ list_command!(
         let mut field_sel = None;
         match matches.value_of("node") {
             Some(nodeval) => {
-                field_sel = Some(format!("spec.nodeName={}", nodeval));
+                field_sel = Some(format!("spec.nodeName={nodeval}"));
             }
             None => {
                 if let ObjectSelection::Single(obj) = env.current_selection() {
@@ -455,8 +455,7 @@ fn print_containers(
             )),
         },
         api::ReadNamespacedPodResponse::Other(o) => Err(ClickError::CommandError(format!(
-            "Error getting pod info: {:?}",
-            o
+            "Error getting pod info: {o:?}"
         ))),
     }
 }

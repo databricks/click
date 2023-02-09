@@ -65,8 +65,7 @@ fn send_delete<D: DeserializeOwned + Debug>(
                 )),
             },
             Err(e) => Err(ClickError::CommandError(format!(
-                "Delete request failed with an error: {}",
-                e
+                "Delete request failed with an error: {e}"
             ))),
         },
     }
@@ -265,7 +264,7 @@ command!(
                 .long("cascade")
                 .help("Cascading strategy for deletion of any dependent objects.")
                 .takes_value(true)
-                .possible_values(&["background", "foreground", "orphan"])
+                .possible_values(["background", "foreground", "orphan"])
                 .ignore_case(true)
                 .default_value("background"),
         )

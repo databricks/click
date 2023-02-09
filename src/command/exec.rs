@@ -109,14 +109,10 @@ fn do_exec(
             Err(e) => {
                 if let io::ErrorKind::NotFound = e.kind() {
                     let msg = if kubectl_binary.starts_with('/') {
-                        format!(
-                            "Could not find kubectl binary: '{}'. Does it exist?",
-                            kubectl_binary
-                        )
+                        format!("Could not find kubectl binary: '{kubectl_binary}'. Does it exist?")
                     } else {
                         format!(
-                            "Could not find kubectl binary: '{}'. Is it in your PATH?",
-                            kubectl_binary
+                            "Could not find kubectl binary: '{kubectl_binary}'. Is it in your PATH?"
                         )
                     };
                     Err(ClickError::CommandError(msg))

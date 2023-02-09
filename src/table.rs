@@ -134,13 +134,13 @@ impl<'a> CellSpec<'a> {
 
     pub fn to_cell(&self, index: usize, env: &Env) -> Cell {
         let cell = match &self.txt {
-            CellSpecTxt::DateTime(datetime) => Cell::new(&format_duration(time_since(*datetime))),
-            CellSpecTxt::Duration(duration) => Cell::new(&format_duration(*duration)),
+            CellSpecTxt::DateTime(datetime) => Cell::new(format_duration(time_since(*datetime))),
+            CellSpecTxt::Duration(duration) => Cell::new(format_duration(*duration)),
             CellSpecTxt::Index => {
-                Cell::new(format!("{}", index).as_str()).set_alignment(CellAlignment::Right)
+                Cell::new(format!("{index}").as_str()).set_alignment(CellAlignment::Right)
             }
             CellSpecTxt::Int(num) => {
-                Cell::new(format!("{}", num).as_str()).set_alignment(CellAlignment::Right)
+                Cell::new(format!("{num}").as_str()).set_alignment(CellAlignment::Right)
             }
             CellSpecTxt::None => Cell::new("Unknown/None"),
             CellSpecTxt::Quantity(quant) => Cell::new(&quant.0),
@@ -182,7 +182,7 @@ impl<'a> ToString for CellSpec<'a> {
             CellSpecTxt::DateTime(datetime) => format_duration(time_since(*datetime)),
             CellSpecTxt::Duration(duration) => format_duration(*duration),
             CellSpecTxt::Index => "[index]".to_string(),
-            CellSpecTxt::Int(num) => format!("{}", num),
+            CellSpecTxt::Int(num) => format!("{num}"),
             CellSpecTxt::None => "Unknown/None".to_string(),
             CellSpecTxt::Quantity(quant) => quant.0.clone(),
             CellSpecTxt::Str(s) => s.to_string(),
@@ -389,7 +389,7 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
                 }
             }
             Err(_) => {
-                println!("Invalid suffix for quantity: {}", suffix);
+                println!("Invalid suffix for quantity: {suffix}");
                 return 0.0;
             }
         }
@@ -421,7 +421,7 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
         "P" => amt * base10.pow(15),
         "E" => amt * base10.pow(18),
         _ => {
-            println!("Invalid suffix for quantity {}", suffix);
+            println!("Invalid suffix for quantity {suffix}");
             0
         }
     };
@@ -439,7 +439,7 @@ pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
             if let Ok(regex) = Regex::new(pattern) {
                 Ok(Some(regex))
             } else {
-                Err(format!("Invalid regex: {}", pattern))
+                Err(format!("Invalid regex: {pattern}"))
             }
         }
         None => Ok(None),

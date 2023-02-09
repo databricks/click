@@ -112,8 +112,7 @@ fn do_logs<'a>(
                         Ok(())
                     }
                     Err(e) => Err(ClickError::CommandError(format!(
-                        "Can't generate output path: {}",
-                        e
+                        "Can't generate output path: {e}"
                     ))),
                 }
             } else if editor {
@@ -127,8 +126,7 @@ fn do_logs<'a>(
                         Ok(ed) => ed,
                         Err(e) => {
                             return Err(ClickError::CommandError(format!(
-                                "Could not get EDITOR environment variable: {}",
-                                e
+                                "Could not get EDITOR environment variable: {e}"
                             )));
                         }
                     }
@@ -137,8 +135,7 @@ fn do_logs<'a>(
                     Ok(ref td) => td,
                     Err(ref e) => {
                         return Err(ClickError::CommandError(format!(
-                            "Failed to create tempdir: {}",
-                            e
+                            "Failed to create tempdir: {e}"
                         )));
                     }
                 };

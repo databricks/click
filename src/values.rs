@@ -34,7 +34,7 @@ pub fn val_str<'a>(pointer: &str, value: &'a Value, default: &'a str) -> Cow<'a,
 pub fn val_num(pointer: &str, value: &Value, default: &str) -> String {
     match value.pointer(pointer) {
         Some(p) => match p.as_i64() {
-            Some(i) => format!("{}", i),
+            Some(i) => format!("{i}"),
             None => default.into(),
         },
         None => default.into(),

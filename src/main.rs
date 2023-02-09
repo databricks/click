@@ -142,7 +142,7 @@ fn main() {
     let click_conf = match ClickConfig::from_file(click_path.as_path().to_str().unwrap()) {
         Ok(conf) => conf,
         Err(e) => {
-            println!("Could not load click config: {}\nUsing default values.", e);
+            println!("Could not load click config: {e}\nUsing default values.");
             ClickConfig::default()
         }
     };
@@ -170,10 +170,7 @@ fn main() {
     let config = match Config::from_files(&config_paths) {
         Ok(c) => c,
         Err(e) => {
-            println!(
-                "Could not load kubernetes config. Cannot continue.  Error was: {}",
-                e
-            );
+            println!("Could not load kubernetes config. Cannot continue.  Error was: {e}");
             return;
         }
     };

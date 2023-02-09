@@ -81,7 +81,7 @@ fn print_events_no_obj(env: &Env, writer: &mut ClickWriter) -> Result<(), ClickE
     let mut opts: ListOptional = Default::default();
     let mut include_namespace = false;
     let (request, _body) = if let Some(ns) = env.namespace.as_ref() {
-        let fs = format!("involvedObject.namespace={}", ns);
+        let fs = format!("involvedObject.namespace={ns}");
         opts.field_selector = Some(&fs);
         api::Event::list_namespaced_event(ns, opts)?
     } else {

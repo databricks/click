@@ -116,7 +116,7 @@ command!(
                 .long("direction")
                 .help("Should the src file be copied to or from the pod.")
                 .takes_value(true)
-                .possible_values(&["to", "from"])
+                .possible_values(["to", "from"])
                 .default_value("from")
         )
         .arg(

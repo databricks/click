@@ -97,7 +97,7 @@ where
     let regex = match crate::table::get_regex(&matches) {
         Ok(r) => r,
         Err(s) => {
-            writeln!(stderr(), "{}", s).unwrap_or(());
+            writeln!(stderr(), "{s}").unwrap_or(());
             return Ok(()); // TODO: Return the error when that does something
         }
     };
@@ -131,10 +131,10 @@ where
             }
             match func {
                 Some(f) => f,
-                None => panic!("Shouldn't be allowed to ask to sort by: {}", colname),
+                None => panic!("Shouldn't be allowed to ask to sort by: {colname}"),
             }
         } else {
-            panic!("Shouldn't be allowed to ask to sort by: {}", colname);
+            panic!("Shouldn't be allowed to ask to sort by: {colname}");
         }
     });
 
@@ -346,7 +346,7 @@ pub fn extract_labels<T: Metadata<Ty = ObjectMeta>>(obj: &T) -> Option<Cow<'_, s
 }
 
 // utility functions
-fn row_matches<'a>(row: &[CellSpec<'a>], regex: &Regex) -> bool {
+fn row_matches(row: &[CellSpec<'_>], regex: &Regex) -> bool {
     let mut has_match = false;
     for cell_spec in row.iter() {
         if !has_match {

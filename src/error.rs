@@ -37,7 +37,7 @@ impl fmt::Display for ClickErrNo {
             ClickErrNo::InvalidContextName => write!(f, "Invalid Context Name"),
             ClickErrNo::InvalidCluster => write!(f, "Invalid Cluster Name"),
             ClickErrNo::InvalidUser => write!(f, "Invalid User Name"),
-            ClickErrNo::NoTokenAvailable => write!(f, "{}", NO_TOKEN_STR),
+            ClickErrNo::NoTokenAvailable => write!(f, "{NO_TOKEN_STR}"),
             ClickErrNo::Unauthorized => write!(
                 f,
                 "Not authorized to talk to cluster, check credentials in config"
@@ -88,22 +88,21 @@ pub enum ClickError {
 impl fmt::Display for ClickError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ClickError::CommandError(ref s) => write!(f, "Error running command: {}", s),
-            ClickError::ParseErr(ref s) => write!(f, "Parse Error: {}", s),
-            ClickError::Kube(ref err) => write!(f, "Kube Error: {}", err),
-            ClickError::ConfigFileError(ref s) => write!(f, "Failed to get config: {}", s),
-            ClickError::DecodeError(ref err) => write!(f, "Base64 decode error: {}", err),
-            ClickError::Io(ref err) => write!(f, "IO error: {}", err),
-            ClickError::SerdeJson(ref err) => write!(f, "Serde json error: {}", err),
-            ClickError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {}", err),
+            ClickError::CommandError(ref s) => write!(f, "Error running command: {s}"),
+            ClickError::ParseErr(ref s) => write!(f, "Parse Error: {s}"),
+            ClickError::Kube(ref err) => write!(f, "Kube Error: {err}"),
+            ClickError::ConfigFileError(ref s) => write!(f, "Failed to get config: {s}"),
+            ClickError::DecodeError(ref err) => write!(f, "Base64 decode error: {err}"),
+            ClickError::Io(ref err) => write!(f, "IO error: {err}"),
+            ClickError::SerdeJson(ref err) => write!(f, "Serde json error: {err}"),
+            ClickError::SerdeYaml(ref err) => write!(f, "Serde yaml error: {err}"),
             ClickError::RequestError(ref err) => match err {
                 k8s_openapi::RequestError::Http(e) => {
-                    write!(f, "Error preparing HTTP request: {}", e)
+                    write!(f, "Error preparing HTTP request: {e}")
                 }
                 k8s_openapi::RequestError::Json(e) => write!(
                     f,
-                    "Error serializing the JSON body of the HTTP request: {}",
-                    e
+                    "Error serializing the JSON body of the HTTP request: {e}"
                 ),
             },
             ClickError::ResponseError(ref err) => match err {
@@ -111,17 +110,17 @@ impl fmt::Display for ClickError {
                     write!(f, "Failed to read enough data")
                 }
                 k8s_openapi::ResponseError::Json(e) => {
-                    write!(f, "Failed to deserialize response json: {}", e)
+                    write!(f, "Failed to deserialize response json: {e}")
                 }
                 k8s_openapi::ResponseError::Utf8(e) => {
-                    write!(f, "Response contained invalid utf-8 data: {}", e)
+                    write!(f, "Response contained invalid utf-8 data: {e}")
                 }
             },
-            ClickError::Clap(ref err) => write!(f, "Error in clap: {}", err),
-            ClickError::JoinPathsError(ref err) => write!(f, "Join paths error: {}", err),
-            ClickError::Pem(ref err) => write!(f, "Pem error: {}", err),
-            ClickError::Reqwest(ref err, _) => write!(f, "Reqwest error: {}", err),
-            ClickError::UrlParse(ref err) => write!(f, "Error parsing url: {}", err),
+            ClickError::Clap(ref err) => write!(f, "Error in clap: {err}"),
+            ClickError::JoinPathsError(ref err) => write!(f, "Join paths error: {err}"),
+            ClickError::Pem(ref err) => write!(f, "Pem error: {err}"),
+            ClickError::Reqwest(ref err, _) => write!(f, "Reqwest error: {err}"),
+            ClickError::UrlParse(ref err) => write!(f, "Error parsing url: {err}"),
         }
     }
 }

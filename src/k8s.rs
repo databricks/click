@@ -83,8 +83,8 @@ impl UserAuth {
         cert: String,
         endpoint: &Url,
     ) -> Result<UserAuth, ClickError> {
-        let key_decoded = ::base64::decode(&key)?;
-        let cert_decoded = ::base64::decode(&cert)?;
+        let key_decoded = ::base64::decode(key)?;
+        let cert_decoded = ::base64::decode(cert)?;
         let pkcs12 = Context::use_pkcs12(endpoint);
         let id = get_id_from_data(key_decoded, cert_decoded, pkcs12)?;
         Ok(UserAuth::Ident(id))
@@ -108,7 +108,7 @@ fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
 
 // get the right kind of id
 fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, ClickError> {
-    let key_pem = pem::parse(&key)?;
+    let key_pem = pem::parse(key)?;
 
     let key_der = match key_pem.tag.as_str() {
         "RSA PRIVATE KEY" => {
@@ -127,7 +127,7 @@ fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, ClickErro
         }
     };
 
-    let cert_pem = pem::parse(&cert)?;
+    let cert_pem = pem::parse(cert)?;
 
     let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "")
         .ok_or_else(|| ClickError::ConfigFileError("Could not parse pkcs12 data".to_string()))?;
@@ -444,7 +444,7 @@ impl Context {
                     } else {
                         return Err(ClickError::ParseErr(
                             // TODO maybe a special error type for this
-                            format!("Got unexpected status {} {:?}", status_code, other),
+                            format!("Got unexpected status {status_code} {other:?}"),
                         ));
                     }
                 }

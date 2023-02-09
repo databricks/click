@@ -78,7 +78,7 @@ fn cjob_schedule(cjob: &batch_api::CronJob) -> Option<CellSpec<'_>> {
 fn cjob_suspend(cjob: &batch_api::CronJob) -> Option<CellSpec<'_>> {
     cjob.spec
         .as_ref()
-        .and_then(|spec| spec.suspend.map(|sus| format!("{}", sus).into()))
+        .and_then(|spec| spec.suspend.map(|sus| format!("{sus}").into()))
 }
 
 fn cjob_active(cjob: &batch_api::CronJob) -> Option<CellSpec<'_>> {

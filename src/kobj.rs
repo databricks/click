@@ -44,6 +44,7 @@ pub enum ObjType {
     DaemonSet,
     ConfigMap,
     Secret,
+    CronJob,
     Job,
     Namespace,
     PersistentVolume,
@@ -95,6 +96,7 @@ impl KObj {
             ObjType::StatefulSet => "StatefulSet",
             ObjType::ConfigMap => "ConfigMap",
             ObjType::Secret => "Secret",
+            ObjType::CronJob => "CronJob",
             ObjType::Job => "Job",
             ObjType::Namespace => "Namespace",
             ObjType::PersistentVolume => "PersistentVolume",
@@ -192,6 +194,14 @@ impl KObj {
                     api_apps::ReadNamespacedDeploymentResponse,
                     api_apps::ReadNamespacedDeploymentResponse::Ok,
                     describe::legacy::describe_format_deployment
+                );
+            }
+            ObjType::CronJob => {
+                do_describe_with_namespace!(
+                    api_batch::CronJob::read_namespaced_cron_job,
+                    api_batch::ReadNamespacedCronJobResponse,
+                    api_batch::ReadNamespacedCronJobResponse::Ok,
+                    describe::describe_metadata
                 );
             }
             ObjType::Job => {

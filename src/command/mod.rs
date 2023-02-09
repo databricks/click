@@ -43,6 +43,7 @@ pub mod click; // commands internal to click (setting config values, etc)
 pub mod configmaps; // commands relating to configmaps
 pub mod copy; // command to copy files to/from pods
 pub mod crds; // commands to query crd created objects
+pub mod cronjobs; // commands relating to cronjobs
 pub mod daemonsets; // commands for daemonsets
 pub mod delete; // command to delete objects
 pub mod deployments; // command to list deployments

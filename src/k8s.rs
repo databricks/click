@@ -261,7 +261,7 @@ impl Context {
         !matches!(host, Host::Domain(_))
     }
 
-    fn handle_exec_provider(&self, exec_provider: &ExecProvider) {
+    fn handle_exec_provider(&self, exec_provider: &ExecProvider) -> Option<UserAuth> {
         let (auth, was_expired) = exec_provider.get_auth();
         match auth {
             ExecAuth::Token(_) => {} // handled below
@@ -275,11 +275,10 @@ impl Context {
                     let id =
                         get_id_from_data(key_data.into_bytes(), cert_data.into_bytes(), pkcs12)
                             .unwrap(); // TODO: Handle error
-                    let auth = self.auth.take();
                     let (new_client, new_auth) = Context::get_client(
                         &self.endpoint,
                         self.root_cas.clone(),
-                        auth.clone(),
+                        self.auth.clone().take(),
                         Some(id.clone()),
                         self.connect_timeout_secs,
                         self.read_timeout_secs,
@@ -287,17 +286,18 @@ impl Context {
                     let (new_log_client, _) = Context::get_client(
                         &self.endpoint,
                         self.root_cas.clone(),
-                        auth,
+                        self.auth.clone().take(),
                         Some(id),
                         u32::MAX,
                         u32::MAX,
                     );
                     *self.client.borrow_mut() = new_client;
                     *self.log_client.borrow_mut() = new_log_client;
-                    *self.auth.borrow_mut() = new_auth;
+                    return new_auth;
                 }
             }
         }
+        None
     }
 
     pub fn execute(
@@ -308,8 +308,16 @@ impl Context {
 
         let url = self.endpoint.join(&parts.uri.to_string())?;
 
-        if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
-            self.handle_exec_provider(exec_provider);
+        let new_provider = {
+            // TODO: Fix this mess
+            if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
+                self.handle_exec_provider(exec_provider)
+            } else {
+                None
+            }
+        };
+        if let Some(new_provider) = new_provider {
+            self.auth.borrow_mut().replace(new_provider);
         }
 
         let req = match parts.method {

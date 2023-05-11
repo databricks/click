@@ -308,7 +308,8 @@ impl Context {
 
         let url = self.endpoint.join(&parts.uri.to_string())?;
 
-        let new_provider = { // TODO: Fix this mess
+        let new_provider = {
+            // TODO: Fix this mess
             if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
                 self.handle_exec_provider(exec_provider)
             } else {

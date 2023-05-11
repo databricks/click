@@ -28,16 +28,11 @@ pub struct Alias {
     pub expanded: String,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum EditMode {
+    #[default]
     Emacs,
     Vi,
-}
-
-impl Default for EditMode {
-    fn default() -> Self {
-        EditMode::Emacs
-    }
 }
 
 impl fmt::Display for EditMode {
@@ -59,16 +54,11 @@ impl From<&EditMode> for String {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 pub enum CompletionType {
+    #[default]
     Circular,
     List,
-}
-
-impl Default for CompletionType {
-    fn default() -> Self {
-        CompletionType::Circular
-    }
 }
 
 impl fmt::Display for CompletionType {

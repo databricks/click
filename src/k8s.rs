@@ -373,6 +373,7 @@ impl Context {
     // for streaming operations like logs
     pub fn execute_reader(
         &self,
+        impersonate_user: Option<&str>,
         k8sreq: http::Request<Vec<u8>>,
         timeout: Option<Duration>,
     ) -> Result<reqwest::blocking::Response, ClickError> {
@@ -389,6 +390,14 @@ impl Context {
             http::method::Method::POST => self.log_client.borrow().post(url),
             http::method::Method::DELETE => self.log_client.borrow().delete(url),
             _ => unimplemented!(),
+        };
+
+        let req = if let Some(user) = impersonate_user {
+            req.header("Impersonate-User", user)
+        } else if let Some(user) = self.impersonate_user.as_ref() {
+            req.header("Impersonate-User", user)
+        } else {
+            req
         };
 
         let req = req.body(body);

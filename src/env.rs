@@ -71,6 +71,7 @@ pub struct Env {
     pub prompt: String,
     range_str: Option<String>,
     pub tempdir: std::io::Result<TempDir>,
+    impersonate_user: Option<String>,
 }
 
 lazy_static! {
@@ -112,6 +113,7 @@ impl Env {
             prompt: format!("[{}] [{}] [{}] > ", nones.0, nones.1, nones.2,),
             range_str: None,
             tempdir: TempDir::new("click"),
+            impersonate_user: None,
         };
         env.set_context(context.as_deref());
         env
@@ -127,6 +129,14 @@ impl Env {
         self.click_config
             .save_to_file(self.click_config_path.as_path().to_str().unwrap())
             .unwrap();
+    }
+
+    pub fn set_impersonate_user(&mut self, user: Option<String>) {
+        self.impersonate_user = user;
+    }
+
+    pub fn get_impersonate_user(&self) -> Option<&str> {
+        self.impersonate_user.as_deref()
     }
 
     // sets the prompt string based on current settings

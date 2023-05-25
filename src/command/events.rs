@@ -98,7 +98,8 @@ fn print_events(
     include_namespace: bool,
     include_object: bool,
 ) -> Result<(), ClickError> {
-    let mut event_list: List<api::Event> = env.run_on_context(|c| c.execute_list(request))?;
+    let mut event_list: List<api::Event> =
+        env.run_on_context(|c| c.execute_list(env.get_impersonate_user(), request))?;
     if !event_list.items.is_empty() {
         event_list.items.sort_by(event_cmp);
         let mut table = Table::new();

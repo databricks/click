@@ -266,7 +266,9 @@ pub fn context_complete(prefix: &str, env: &Env) -> Vec<Pair> {
 
 pub fn namespace_completer(prefix: &str, env: &Env) -> Vec<Pair> {
     let (request, _response_body) = api::Namespace::list_namespace(Default::default()).unwrap();
-    match env.run_on_context::<_, List<api::Namespace>>(|c| c.execute_list(request)) {
+    match env.run_on_context::<_, List<api::Namespace>>(|c| {
+        c.execute_list(env.get_impersonate_user(), request)
+    }) {
         Ok(nslist) => nslist
             .items
             .into_iter()

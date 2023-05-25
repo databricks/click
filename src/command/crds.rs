@@ -62,7 +62,9 @@ fn find_desc_for(env: &mut Env, name: &str) -> Result<Option<CrdApiDesc>, ClickE
         };
         if let Some(group_version) = version {
             let (group_req, _) = crate::crd::get_api_group_resources(group_version)?;
-            match env.run_on_context::<_, GetAPIGroupResourcesResponse>(|c| c.read(group_req))? {
+            match env.run_on_context::<_, GetAPIGroupResourcesResponse>(|c| {
+                c.read(env.get_impersonate_user(), group_req)
+            })? {
                 GetAPIGroupResourcesResponse::Ok(resp) => {
                     for resource in resp.resources.iter() {
                         if resource.name == name || resource.singular_name == name {
@@ -102,7 +104,9 @@ command!(
         match api_desc {
             Some(desc) => {
                 let (request, _) = get_k8s_table(&desc.url(env.namespace.as_deref()))?;
-                match env.run_on_context::<_, GetTableResponse>(|c| c.read(request))? {
+                match env.run_on_context::<_, GetTableResponse>(|c| {
+                    c.read(env.get_impersonate_user(), request)
+                })? {
                     GetTableResponse::Ok(resp) => {
                         let kobjs = resp.print_to(
                             env,

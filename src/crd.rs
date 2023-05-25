@@ -24,7 +24,9 @@ use crate::{env::Env, error::ClickError};
 
 pub fn get_api_groups(env: &mut Env) -> Result<Vec<APIGroup>, ClickError> {
     let (request, _) = k8s_openapi::get_api_versions()?;
-    match env.run_on_context::<_, GetAPIVersionsResponse>(|c| c.read(request))? {
+    match env.run_on_context::<_, GetAPIVersionsResponse>(|c| {
+        c.read(env.get_impersonate_user(), request)
+    })? {
         GetAPIVersionsResponse::Ok(groups) => Ok(groups.groups),
         GetAPIVersionsResponse::Other(_) => Err(ClickError::CommandError(
             "Could not fetch api groups".to_string(),

@@ -131,7 +131,7 @@ impl KObj {
             ($read_func:expr, $resp_typ:ty, $resp_ok:path, $($desc_func: expr),*) => {{
                 let (request, _) = $read_func(&self.name, Default::default())?;
                 match env
-                    .run_on_context(|c| c.read::<$resp_typ>(request))
+                    .run_on_context(|c| c.read::<$resp_typ>(env.get_impersonate_user(), request))
                     .unwrap()
                 {
                     $resp_ok(t) => {
@@ -152,7 +152,7 @@ impl KObj {
                     Some(ns) => {
                         let (request, _) = $read_func(&self.name, ns, Default::default())?;
                         match env
-                            .run_on_context(|c| c.read::<$resp_typ>(request))
+                            .run_on_context(|c| c.read::<$resp_typ>(env.get_impersonate_user(), request))
                             .unwrap()
                         {
                             $resp_ok(t) => {

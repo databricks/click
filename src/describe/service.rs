@@ -37,7 +37,10 @@ pub fn service_describe(
 ) -> Result<(), ClickError> {
     let (request, _) =
         api::Endpoints::read_namespaced_endpoints(name, namespace, Default::default()).unwrap();
-    let epval = match env.run_on_context(|c| c.read(request)).unwrap() {
+    let epval = match env
+        .run_on_context(|c| c.read(env.get_impersonate_user(), request))
+        .unwrap()
+    {
         api::ReadNamespacedEndpointsResponse::Ok(resp) => serde_json::value::to_value(resp).ok(),
         _ => {
             clickwriteln!(writer, "Error fetching endpoints");
@@ -47,7 +50,10 @@ pub fn service_describe(
 
     let (request, _) =
         api::Service::read_namespaced_service(name, namespace, Default::default()).unwrap();
-    match env.run_on_context(|c| c.read(request)).unwrap() {
+    match env
+        .run_on_context(|c| c.read(env.get_impersonate_user(), request))
+        .unwrap()
+    {
         api::ReadNamespacedServiceResponse::Ok(service) => {
             if !super::maybe_full_describe_output(matches, &service, writer) {
                 super::describe_metadata(&service, table)?;

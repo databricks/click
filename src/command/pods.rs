@@ -367,7 +367,9 @@ fn print_containers(
         Default::default(),
     )?;
     match env
-        .run_on_context(|c| c.read::<api::ReadNamespacedPodResponse>(request))
+        .run_on_context(|c| {
+            c.read::<api::ReadNamespacedPodResponse>(env.get_impersonate_user(), request)
+        })
         .unwrap()
     {
         api::ReadNamespacedPodResponse::Ok(pod) => match pod

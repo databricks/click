@@ -106,17 +106,21 @@ Examples:
             .kubectl_binary
             .as_deref()
             .unwrap_or("kubectl");
-        match Command::new(kubectl_binary)
+        let mut command = Command::new(kubectl_binary);
+        let command = if let Some(user) = env.get_impersonate_user() {
+            command.arg("--as").arg(user)
+        } else {
+            &mut command
+        };
+        command
             .arg("--namespace")
             .arg(ns)
             .arg("--context")
             .arg(context)
             .arg("port-forward")
             .arg(&pod)
-            .args(ports.iter())
-            .stdout(Stdio::piped())
-            .spawn()
-        {
+            .args(ports.iter());
+        match command.stdout(Stdio::piped()).spawn() {
             Ok(mut child) => {
                 let mut stdout = child.stdout.take().unwrap();
                 let output = Arc::new(Mutex::new(String::new()));

@@ -90,7 +90,8 @@ fn do_logs<'a>(
     let (request, _resp) =
         api::Pod::read_namespaced_pod_log(obj.name(), obj.namespace.as_ref().unwrap(), opts)?;
 
-    let logs_reader_res = env.run_on_context(|c| c.execute_reader(request, timeout));
+    let logs_reader_res =
+        env.run_on_context(|c| c.execute_reader(env.get_impersonate_user(), request, timeout));
     match logs_reader_res {
         Ok(lreader) => {
             let mut reader = BufReader::new(lreader);

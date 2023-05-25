@@ -175,6 +175,7 @@ impl CommandProcessor {
         let commands: Vec<Box<dyn Cmd>> = vec![
             Box::new(crate::command::alias::Alias::new()),
             Box::new(crate::command::alias::Unalias::new()),
+            Box::new(crate::command::click::As::new()),
             Box::new(crate::command::click::Clear::new()),
             Box::new(crate::command::click::Context::new()),
             Box::new(crate::command::click::Contexts::new()),

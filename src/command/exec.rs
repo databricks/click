@@ -76,6 +76,10 @@ fn do_exec(
             targs.push("-c");
             targs.push(cont);
         }
+        if let Some(user) = env.get_impersonate_user() {
+            targs.push("--as");
+            targs.push(user);
+        }
         targs.push("--");
         targs.extend(cmd.iter());
         clickwriteln!(writer, "Starting on {} in terminal", pod.name());
@@ -91,6 +95,11 @@ fn do_exec(
             .arg("exec")
             .arg(it_arg)
             .arg(pod.name());
+        let command = if let Some(user) = env.get_impersonate_user() {
+            command.arg("--as").arg(user)
+        } else {
+            &mut command
+        };
         let command = if let Some(cont) = cont_opt {
             command.arg("-c").arg(cont).arg("--").args(cmd)
         } else {

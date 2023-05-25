@@ -32,22 +32,29 @@ use crate::k8s::UserAuth as K8SUserAuth;
 pub struct ClusterConf {
     pub cert: Option<String>,
     pub server: String,
+    pub tls_server_name: Option<String>,
     pub insecure_skip_tls_verify: bool,
 }
 
 impl ClusterConf {
-    fn new(cert: Option<String>, server: String) -> ClusterConf {
+    fn new(cert: Option<String>, server: String, tls_server_name: Option<String>) -> ClusterConf {
         ClusterConf {
             cert,
             server,
+            tls_server_name,
             insecure_skip_tls_verify: false,
         }
     }
 
-    fn new_insecure(cert: Option<String>, server: String) -> ClusterConf {
+    fn new_insecure(
+        cert: Option<String>,
+        server: String,
+        tls_server_name: Option<String>,
+    ) -> ClusterConf {
         ClusterConf {
             cert,
             server,
+            tls_server_name,
             insecure_skip_tls_verify: true,
         }
     }
@@ -69,6 +76,7 @@ pub enum UserAuth {
 
 #[derive(Debug)]
 pub struct UserConf {
+    impersonate_user: Option<String>,
     auths: Vec<UserAuth>,
 }
 
@@ -96,7 +104,10 @@ impl From<super::kubefile::UserConf> for UserConf {
         if let Some(exec_conf) = conf.exec {
             auth_vec.push(UserAuth::ExecProvider(ExecProvider::new(exec_conf)))
         }
-        UserConf { auths: auth_vec }
+        UserConf {
+            impersonate_user: conf.impersonate_user,
+            auths: auth_vec,
+        }
     }
 }
 
@@ -175,7 +186,11 @@ impl Config {
                                 br.read_to_string(&mut s).expect("Couldn't read cert");
                                 cluster_map.insert(
                                     cluster.name.clone(),
-                                    ClusterConf::new(Some(s), cluster.conf.server.clone()),
+                                    ClusterConf::new(
+                                        Some(s),
+                                        cluster.conf.server.clone(),
+                                        cluster.conf.tls_server_name.clone(),
+                                    ),
                                 );
                             }
                             Err(e) => {
@@ -197,7 +212,11 @@ impl Config {
                             })?;
                             cluster_map.insert(
                                 cluster.name.clone(),
-                                ClusterConf::new(Some(cert_pem), cluster.conf.server.clone()),
+                                ClusterConf::new(
+                                    Some(cert_pem),
+                                    cluster.conf.server.clone(),
+                                    cluster.conf.tls_server_name.clone(),
+                                ),
                             );
                         }
                         Err(e) => {
@@ -206,9 +225,17 @@ impl Config {
                     },
                     (None, None) => {
                         let conf = if cluster.conf.skip_tls {
-                            ClusterConf::new_insecure(None, cluster.conf.server.clone())
+                            ClusterConf::new_insecure(
+                                None,
+                                cluster.conf.server.clone(),
+                                cluster.conf.tls_server_name.clone(),
+                            )
                         } else {
-                            ClusterConf::new(None, cluster.conf.server.clone())
+                            ClusterConf::new(
+                                None,
+                                cluster.conf.server.clone(),
+                                cluster.conf.tls_server_name.clone(),
+                            )
                         };
                         cluster_map.insert(cluster.name.clone(), conf);
                     }
@@ -258,7 +285,11 @@ impl Config {
             .get(&context.user)
             .ok_or(ClickError::Kube(ClickErrNo::InvalidUser))?;
 
-        let endpoint = reqwest::Url::parse(&cluster.server)?;
+        let mut endpoint = reqwest::Url::parse(&cluster.server)?;
+        if cluster.tls_server_name.is_some() {
+            endpoint.set_host(cluster.tls_server_name.as_deref())?;
+        }
+
         let ca_certs = match &cluster.cert {
             Some(cert) => {
                 let reqwest_certs = get_reqwest_certs(cert)?;
@@ -305,12 +336,13 @@ impl Config {
             };
         }
 
-        k8suser.map(|user| {
+        k8suser.map(|user_auth| {
             crate::k8s::Context::new(
                 context_name,
                 endpoint,
                 ca_certs,
-                Some(user),
+                Some(user_auth),
+                user.impersonate_user.clone(),
                 click_conf.connect_timeout_secs,
                 click_conf.read_timeout_secs,
             )
@@ -429,5 +461,15 @@ bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
         let certs = get_reqwest_certs(TEST_CA_CERTS);
         assert!(certs.is_ok());
         assert!(certs.unwrap().len() == 2);
+    }
+
+    #[test]
+    fn ensure_tls_server_name() {
+        let conf = get_config_from_kubefile_test_conf();
+        let click_conf = crate::config::click::tests::get_parsed_test_click_config();
+        let ctx = conf.get_context("tls-context", &click_conf);
+        assert!(ctx.is_ok());
+        let ctx = ctx.unwrap();
+        assert!(ctx.endpoint.host_str() == Some("tls.foo"));
     }
 }

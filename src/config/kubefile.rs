@@ -76,6 +76,8 @@ pub struct ClusterConf {
     #[serde(rename = "insecure-skip-tls-verify", default = "default_false")]
     pub skip_tls: bool,
     pub server: String,
+    #[serde(rename = "tls-server-name")]
+    pub tls_server_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +112,9 @@ pub struct UserConf {
 
     pub username: Option<String>,
     pub password: Option<String>,
+
+    #[serde(rename = "as")]
+    pub impersonate_user: Option<String>,
 
     #[serde(rename = "auth-provider")]
     pub auth_provider: Option<AuthProvider>,
@@ -617,6 +622,11 @@ clusters:
     certificate-authority-data: aGVsbG8K
     server: http://nos.foo:80
   name: data
+- cluster:
+    insecure-skip-tls-verify: true
+    server: http://nos.foo:80
+    tls-server-name: tls.foo
+  name: tls-cluster
 contexts:
 - context:
     cluster: cluster1
@@ -635,6 +645,10 @@ contexts:
     cluster: data
     user: token
   name: data_context
+- context:
+    cluster: tls-cluster
+    user: as-test
+  name: tls-context
 current-context: c1ctx
 users:
 - name: c1user
@@ -688,6 +702,17 @@ users:
       - test-cluster
       command: aws
       env: null
+- name: as-test
+  user:
+    as: as-test-as-user
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - kube
+      - credentials
+      command: something
+      env: null
+      provideClusterInfo: false
 "#;
 
     pub fn get_parsed_test_config() -> Config {
@@ -756,6 +781,7 @@ users:
                     cert_data: Some("aGVsbG8K".to_string()),
                     skip_tls: false,
                     server: "http://nos.foo:80".to_string(),
+                    tls_server_name: None,
                 }
             }
         ));
@@ -768,6 +794,7 @@ users:
                     cert_data: None,
                     skip_tls: false,
                     server: "https://cluster1.test:443".to_string(),
+                    tls_server_name: None,
                 }
             }
         ));
@@ -780,6 +807,7 @@ users:
                     cert_data: None,
                     skip_tls: false,
                     server: "https://cluster2.foo:8443".to_string(),
+                    tls_server_name: None,
                 }
             }
         ));
@@ -792,6 +820,7 @@ users:
                     cert_data: None,
                     skip_tls: true,
                     server: "https://insecure.blah".to_string(),
+                    tls_server_name: None,
                 }
             }
         ));
@@ -829,6 +858,7 @@ users:
                     client_key_data: None,
                     username: None,
                     password: None,
+                    impersonate_user: None,
                     auth_provider: None,
                     exec: None,
                 }
@@ -846,6 +876,7 @@ users:
                     client_key_data: None,
                     username: None,
                     password: None,
+                    impersonate_user: None,
                     auth_provider: None,
                     exec: None,
                 }
@@ -863,6 +894,7 @@ users:
                     client_key_data: Some("KEYDATA".to_string()),
                     username: None,
                     password: None,
+                    impersonate_user: None,
                     auth_provider: None,
                     exec: None,
                 }
@@ -880,6 +912,7 @@ users:
                     client_key_data: None,
                     username: Some("user".to_string()),
                     password: Some("hunter2".to_string()),
+                    impersonate_user: None,
                     auth_provider: None,
                     exec: None,
                 }

@@ -289,7 +289,7 @@ impl Config {
         if cluster.tls_server_name.is_some() {
             endpoint.set_host(cluster.tls_server_name.as_deref())?;
         }
-        
+
         let ca_certs = match &cluster.cert {
             Some(cert) => {
                 let reqwest_certs = get_reqwest_certs(cert)?;

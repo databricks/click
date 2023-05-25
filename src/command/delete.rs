@@ -41,7 +41,8 @@ fn send_delete<D: DeserializeOwned + Debug>(
     writer: &mut ClickWriter,
     request: Request<Vec<u8>>,
 ) -> Result<(), ClickError> {
-    let r = env.run_on_context::<_, DeleteResponse<D>>(|c| c.read(request))?;
+    let r = env
+        .run_on_context::<_, DeleteResponse<D>>(|c| c.read(env.get_impersonate_user(), request))?;
     match r {
         DeleteResponse::OkStatus(_) | DeleteResponse::OkValue(_) => {
             clickwriteln!(writer, "Deleted");

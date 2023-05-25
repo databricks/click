@@ -29,7 +29,9 @@ pub fn crd_describe(
     //let ns = self.namespace.as_ref().unwrap();
     let (request, _) = crate::crd::read_namespaced_resource(name, namespace, _type, group_version)?;
     match env
-        .run_on_context(|c| c.read::<crate::crd::ReadResourceValueResponse>(request))
+        .run_on_context(|c| {
+            c.read::<crate::crd::ReadResourceValueResponse>(env.get_impersonate_user(), request)
+        })
         .unwrap()
     {
         crate::crd::ReadResourceValueResponse::Ok(t) => {

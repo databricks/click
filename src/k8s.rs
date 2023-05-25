@@ -305,6 +305,7 @@ impl Context {
 
     pub fn execute(
         &self,
+        impersonate_user: Option<&str>,
         k8sreq: http::Request<Vec<u8>>,
     ) -> Result<http::Response<Bytes>, ClickError> {
         let (parts, body) = k8sreq.into_parts();
@@ -330,10 +331,14 @@ impl Context {
             _ => unimplemented!(),
         };
 
-        let req = match self.impersonate_user.as_ref() {
-            Some(impersonate_user) => req.header("Impersonate-User", impersonate_user),
-            None => req,
+        let req = if let Some(user) = impersonate_user {
+            req.header("Impersonate-User", user)
+        } else if let Some(user) = self.impersonate_user.as_ref() {
+            req.header("Impersonate-User", user)
+        } else {
+            req
         };
+
         let req = req.headers(parts.headers).body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {
@@ -428,9 +433,10 @@ impl Context {
 
     pub fn read<T: k8s_openapi::Response + Debug>(
         &self,
+        impersonate_user: Option<&str>,
         k8sreq: http::Request<Vec<u8>>,
     ) -> Result<T, ClickError> {
-        let response = self.execute(k8sreq)?;
+        let response = self.execute(impersonate_user, k8sreq)?;
         let status_code: http::StatusCode = response.status();
         match k8s_openapi::Response::try_from_parts(status_code, response.body()) {
             Ok((res, _)) => Ok(res),
@@ -441,9 +447,10 @@ impl Context {
 
     pub fn execute_list<T: ListableResource + for<'de> Deserialize<'de> + Debug>(
         &self,
+        impersonate_user: Option<&str>,
         k8sreq: http::Request<Vec<u8>>,
     ) -> Result<List<T>, ClickError> {
-        let response = self.execute(k8sreq)?;
+        let response = self.execute(impersonate_user, k8sreq)?;
         let status_code: http::StatusCode = response.status();
 
         let res_list: List<T> =

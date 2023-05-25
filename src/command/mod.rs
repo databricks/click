@@ -103,7 +103,8 @@ where
         }
     };
 
-    let list_res = env.run_on_context::<_, List<T>>(|c| c.execute_list(request));
+    let list_res =
+        env.run_on_context::<_, List<T>>(|c| c.execute_list(env.get_impersonate_user(), request));
     if list_res.is_err() {
         env.clear_last_objs();
     }

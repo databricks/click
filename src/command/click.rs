@@ -127,6 +127,53 @@ command!(
 );
 
 command!(
+    As,
+    "as",
+    "Set the username to impersonate for requests. With no arg, shows the current setting",
+    |clap: ClapCommand<'static>| {
+        clap.arg(
+            Arg::new("user")
+                .help("The name of the user to impersonate")
+                .required(false)
+                .index(1),
+        )
+        .arg(
+            Arg::new("clear")
+                .short('c')
+                .long("clear")
+                .help("revert to the default user"),
+        )
+    },
+    vec!["as"],
+    noop_complete!(),
+    no_named_complete!(),
+    |matches, env, writer| {
+        if matches.is_present("clear") {
+            env.set_impersonate_user(None);
+            clickwriteln!(writer, "Impersonate user cleared");
+        } else if matches.is_present("user") {
+            let user = matches.value_of("user").map(|s| s.to_string());
+            clickwriteln!(
+                writer,
+                "Set impersonate user to: {}",
+                user.as_deref().unwrap()
+            );
+            env.set_impersonate_user(user);
+        } else {
+            match env.get_impersonate_user() {
+                Some(user) => {
+                    clickwriteln!(writer, "Impersonate user: {}", user);
+                }
+                None => {
+                    clickwriteln!(writer, "Using default user from config");
+                }
+            }
+        }
+        Ok(())
+    }
+);
+
+command!(
     Quit,
     "quit",
     "Quit click",

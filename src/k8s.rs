@@ -166,7 +166,7 @@ fn get_id_from_data(
 
 pub struct Context {
     pub name: String,
-    endpoint: Url,
+    pub endpoint: Url,
     client: RefCell<Client>,
     log_client: RefCell<Client>,
     root_cas: Option<Vec<Certificate>>,

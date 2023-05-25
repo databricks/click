@@ -462,4 +462,14 @@ bW1EDp3zdHSo1TRJ6V6e6bR64eVaH4QwnNOfpSXY
         assert!(certs.is_ok());
         assert!(certs.unwrap().len() == 2);
     }
+
+    #[test]
+    fn ensure_tls_server_name() {
+        let conf = get_config_from_kubefile_test_conf();
+        let click_conf = crate::config::click::tests::get_parsed_test_click_config();
+        let ctx = conf.get_context("tls-context", &click_conf);
+        assert!(ctx.is_ok());
+        let ctx = ctx.unwrap();
+        assert!(ctx.endpoint.host_str() == Some("tls.foo"));
+    }
 }

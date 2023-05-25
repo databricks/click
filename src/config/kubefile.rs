@@ -76,6 +76,8 @@ pub struct ClusterConf {
     #[serde(rename = "insecure-skip-tls-verify", default = "default_false")]
     pub skip_tls: bool,
     pub server: String,
+    #[serde(rename = "tls-server-name")]
+    pub tls_server_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +112,9 @@ pub struct UserConf {
 
     pub username: Option<String>,
     pub password: Option<String>,
+
+    #[serde(rename = "as")]
+    pub impersonate_user: Option<String>,
 
     #[serde(rename = "auth-provider")]
     pub auth_provider: Option<AuthProvider>,

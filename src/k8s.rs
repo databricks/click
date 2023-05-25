@@ -171,6 +171,7 @@ pub struct Context {
     log_client: RefCell<Client>,
     root_cas: Option<Vec<Certificate>>,
     auth: RefCell<Option<UserAuth>>,
+    impersonate_user: Option<String>,
     connect_timeout_secs: u32,
     read_timeout_secs: u32,
 }
@@ -181,6 +182,7 @@ impl Context {
         endpoint: Url,
         root_cas: Option<Vec<Certificate>>,
         auth: Option<UserAuth>,
+        impersonate_user: Option<String>,
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
     ) -> Context {
@@ -207,6 +209,7 @@ impl Context {
             log_client,
             root_cas,
             auth: client_auth,
+            impersonate_user,
             connect_timeout_secs,
             read_timeout_secs,
         }
@@ -327,6 +330,10 @@ impl Context {
             _ => unimplemented!(),
         };
 
+        let req = match self.impersonate_user.as_ref() {
+            Some(impersonate_user) => req.header("Impersonate-User", impersonate_user),
+            None => req,
+        };
         let req = req.headers(parts.headers).body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {

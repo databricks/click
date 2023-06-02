@@ -20,10 +20,10 @@ use crate::output::ClickWriter;
 use crate::parser::{try_parse_csl, try_parse_range, Parser};
 use crate::values::val_str;
 
-use rustyline::Editor;
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
+use rustyline::Editor;
 
 use crate::env::Env;
 
@@ -119,8 +119,12 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
 }
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
-fn get_editor(config: rustyconfig::Config, hist_path: &Path) -> Editor<ClickHelper, DefaultHistory> {
-    let mut rl = Editor::<ClickHelper, DefaultHistory>::with_config(config).expect("Could not make editor");
+fn get_editor(
+    config: rustyconfig::Config,
+    hist_path: &Path,
+) -> Editor<ClickHelper, DefaultHistory> {
+    let mut rl =
+        Editor::<ClickHelper, DefaultHistory>::with_config(config).expect("Could not make editor");
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
         vec![

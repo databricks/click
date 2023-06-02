@@ -26,7 +26,7 @@ clap = { version = "^3.1", features = ["cargo", "color"] }
 comfy-table = "^6.0"
 crossterm = "^0.26"
 ctrlc = "^3.1"
-dirs = "^4.0"
+dirs = "^5.0"
 duct = "^0.13"
 duct_sh = "^0.13"
 env_logger = "^0.9"

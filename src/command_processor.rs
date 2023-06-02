@@ -22,6 +22,7 @@ use crate::values::val_str;
 
 use rustyline::config as rustyconfig;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use rustyline::Editor;
 
 use crate::env::Env;
@@ -118,8 +119,12 @@ fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
 }
 
 // see comment on ClickCompleter::new for why a raw pointer is needed
-fn get_editor(config: rustyconfig::Config, hist_path: &Path) -> Editor<ClickHelper> {
-    let mut rl = Editor::<ClickHelper>::with_config(config).expect("Could not make editor");
+fn get_editor(
+    config: rustyconfig::Config,
+    hist_path: &Path,
+) -> Editor<ClickHelper, DefaultHistory> {
+    let mut rl =
+        Editor::<ClickHelper, DefaultHistory>::with_config(config).expect("Could not make editor");
     rl.set_helper(Some(ClickHelper::new(
         CommandProcessor::get_command_vec(),
         vec![
@@ -137,7 +142,7 @@ fn get_editor(config: rustyconfig::Config, hist_path: &Path) -> Editor<ClickHelp
 
 pub struct CommandProcessor {
     env: Rc<Env>,
-    rl: Editor<ClickHelper>,
+    rl: Editor<ClickHelper, DefaultHistory>,
     hist_path: PathBuf,
     commands: Vec<Box<dyn Cmd>>,
 }
@@ -271,7 +276,9 @@ impl CommandProcessor {
         }
         let lstr = if first_non_whitespace == 0 {
             // bash semantics: don't add to history if start with space
-            self.rl.add_history_entry(line);
+            if let Err(e) = self.rl.add_history_entry(line) {
+                println!("Couldn't write history entry: {}", e);
+            }
             line
         } else {
             &line[first_non_whitespace..]
@@ -544,6 +551,7 @@ mod tests {
     use crate::kobj::{KObj, ObjType};
 
     use rustyline::completion::Pair as RustlinePair;
+    use rustyline::history::History;
 
     use std::io::Read;
     use std::path::PathBuf;

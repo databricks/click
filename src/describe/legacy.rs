@@ -18,6 +18,7 @@
 use crate::error::ClickError;
 use crate::values::{val_str, val_str_opt, val_u64};
 
+use base64::engine::{general_purpose::STANDARD, Engine};
 use chrono::offset::Local;
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -68,7 +69,7 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
                     };
 
                     let computed_val: Cow<'a, str> = if is_service_token {
-                        match ::base64::decode(val.as_str().unwrap()) {
+                        match STANDARD.decode(val.as_str().unwrap()) {
                             Ok(dec) => str::from_utf8(&dec[..])
                                 .map(|s| s.to_string())
                                 .unwrap_or_else(|_e| "Invalid utf-8 data".to_string())
@@ -76,7 +77,7 @@ fn keyval_str<'a>(v: &'a Value, parent: &str, secret_vals: bool) -> Cow<'a, str>
                             Err(_) => "Could not decode secret".into(),
                         }
                     } else if secret_vals {
-                        match ::base64::decode(val.as_str().unwrap()) {
+                        match STANDARD.decode(val.as_str().unwrap()) {
                             Ok(dec) => format!("{} bytes", dec.len()).into(),
                             Err(_) => "Could not decode secret".into(),
                         }

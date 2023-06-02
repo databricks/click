@@ -15,6 +15,8 @@
 //! Code to represent the data found in .kube/config files after it's deserialized, validated, and
 //! so on.  Data in here is what gets passed around to the rest of Click.
 
+use base64::engine::{general_purpose::STANDARD, Engine};
+
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::From;
@@ -202,7 +204,7 @@ impl Config {
                             }
                         }
                     }
-                    (None, Some(cert_data)) => match ::base64::decode(cert_data.as_str()) {
+                    (None, Some(cert_data)) => match STANDARD.decode(cert_data.as_str()) {
                         Ok(mut cert) => {
                             cert.retain(|&i| i != 0);
                             let cert_pem = String::from_utf8(cert).map_err(|e| {

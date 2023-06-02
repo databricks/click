@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use base64::engine::{general_purpose::STANDARD, Engine};
 use bytes::Bytes;
 use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;
@@ -83,8 +84,8 @@ impl UserAuth {
         cert: String,
         endpoint: &Url,
     ) -> Result<UserAuth, ClickError> {
-        let key_decoded = ::base64::decode(key)?;
-        let cert_decoded = ::base64::decode(cert)?;
+        let key_decoded = STANDARD.decode(key)?;
+        let cert_decoded = STANDARD.decode(cert)?;
         let pkcs12 = Context::use_pkcs12(endpoint);
         let id = get_id_from_data(key_decoded, cert_decoded, pkcs12)?;
         Ok(UserAuth::Ident(id))
@@ -110,26 +111,26 @@ fn pkcs1to8(pkcs1: &[u8]) -> Vec<u8> {
 fn get_id_from_pkcs12(key: Vec<u8>, cert: Vec<u8>) -> Result<Identity, ClickError> {
     let key_pem = pem::parse(key)?;
 
-    let key_der = match key_pem.tag.as_str() {
+    let key_der = match key_pem.tag() {
         "RSA PRIVATE KEY" => {
             // pkcs#1 pem, need to convert to pkcs#8
-            pkcs1to8(&key_pem.contents)
+            pkcs1to8(key_pem.contents())
         }
         "PRIVATE KEY" => {
             // pkcs#8 pem, use as is
-            key_pem.contents
+            key_pem.contents().to_vec()
         }
         _ => {
             return Err(ClickError::ConfigFileError(format!(
                 "Unknown key type: {}",
-                key_pem.tag
+                key_pem.tag()
             )));
         }
     };
 
     let cert_pem = pem::parse(cert)?;
 
-    let pfx = p12::PFX::new(&cert_pem.contents, &key_der, None, "", "")
+    let pfx = p12::PFX::new(cert_pem.contents(), &key_der, None, "", "")
         .ok_or_else(|| ClickError::ConfigFileError("Could not parse pkcs12 data".to_string()))?;
 
     let pkcs12der = pfx.to_der();

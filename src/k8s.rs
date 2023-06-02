@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use base64::engine::{general_purpose::STANDARD, Engine};
 use bytes::Bytes;
 use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;
@@ -83,8 +84,8 @@ impl UserAuth {
         cert: String,
         endpoint: &Url,
     ) -> Result<UserAuth, ClickError> {
-        let key_decoded = ::base64::decode(key)?;
-        let cert_decoded = ::base64::decode(cert)?;
+        let key_decoded = STANDARD.decode(key)?;
+        let cert_decoded = STANDARD.decode(cert)?;
         let pkcs12 = Context::use_pkcs12(endpoint);
         let id = get_id_from_data(key_decoded, cert_decoded, pkcs12)?;
         Ok(UserAuth::Ident(id))

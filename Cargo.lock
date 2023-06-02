@@ -28,12 +28,13 @@ dependencies = [
 
 [[package]]
 name = "atomicwrites"
-version = "0.3.1"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb8f2cd6962fa53c0e2a9d3f97eaa7dbd1e3cbbeeb4745403515b42ae07b3ff6"
+checksum = "c1163d9d7c51de51a2b79d6df5e8888d11e9df17c752ce4a285fb6ca1580734e"
 dependencies = [
+ "rustix",
  "tempfile",
- "winapi",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -178,7 +179,7 @@ name = "click"
 version = "0.6.2"
 dependencies = [
  "atomicwrites",
- "base64 0.13.1",
+ "base64 0.21.2",
  "bytes",
  "chrono",
  "clap",

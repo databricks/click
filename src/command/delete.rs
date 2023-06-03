@@ -304,17 +304,17 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let grace = if matches.is_present("force") {
+        let grace = if matches.contains_id("force") {
             Some(0)
-        } else if matches.is_present("now") {
+        } else if matches.contains_id("now") {
             Some(1)
         } else {
-            matches.value_of("grace").map(|grace| {
+            matches.get_one::<String>("grace").map(|s| s.as_str()).map(|grace| {
                 grace.parse::<i64>().unwrap() // safe as validated
             })
         };
 
-        let propagation_policy = matches.value_of("cascade").map(|cascade| {
+        let propagation_policy = matches.get_one::<String>("cascade").map(|s| s.as_str()).map(|cascade| {
             // k8s requires lowercase with first uppercase
             let lower = cascade.to_lowercase();
             uppercase_first(lower.as_str())

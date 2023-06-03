@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use clap::{Arg, Command as ClapCommand};
+use clap::builder::ValueParser;
+use clap::error::{Error, ErrorKind};
 use comfy_table::{Cell, CellAlignment, Table};
 use rustyline::completion::Pair as RustlinePair;
 
@@ -31,6 +33,29 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// function to validate passed port arg
+fn parse_ports(value: &str) -> std::result::Result<String, Error> {
+    let parts: Vec<&str> = value.split(':').collect();
+    if parts.len() > 2 {
+        Err(Error::raw(ErrorKind::InvalidValue,
+            format!(
+                "Invalid port specification, can only contain one ':'"
+            ))
+        )
+    } else {
+        for part in parts {
+            if !part.is_empty() {
+              if let Err(_) = part.parse::<u32>() {
+                  return Err(Error::raw(ErrorKind::InvalidValue,
+                      format!("{part} is not a valid portnumber")
+                  ))
+              }
+            }
+      }
+        Ok(value.to_owned())
+    }
+}
+
 command!(
     PortForward,
     "port-forward",
@@ -40,23 +65,7 @@ command!(
             Arg::new("ports")
                 .help("the ports to forward")
                 .multiple_values(true)
-                .validator(|s: &str| {
-                    let parts: Vec<&str> = s.split(':').collect();
-                    if parts.len() > 2 {
-                        Err(format!(
-                            "Invalid port specification '{s}', can only contain one ':'"
-                        ))
-                    } else {
-                        for part in parts {
-                            if !part.is_empty() {
-                                if let Err(e) = part.parse::<u32>() {
-                                    return Err(e.to_string());
-                                }
-                            }
-                        }
-                        Ok(())
-                    }
-                })
+                .value_parser(ValueParser::from(parse_ports))
                 .required(true)
                 .index(1)
         )
@@ -79,7 +88,8 @@ Examples:
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let ports: Vec<_> = matches.values_of("ports").unwrap().collect(); // unwrap safe, required
+        let ports = matches.get_many::<String>("ports").unwrap().map(|s| s.as_str());
+        //let ports: Vec<_> = matches.get_many("ports").unwrap().copied().collect(); // unwrap safe, required
 
         let (pod, ns) = {
             let epod = env.current_pod();
@@ -119,7 +129,7 @@ Examples:
             .arg(context)
             .arg("port-forward")
             .arg(&pod)
-            .args(ports.iter());
+            .args(ports.clone());
         match command.stdout(Stdio::piped()).spawn() {
             Ok(mut child) => {
                 let mut stdout = child.stdout.take().unwrap();
@@ -147,13 +157,13 @@ Examples:
                     }
                 });
 
-                let pvec: Vec<String> = ports.iter().map(|s| (*s).to_owned()).collect();
-                clickwriteln!(writer, "Forwarding port(s): {}", pvec.join(", "));
+                let ports: Vec<String> = ports.map(|s| s.to_string()).collect();
+                clickwriteln!(writer, "Forwarding port(s): {}", ports.join(", "));
 
                 env.add_port_forward(env::PortForward {
                     child,
                     pod,
-                    ports: pvec,
+                    ports,
                     output,
                 });
             }
@@ -226,13 +236,13 @@ command!(
             Arg::new("action")
                 .help("Action to take")
                 .required(false)
-                .possible_values(["list", "output", "stop"])
+                .value_parser(["list", "output", "stop"])
                 .index(1)
         )
         .arg(
             Arg::new("index")
                 .help("Index (from 'port-forwards list') of port forward to take action on")
-                .validator(|s: &str| s.parse::<usize>().map(|_| ()).map_err(|e| e.to_string()))
+                .value_parser(clap::value_parser!(usize))
                 .required(false)
                 .index(2)
         )
@@ -248,12 +258,11 @@ command!(
     vec![&completer::portforwardaction_values_completer],
     no_named_complete!(),
     |matches, env, writer| {
-        let stop = matches.is_present("action") && matches.value_of("action").unwrap() == "stop";
+        let stop = matches.contains_id("action") && matches.get_one::<String>("action").map(|s| s.as_str()).unwrap() == "stop";
         let output =
-            matches.is_present("action") && matches.value_of("action").unwrap() == "output";
-        if let Some(index) = matches.value_of("index") {
-            let i = index.parse::<usize>().unwrap();
-            match env.get_port_forward(i) {
+            matches.contains_id("action") && matches.get_one::<String>("action").map(|s| s.as_str()).unwrap() == "output";
+        if let Some(i) = matches.get_one::<usize>("index") {
+            match env.get_port_forward(*i) {
                 Some(pf) => {
                     if stop {
                         clickwrite!(writer, "Stop port-forward: ");
@@ -276,7 +285,7 @@ command!(
                 let mut conf = String::new();
                 if io::stdin().read_line(&mut conf).is_ok() {
                     if conf.trim() == "y" || conf.trim() == "yes" {
-                        match env.stop_port_forward(i) {
+                        match env.stop_port_forward(*i) {
                             Ok(()) => {
                                 clickwriteln!(writer, "Stopped");
                             }

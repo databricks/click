@@ -77,9 +77,9 @@ Examples:
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        if matches.is_present("alias") {
-            let alias = matches.value_of("alias").unwrap(); // safe, checked above
-            let expanded = matches.value_of("expanded").unwrap(); // safe, required with alias
+        if matches.contains_id("alias") {
+            let alias = matches.get_one::<String>("alias").map(|s| s.as_str()).unwrap(); // safe, checked above
+            let expanded = matches.get_one::<String>("expanded").map(|s| s.as_str()).unwrap(); // safe, required with alias
             env.add_alias(config::Alias {
                 alias: alias.to_owned(),
                 expanded: expanded.to_owned(),
@@ -107,7 +107,7 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let alias = matches.value_of("alias").unwrap(); // safe, required
+        let alias = matches.get_one::<String>("alias").map(|s| s.as_str()).unwrap(); // safe, required
         if env.remove_alias(alias) {
             clickwriteln!(writer, "unaliased: {}", alias);
         } else {

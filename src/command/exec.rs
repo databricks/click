@@ -196,8 +196,8 @@ command!(
             ClickError::CommandError("Need an active context in order to exec.".to_string())
         })?;
         let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
-        let tty = if matches.is_present("tty") {
-            if let Some(v) = matches.value_of("tty") {
+        let tty = if matches.contains_id("tty") {
+            if let Some(v) = matches.get_one::<String>("tty").map(|s| s.as_str()) {
                 // already validated
                 v.parse::<bool>().unwrap()
             } else {
@@ -206,8 +206,8 @@ command!(
         } else {
             true
         };
-        let stdin = if matches.is_present("stdin") {
-            if let Some(v) = matches.value_of("stdin") {
+        let stdin = if matches.contains_id("stdin") {
+            if let Some(v) = matches.get_one::<String>("stdin").map(|s| s.as_str()) {
                 // already validated
                 v.parse::<bool>().unwrap()
             } else {
@@ -233,9 +233,9 @@ command!(
                         &context.name,
                         &cmd,
                         it_arg,
-                        &matches.value_of("container"),
-                        &matches.value_of("terminal"),
-                        matches.is_present("terminal"),
+                        &matches.get_one::<String>("container").map(|s| s.as_str()),
+                        &matches.get_one::<String>("terminal").map(|s| s.as_str()),
+                        matches.contains_id("terminal"),
                         writer,
                     )
                 } else {

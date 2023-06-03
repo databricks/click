@@ -109,17 +109,12 @@ where
         env.clear_last_objs();
     }
     let list = list_res?;
-
-    let mut flags: Vec<&str> = if matches.is_valid_arg("show") {
-        match matches.values_of("show") {
-            Some(v) => v.collect(),
-            None => vec![],
-        }
-    } else {
-        vec![]
+    let mut flags: Vec<&str> = match matches.try_get_many::<String>("show") {
+        Ok(Some(v)) => v.map(|s| s.as_str()).collect(),
+        _ => vec![],
     };
 
-    let sort = matches.value_of("sort").map(|s| {
+    let sort = matches.get_one::<String>("sort").map(|s| s.as_str()).map(|s| {
         let colname = s.to_lowercase();
         if let Some(col) = mapped_val(&colname, col_map) {
             command_def::SortCol(col)
@@ -145,13 +140,8 @@ where
         if env.namespace.is_none() && mapped_val("namespace", ecm).is_some() {
             flags.push("namespace");
         }
-
-        let labels_present = if matches.is_valid_arg("labels") {
-            matches.is_present("labels")
-        } else {
-            false
-        };
-        command_def::add_extra_cols(&mut cols, labels_present, flags, ecm);
+        let labels_present = matches.try_contains_id("labels").unwrap_or(false);
+        command_def::add_extra_cols(&mut cols, labels_present, flags.iter().map(AsRef::as_ref).collect(), ecm);
     }
 
     handle_list_result(
@@ -162,7 +152,7 @@ where
         extractors,
         regex,
         sort,
-        matches.is_present("reverse"),
+        matches.contains_id("reverse"),
         get_kobj,
     )
 }
@@ -179,13 +169,6 @@ pub fn uppercase_first(s: &str) -> String {
 /// a clap validator for duration
 fn valid_duration(s: &str) -> Result<(), String> {
     parse_duration(s).map(|_| ()).map_err(|e| e.to_string())
-}
-
-/// a clap validator for rfc3339 dates
-fn valid_date(s: &str) -> Result<(), String> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// a clap validator for u32

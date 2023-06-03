@@ -64,7 +64,7 @@ command!(
     no_named_complete!(),
     |matches, env, writer| {
         let mut include_events = env.click_config.describe_include_events;
-        if let Some(b) = matches.value_of("include_events") {
+        if let Some(b) = matches.get_one::<String>("include_events").map(|s| s.as_str()) {
             include_events = b.parse().unwrap(); // safe, validated to be true/false
         }
         env.apply_to_selection(

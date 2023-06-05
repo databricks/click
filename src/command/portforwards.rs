@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{Arg, Command as ClapCommand};
 use clap::builder::ValueParser;
 use clap::error::{Error, ErrorKind};
+use clap::{Arg, Command as ClapCommand};
 use comfy_table::{Cell, CellAlignment, Table};
 use rustyline::completion::Pair as RustlinePair;
 
@@ -37,21 +37,21 @@ use std::thread;
 fn parse_ports(value: &str) -> std::result::Result<String, Error> {
     let parts: Vec<&str> = value.split(':').collect();
     if parts.len() > 2 {
-        Err(Error::raw(ErrorKind::InvalidValue,
-            format!(
-                "Invalid port specification, can only contain one ':'"
-            ))
-        )
+        Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!("Invalid port specification, can only contain one ':'"),
+        ))
     } else {
         for part in parts {
             if !part.is_empty() {
-              if let Err(_) = part.parse::<u32>() {
-                  return Err(Error::raw(ErrorKind::InvalidValue,
-                      format!("{part} is not a valid portnumber")
-                  ))
-              }
+                if let Err(_) = part.parse::<u32>() {
+                    return Err(Error::raw(
+                        ErrorKind::InvalidValue,
+                        format!("{part} is not a valid portnumber"),
+                    ));
+                }
             }
-      }
+        }
         Ok(value.to_owned())
     }
 }
@@ -88,7 +88,10 @@ Examples:
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let ports = matches.get_many::<String>("ports").unwrap().map(|s| s.as_str());
+        let ports = matches
+            .get_many::<String>("ports")
+            .unwrap()
+            .map(|s| s.as_str());
         //let ports: Vec<_> = matches.get_many("ports").unwrap().copied().collect(); // unwrap safe, required
 
         let (pod, ns) = {
@@ -258,9 +261,18 @@ command!(
     vec![&completer::portforwardaction_values_completer],
     no_named_complete!(),
     |matches, env, writer| {
-        let stop = matches.contains_id("action") && matches.get_one::<String>("action").map(|s| s.as_str()).unwrap() == "stop";
-        let output =
-            matches.contains_id("action") && matches.get_one::<String>("action").map(|s| s.as_str()).unwrap() == "output";
+        let stop = matches.contains_id("action")
+            && matches
+                .get_one::<String>("action")
+                .map(|s| s.as_str())
+                .unwrap()
+                == "stop";
+        let output = matches.contains_id("action")
+            && matches
+                .get_one::<String>("action")
+                .map(|s| s.as_str())
+                .unwrap()
+                == "output";
         if let Some(i) = matches.get_one::<usize>("index") {
             match env.get_port_forward(*i) {
                 Some(pf) => {

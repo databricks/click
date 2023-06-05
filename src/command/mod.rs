@@ -113,26 +113,29 @@ where
         _ => vec![],
     };
 
-    let sort = matches.get_one::<String>("sort").map(|s| s.as_str()).map(|s| {
-        let colname = s.to_lowercase();
-        if let Some(col) = mapped_val(&colname, col_map) {
-            command_def::SortCol(col)
-        } else if let Some(ecm) = extra_col_map {
-            let mut func = None;
-            for (flag, col) in ecm.iter() {
-                if flag.eq(&colname) {
-                    flags.push(flag);
-                    func = Some(command_def::SortCol(col));
+    let sort = matches
+        .get_one::<String>("sort")
+        .map(|s| s.as_str())
+        .map(|s| {
+            let colname = s.to_lowercase();
+            if let Some(col) = mapped_val(&colname, col_map) {
+                command_def::SortCol(col)
+            } else if let Some(ecm) = extra_col_map {
+                let mut func = None;
+                for (flag, col) in ecm.iter() {
+                    if flag.eq(&colname) {
+                        flags.push(flag);
+                        func = Some(command_def::SortCol(col));
+                    }
                 }
+                match func {
+                    Some(f) => f,
+                    None => panic!("Shouldn't be allowed to ask to sort by: {colname}"),
+                }
+            } else {
+                panic!("Shouldn't be allowed to ask to sort by: {colname}");
             }
-            match func {
-                Some(f) => f,
-                None => panic!("Shouldn't be allowed to ask to sort by: {colname}"),
-            }
-        } else {
-            panic!("Shouldn't be allowed to ask to sort by: {colname}");
-        }
-    });
+        });
 
     if let Some(ecm) = extra_col_map {
         // if we're not in a namespace, we want to add a namespace col if it's in extra_col_map
@@ -140,7 +143,12 @@ where
             flags.push("namespace");
         }
         let labels_present = matches.try_contains_id("labels").unwrap_or(false);
-        command_def::add_extra_cols(&mut cols, labels_present, flags.iter().map(AsRef::as_ref).collect(), ecm);
+        command_def::add_extra_cols(
+            &mut cols,
+            labels_present,
+            flags.iter().map(AsRef::as_ref).collect(),
+            ecm,
+        );
     }
 
     handle_list_result(
@@ -164,7 +172,6 @@ pub fn uppercase_first(s: &str) -> String {
         Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
     }
 }
-
 
 // table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.

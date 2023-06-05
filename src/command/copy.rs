@@ -87,7 +87,6 @@ fn do_copy(
     }
 }
 
-
 command!(
     Copy,
     "copy",
@@ -112,7 +111,7 @@ command!(
                 .long("direction")
                 .help("Should the src file be copied to or from the pod.")
                 .takes_value(true)
-                .possible_values(["to", "from"])
+                .value_parser(["to", "from"])
                 .default_value("from")
         )
         .arg(
@@ -161,9 +160,19 @@ Examples:
         let context = env.context.as_ref().ok_or_else(|| {
             ClickError::CommandError("Need an active context in order to copy.".to_string())
         })?;
-        let src = matches.get_one::<String>("src").map(|s| s.as_str()).unwrap(); // safe, required
-        let dest = matches.get_one::<String>("dest").map(|s| s.as_str()).unwrap(); // safe, required
-        let from = matches.get_one::<String>("direction").map(|s| s.as_str()).unwrap() == "from"; // safe, has default
+        let src = matches
+            .get_one::<String>("src")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
+        let dest = matches
+            .get_one::<String>("dest")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
+        let from = matches
+            .get_one::<String>("direction")
+            .map(|s| s.as_str())
+            .unwrap()
+            == "from"; // safe, has default
         let retries = matches.get_one::<i32>("retries").unwrap(); // safe, has default
         env.apply_to_selection(
             writer,

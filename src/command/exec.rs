@@ -190,7 +190,11 @@ command!(
         let context = env.context.as_ref().ok_or_else(|| {
             ClickError::CommandError("Need an active context in order to exec.".to_string())
         })?;
-        let cmd: Vec<&str> = matches.get_many::<String>("command").unwrap().map(|s| s.as_str()).collect(); // safe as required
+        let cmd: Vec<&str> = matches
+            .get_many::<String>("command")
+            .unwrap()
+            .map(|s| s.as_str())
+            .collect(); // safe as required
         let tty = matches.contains_id("tty") && *matches.get_one::<bool>("tty").unwrap();
         let stdin = matches.contains_id("stdin") && *matches.get_one::<bool>("stdin").unwrap();
         let it_arg = match (tty, stdin) {

@@ -22,7 +22,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
-    command::{uppercase_first},
+    command::uppercase_first,
     completer,
     env::Env,
     error::ClickError,
@@ -312,11 +312,14 @@ command!(
             matches.get_one::<u32>("grace").map(|g| *g as i64)
         };
 
-        let propagation_policy = matches.get_one::<String>("cascade").map(|s| s.as_str()).map(|cascade| {
-            // k8s requires lowercase with first uppercase
-            let lower = cascade.to_lowercase();
-            uppercase_first(lower.as_str())
-        });
+        let propagation_policy = matches
+            .get_one::<String>("cascade")
+            .map(|s| s.as_str())
+            .map(|cascade| {
+                // k8s requires lowercase with first uppercase
+                let lower = cascade.to_lowercase();
+                uppercase_first(lower.as_str())
+            });
 
         let delete_options: DeleteOptional = DeleteOptional {
             propagation_policy: propagation_policy.as_deref(),

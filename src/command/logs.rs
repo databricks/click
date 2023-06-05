@@ -247,7 +247,9 @@ command!(
                 Arg::new("sinceTime")
                     .long("since-time")
                     .conflicts_with("since")
-                    .value_parser(clap::builder::ValueParser::from(chrono::DateTime::parse_from_rfc3339))
+                    .value_parser(clap::builder::ValueParser::from(
+                        chrono::DateTime::parse_from_rfc3339,
+                    ))
                     .help(
                         "Only return logs newer than specified RFC3339 date. Eg:
  1996-12-19T16:39:57-08:00",
@@ -338,8 +340,13 @@ command!(
             opts.since_seconds = Some(dur);
         }
         if matches.contains_id("sinceTime") {
-            let specified =
-                DateTime::parse_from_rfc3339(matches.get_one::<String>("sinceTime").map(|s| s.as_str()).unwrap()).unwrap();
+            let specified = DateTime::parse_from_rfc3339(
+                matches
+                    .get_one::<String>("sinceTime")
+                    .map(|s| s.as_str())
+                    .unwrap(),
+            )
+            .unwrap();
             let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
             opts.since_seconds = Some(dur.num_seconds());
         }

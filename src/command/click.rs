@@ -152,7 +152,10 @@ command!(
             env.set_impersonate_user(None);
             clickwriteln!(writer, "Impersonate user cleared");
         } else if matches.contains_id("user") {
-            let user = matches.get_one::<String>("user").map(|s| s.as_str()).map(|s| s.to_string());
+            let user = matches
+                .get_one::<String>("user")
+                .map(|s| s.as_str())
+                .map(|s| s.to_string());
             clickwriteln!(
                 writer,
                 "Set impersonate user to: {}",
@@ -230,7 +233,7 @@ command!(
     }
 );
 
-pub const SET_OPTS: &[&str] = &[
+pub const SET_OPTS: [&str; 7] = [
     "completion_type",
     "edit_mode",
     "editor",
@@ -250,7 +253,7 @@ command!(
                 .help("The click option to set")
                 .required(true)
                 .index(1)
-                .possible_values(SET_OPTS),
+                .value_parser(SET_OPTS),
         )
         .arg(
             Arg::new("value")
@@ -274,8 +277,14 @@ Example:
     vec![&completer::setoptions_values_completer],
     no_named_complete!(),
     |matches, env, writer| {
-        let option = matches.get_one::<String>("option").map(|s| s.as_str()).unwrap(); // safe, required
-        let value = matches.get_one::<String>("value").map(|s| s.as_str()).unwrap(); // safe, required
+        let option = matches
+            .get_one::<String>("option")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
+        let value = matches
+            .get_one::<String>("value")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
         let mut failed = false;
         match option {
             "completion_type" => match value {
@@ -335,7 +344,7 @@ Example:
     }
 );
 
-pub const UNSET_OPTS: &[&str] = &["editor", "kubectl_binary", "terminal", "range_separator"];
+pub const UNSET_OPTS: [&str; 4] = ["editor", "kubectl_binary", "terminal", "range_separator"];
 
 command!(
     UnSetCmd,
@@ -347,14 +356,17 @@ command!(
                 .help("The click option to unset")
                 .required(true)
                 .index(1)
-                .possible_values(UNSET_OPTS),
+                .value_parser(UNSET_OPTS),
         )
     },
     vec!["unset"],
     vec![&completer::unsetoptions_values_completer],
     no_named_complete!(),
     |matches, env, writer| {
-        let option = matches.get_one::<String>("option").map(|s| s.as_str()).unwrap(); // safe, required
+        let option = matches
+            .get_one::<String>("option")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
         let mut failed = false;
         match option {
             "editor" => {

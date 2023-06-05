@@ -99,7 +99,10 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let name = matches.get_one::<String>("name").map(|s| s.as_str()).unwrap(); // safe: required
+        let name = matches
+            .get_one::<String>("name")
+            .map(|s| s.as_str())
+            .unwrap(); // safe: required
         let api_desc = find_desc_for(env, name)?;
         match api_desc {
             Some(desc) => {

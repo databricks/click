@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{Arg, Command as ClapCommand};
 use clap::builder::ValueParser;
 use clap::error::{Error, ErrorKind};
+use clap::{Arg, Command as ClapCommand};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -31,8 +31,9 @@ use std::io::Write;
 // validator to ensure we don't pass invalid values to the command
 fn validate_alias(value: &str) -> std::result::Result<String, Error> {
     if value == "alias" || value == "unalias" || value.parse::<usize>().is_ok() {
-        Err(Error::raw(ErrorKind::InvalidValue,
-            "alias cannot be \"alias\", \"unalias\", or a number".to_owned()
+        Err(Error::raw(
+            ErrorKind::InvalidValue,
+            "alias cannot be \"alias\", \"unalias\", or a number".to_owned(),
         ))
     } else {
         Ok(value.to_owned())
@@ -85,8 +86,14 @@ Examples:
     no_named_complete!(),
     |matches, env, writer| {
         if matches.contains_id("alias") {
-            let alias = matches.get_one::<String>("alias").map(|s| s.as_str()).unwrap(); // safe, checked above
-            let expanded = matches.get_one::<String>("expanded").map(|s| s.as_str()).unwrap(); // safe, required with alias
+            let alias = matches
+                .get_one::<String>("alias")
+                .map(|s| s.as_str())
+                .unwrap(); // safe, checked above
+            let expanded = matches
+                .get_one::<String>("expanded")
+                .map(|s| s.as_str())
+                .unwrap(); // safe, required with alias
             env.add_alias(config::Alias {
                 alias: alias.to_owned(),
                 expanded: expanded.to_owned(),
@@ -114,7 +121,10 @@ command!(
     noop_complete!(),
     no_named_complete!(),
     |matches, env, writer| {
-        let alias = matches.get_one::<String>("alias").map(|s| s.as_str()).unwrap(); // safe, required
+        let alias = matches
+            .get_one::<String>("alias")
+            .map(|s| s.as_str())
+            .unwrap(); // safe, required
         if env.remove_alias(alias) {
             clickwriteln!(writer, "unaliased: {}", alias);
         } else {

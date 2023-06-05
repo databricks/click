@@ -44,8 +44,16 @@ pub fn try_complete_all(prefix: &str, cols: &[&str], extra_cols: &[&str]) -> Vec
     v
 }
 
-pub fn try_complete(prefix: &str, extra_cols: &[&str]) -> Vec<RustlinePair> {
+pub fn try_complete(prefix: &str, extra_cols: &[&str], include_all: bool) -> Vec<RustlinePair> {
     let mut v = vec![];
+    if include_all {
+        if let Some(rest) = "all".strip_prefix(prefix) {
+            v.push(RustlinePair {
+                display: "all".to_string(),
+                replacement: rest.to_string(),
+            });
+        }
+    }
     for val in extra_cols.iter() {
         if let Some(rest) = val.strip_prefix(prefix) {
             v.push(RustlinePair {
@@ -360,7 +368,7 @@ macro_rules! list_command {
             use rustyline::completion::Pair as RustlinePair;
             #[allow(non_snake_case)]
             pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<RustlinePair> {
-                try_complete(prefix, $extra_cols)
+                try_complete(prefix, $extra_cols, true)
             }
         }
 

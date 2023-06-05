@@ -35,7 +35,7 @@ fn do_exec(
     pod: &KObj,
     kluster_name: &str,
     cmd: &[&str],
-    it_arg: &str,
+    it_arg: &Option<&str>,
     cont_opt: &Option<&str>,
     term_opt: &Option<&str>,
     do_terminal: bool,
@@ -63,10 +63,12 @@ fn do_exec(
             "--context",
             kluster_name,
             "exec",
-            it_arg,
-            pod.name(),
         ];
         targs.append(&mut kubectl_args);
+        if let Some(it) = it_arg {
+            targs.push(it);
+        }
+        targs.push(pod.name());
         if let Some(cont) = cont_opt {
             targs.push("-c");
             targs.push(cont);
@@ -87,18 +89,18 @@ fn do_exec(
             .arg(ns)
             .arg("--context")
             .arg(kluster_name)
-            .arg("exec")
-            .arg(it_arg)
-            .arg(pod.name());
-        let command = if let Some(user) = env.get_impersonate_user() {
-            command.arg("--as").arg(user)
+            .arg("exec");
+        if let Some(it) = it_arg {
+            command.arg(it);
+        }
+        command.arg(pod.name());
+        if let Some(user) = env.get_impersonate_user() {
+            command.arg("--as").arg(user);
+        }
+        if let Some(cont) = cont_opt {
+            command.arg("-c").arg(cont).arg("--").args(cmd);
         } else {
-            &mut command
-        };
-        let command = if let Some(cont) = cont_opt {
-            command.arg("-c").arg(cont).arg("--").args(cmd)
-        } else {
-            command.arg("--").args(cmd)
+            command.arg("--").args(cmd);
         };
         match command.status() {
             Ok(s) => {
@@ -198,10 +200,10 @@ command!(
         let tty = !matches.contains_id("tty") || *matches.get_one::<bool>("tty").unwrap();
         let stdin = !matches.contains_id("stdin") || *matches.get_one::<bool>("stdin").unwrap();
         let it_arg = match (tty, stdin) {
-            (true, true) => "-it",
-            (true, false) => "-t",
-            (false, true) => "-i",
-            (false, false) => "",
+            (true, true) => Some("-it"),
+            (true, false) => Some("-t"),
+            (false, true) => Some("-i"),
+            (false, false) => None,
         };
         env.apply_to_selection(
             writer,
@@ -213,7 +215,7 @@ command!(
                         obj,
                         &context.name,
                         &cmd,
-                        it_arg,
+                        &it_arg,
                         &matches.get_one::<String>("container").map(|s| s.as_str()),
                         &matches.get_one::<String>("terminal").map(|s| s.as_str()),
                         matches.contains_id("terminal"),

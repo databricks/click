@@ -39,17 +39,15 @@ fn parse_ports(value: &str) -> std::result::Result<String, Error> {
     if parts.len() > 2 {
         Err(Error::raw(
             ErrorKind::InvalidValue,
-            format!("Invalid port specification, can only contain one ':'"),
+            "Invalid port specification, can only contain one ':'",
         ))
     } else {
         for part in parts {
-            if !part.is_empty() {
-                if let Err(_) = part.parse::<u32>() {
-                    return Err(Error::raw(
-                        ErrorKind::InvalidValue,
-                        format!("{part} is not a valid portnumber"),
-                    ));
-                }
+            if !part.is_empty() && part.parse::<u32>().is_err() {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!("{part} is not a valid portnumber"),
+                ));
             }
         }
         Ok(value.to_owned())

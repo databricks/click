@@ -195,8 +195,8 @@ command!(
             .unwrap()
             .map(|s| s.as_str())
             .collect(); // safe as required
-        let tty = matches.contains_id("tty") && *matches.get_one::<bool>("tty").unwrap();
-        let stdin = matches.contains_id("stdin") && *matches.get_one::<bool>("stdin").unwrap();
+        let tty = !matches.contains_id("tty") || *matches.get_one::<bool>("tty").unwrap();
+        let stdin = !matches.contains_id("stdin") || *matches.get_one::<bool>("stdin").unwrap();
         let it_arg = match (tty, stdin) {
             (true, true) => "-it",
             (true, false) => "-t",

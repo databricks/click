@@ -29,11 +29,6 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::process::Command;
 
-/// a clap validator for boolean
-fn valid_bool(s: &str) -> Result<(), String> {
-    s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
-}
-
 #[allow(clippy::too_many_arguments)]
 fn do_exec(
     env: &Env,
@@ -170,7 +165,7 @@ command!(
                 .short('T')
                 .long("tty")
                 .help("If stdin is a TTY. Contrary to kubectl, this defaults to TRUE")
-                .validator(valid_bool)
+                .value_parser(clap::value_parser!(bool))
                 .takes_value(true)
                 .min_values(0)
         )
@@ -179,7 +174,7 @@ command!(
                 .short('i')
                 .long("stdin")
                 .help("Pass stdin to the container. Contrary to kubectl, this defaults to TRUE")
-                .validator(valid_bool)
+                .value_parser(clap::value_parser!(bool))
                 .takes_value(true)
                 .min_values(0)
         ),
@@ -195,27 +190,9 @@ command!(
         let context = env.context.as_ref().ok_or_else(|| {
             ClickError::CommandError("Need an active context in order to exec.".to_string())
         })?;
-        let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
-        let tty = if matches.contains_id("tty") {
-            if let Some(v) = matches.get_one::<String>("tty").map(|s| s.as_str()) {
-                // already validated
-                v.parse::<bool>().unwrap()
-            } else {
-                true
-            }
-        } else {
-            true
-        };
-        let stdin = if matches.contains_id("stdin") {
-            if let Some(v) = matches.get_one::<String>("stdin").map(|s| s.as_str()) {
-                // already validated
-                v.parse::<bool>().unwrap()
-            } else {
-                true
-            }
-        } else {
-            true
-        };
+        let cmd: Vec<&str> = matches.get_many::<String>("command").unwrap().map(|s| s.as_str()).collect(); // safe as required
+        let tty = matches.contains_id("tty") && *matches.get_one::<bool>("tty").unwrap();
+        let stdin = matches.contains_id("stdin") && *matches.get_one::<bool>("stdin").unwrap();
         let it_arg = match (tty, stdin) {
             (true, true) => "-it",
             (true, false) => "-t",

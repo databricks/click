@@ -37,7 +37,7 @@ fn do_copy(
     src: &str,
     dest: &str,
     from: bool,
-    retries: &str,
+    retries: &i32,
     writer: &mut ClickWriter,
 ) -> Result<(), ClickError> {
     let ns = pod.namespace.as_ref().unwrap();
@@ -61,7 +61,7 @@ fn do_copy(
         .arg(&*src_arg)
         .arg(&*dest_arg)
         .arg("--retries")
-        .arg(retries);
+        .arg(format!("{}", retries));
     match command.output() {
         Ok(output) => {
             if output.status.success() {
@@ -87,10 +87,6 @@ fn do_copy(
     }
 }
 
-/// a clap validator for i32
-pub fn valid_i32(s: &str) -> Result<(), String> {
-    s.parse::<i32>().map(|_| ()).map_err(|e| e.to_string())
-}
 
 command!(
     Copy,
@@ -136,7 +132,7 @@ command!(
             Arg::new("retries")
                 .long("retries")
                 .help("How many times to retry the copy. Specify 0 for no retry, or a negative value for infinte retries")
-                .validator(valid_i32)
+                .value_parser(clap::value_parser!(i32))
                 .takes_value(true)
                 .default_value("0")
         )
@@ -168,7 +164,7 @@ Examples:
         let src = matches.get_one::<String>("src").map(|s| s.as_str()).unwrap(); // safe, required
         let dest = matches.get_one::<String>("dest").map(|s| s.as_str()).unwrap(); // safe, required
         let from = matches.get_one::<String>("direction").map(|s| s.as_str()).unwrap() == "from"; // safe, has default
-        let retries = matches.get_one::<String>("retries").map(|s| s.as_str()).unwrap(); // safe, has default
+        let retries = matches.get_one::<i32>("retries").unwrap(); // safe, has default
         env.apply_to_selection(
             writer,
             Some(&env.click_config.range_separator),

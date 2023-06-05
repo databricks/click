@@ -23,7 +23,6 @@ use strfmt::strfmt;
 
 use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
-    command::{parse_duration, valid_duration},
     completer,
     env::Env,
     error::ClickError,
@@ -237,7 +236,7 @@ command!(
                 Arg::new("since")
                     .long("since")
                     .conflicts_with("sinceTime")
-                    .validator(valid_duration)
+                    .value_parser(humantime::parse_duration)
                     .help(
                         "Only return logs newer than specified relative duration,
  e.g. 5s, 2m, 3m5s, 1h2min5sec",
@@ -328,7 +327,7 @@ command!(
         }
         if matches.contains_id("since") {
             // all unwraps already validated
-            let dur = parse_duration(matches.get_one::<String>("since").map(|s| s.as_str()).unwrap()).unwrap();
+            let dur = matches.get_one::<Duration>("since").unwrap();
             let dur = match i64::try_from(dur.as_secs()) {
                 Ok(d) => d,
                 Err(e) => {

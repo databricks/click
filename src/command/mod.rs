@@ -15,7 +15,6 @@
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use clap::ArgMatches;
-use humantime::parse_duration;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
     http::{self, Request},
@@ -166,15 +165,6 @@ pub fn uppercase_first(s: &str) -> String {
     }
 }
 
-/// a clap validator for duration
-fn valid_duration(s: &str) -> Result<(), String> {
-    parse_duration(s).map(|_| ()).map_err(|e| e.to_string())
-}
-
-/// a clap validator for u32
-pub fn valid_u32(s: &str) -> Result<(), String> {
-    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
-}
 
 // table printing / building
 /* this function abstracts the standard handling code for when a k8s call returns a list of objects.

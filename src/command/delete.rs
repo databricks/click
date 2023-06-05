@@ -22,7 +22,7 @@ use serde::de::DeserializeOwned;
 
 use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
-    command::{uppercase_first, valid_u32},
+    command::{uppercase_first},
     completer,
     env::Env,
     error::ClickError,
@@ -265,7 +265,7 @@ command!(
                 .short('g')
                 .long("gracePeriod")
                 .help("The duration in seconds before the object should be deleted.")
-                .validator(valid_u32)
+                .value_parser(clap::value_parser!(u32))
                 .takes_value(true),
         )
         .arg(
@@ -274,7 +274,7 @@ command!(
                 .long("cascade")
                 .help("Cascading strategy for deletion of any dependent objects.")
                 .takes_value(true)
-                .possible_values(["background", "foreground", "orphan"])
+                .value_parser(["background", "foreground", "orphan"])
                 .ignore_case(true)
                 .default_value("background"),
         )
@@ -309,9 +309,7 @@ command!(
         } else if matches.contains_id("now") {
             Some(1)
         } else {
-            matches.get_one::<String>("grace").map(|s| s.as_str()).map(|grace| {
-                grace.parse::<i64>().unwrap() // safe as validated
-            })
+            matches.get_one::<u32>("grace").map(|g| *g as i64)
         };
 
         let propagation_policy = matches.get_one::<String>("cascade").map(|s| s.as_str()).map(|cascade| {

@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use clap::{Arg, Command as ClapCommand};
+use clap::builder::ValueParser;
+use clap::error::{Error, ErrorKind};
 use rustyline::completion::Pair as RustlinePair;
 
 use crate::{
@@ -26,6 +28,17 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Write;
 
+// validator to ensure we don't pass invalid values to the command
+fn validate_alias(value: &str) -> std::result::Result<String, Error> {
+    if value == "alias" || value == "unalias" || value.parse::<usize>().is_ok() {
+        Err(Error::raw(ErrorKind::InvalidValue,
+            "alias cannot be \"alias\", \"unalias\", or a number".to_owned()
+        ))
+    } else {
+        Ok(value.to_owned())
+    }
+}
+
 command!(
     Alias,
     "alias",
@@ -36,13 +49,7 @@ command!(
                 .help(
                     "the short version of the command.\nCannot be 'alias', 'unalias', or a number."
                 )
-                .validator(|s: &str| {
-                    if s == "alias" || s == "unalias" || s.parse::<usize>().is_ok() {
-                        Err("alias cannot be \"alias\", \"unalias\", or a number".to_owned())
-                    } else {
-                        Ok(())
-                    }
-                })
+                .value_parser(ValueParser::from(validate_alias))
                 .required(false)
                 .requires("expanded")
         )

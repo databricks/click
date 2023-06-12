@@ -29,18 +29,13 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 use std::process::Command;
 
-/// a clap validator for boolean
-fn valid_bool(s: &str) -> Result<(), String> {
-    s.parse::<bool>().map(|_| ()).map_err(|e| e.to_string())
-}
-
 #[allow(clippy::too_many_arguments)]
 fn do_exec(
     env: &Env,
     pod: &KObj,
     kluster_name: &str,
     cmd: &[&str],
-    it_arg: &str,
+    it_arg: &Option<&str>,
     cont_opt: &Option<&str>,
     term_opt: &Option<&str>,
     do_terminal: bool,
@@ -68,10 +63,12 @@ fn do_exec(
             "--context",
             kluster_name,
             "exec",
-            it_arg,
-            pod.name(),
         ];
         targs.append(&mut kubectl_args);
+        if let Some(it) = it_arg {
+            targs.push(it);
+        }
+        targs.push(pod.name());
         if let Some(cont) = cont_opt {
             targs.push("-c");
             targs.push(cont);
@@ -92,18 +89,18 @@ fn do_exec(
             .arg(ns)
             .arg("--context")
             .arg(kluster_name)
-            .arg("exec")
-            .arg(it_arg)
-            .arg(pod.name());
-        let command = if let Some(user) = env.get_impersonate_user() {
-            command.arg("--as").arg(user)
+            .arg("exec");
+        if let Some(it) = it_arg {
+            command.arg(it);
+        }
+        command.arg(pod.name());
+        if let Some(user) = env.get_impersonate_user() {
+            command.arg("--as").arg(user);
+        }
+        if let Some(cont) = cont_opt {
+            command.arg("-c").arg(cont).arg("--").args(cmd);
         } else {
-            &mut command
-        };
-        let command = if let Some(cont) = cont_opt {
-            command.arg("-c").arg(cont).arg("--").args(cmd)
-        } else {
-            command.arg("--").args(cmd)
+            command.arg("--").args(cmd);
         };
         match command.status() {
             Ok(s) => {
@@ -170,7 +167,7 @@ command!(
                 .short('T')
                 .long("tty")
                 .help("If stdin is a TTY. Contrary to kubectl, this defaults to TRUE")
-                .validator(valid_bool)
+                .value_parser(clap::value_parser!(bool))
                 .takes_value(true)
                 .min_values(0)
         )
@@ -179,7 +176,7 @@ command!(
                 .short('i')
                 .long("stdin")
                 .help("Pass stdin to the container. Contrary to kubectl, this defaults to TRUE")
-                .validator(valid_bool)
+                .value_parser(clap::value_parser!(bool))
                 .takes_value(true)
                 .min_values(0)
         ),
@@ -195,32 +192,18 @@ command!(
         let context = env.context.as_ref().ok_or_else(|| {
             ClickError::CommandError("Need an active context in order to exec.".to_string())
         })?;
-        let cmd: Vec<&str> = matches.values_of("command").unwrap().collect(); // safe as required
-        let tty = if matches.is_present("tty") {
-            if let Some(v) = matches.value_of("tty") {
-                // already validated
-                v.parse::<bool>().unwrap()
-            } else {
-                true
-            }
-        } else {
-            true
-        };
-        let stdin = if matches.is_present("stdin") {
-            if let Some(v) = matches.value_of("stdin") {
-                // already validated
-                v.parse::<bool>().unwrap()
-            } else {
-                true
-            }
-        } else {
-            true
-        };
+        let cmd: Vec<&str> = matches
+            .get_many::<String>("command")
+            .unwrap()
+            .map(|s| s.as_str())
+            .collect(); // safe as required
+        let tty = !matches.contains_id("tty") || *matches.get_one::<bool>("tty").unwrap();
+        let stdin = !matches.contains_id("stdin") || *matches.get_one::<bool>("stdin").unwrap();
         let it_arg = match (tty, stdin) {
-            (true, true) => "-it",
-            (true, false) => "-t",
-            (false, true) => "-i",
-            (false, false) => "",
+            (true, true) => Some("-it"),
+            (true, false) => Some("-t"),
+            (false, true) => Some("-i"),
+            (false, false) => None,
         };
         env.apply_to_selection(
             writer,
@@ -232,10 +215,10 @@ command!(
                         obj,
                         &context.name,
                         &cmd,
-                        it_arg,
-                        &matches.value_of("container"),
-                        &matches.value_of("terminal"),
-                        matches.is_present("terminal"),
+                        &it_arg,
+                        &matches.get_one::<String>("container").map(|s| s.as_str()),
+                        &matches.get_one::<String>("terminal").map(|s| s.as_str()),
+                        matches.contains_id("terminal"),
                         writer,
                     )
                 } else {

@@ -122,7 +122,7 @@ fn main() {
         )
         .get_matches();
 
-    let conf_dir = if let Some(dir) = matches.value_of("config_dir") {
+    let conf_dir = if let Some(dir) = matches.get_one::<String>("config_dir").map(|s| s.as_str()) {
         PathBuf::from(dir)
     } else {
         match dirs::home_dir() {
@@ -179,15 +179,15 @@ fn main() {
     hist_path.push("click.history");
 
     let mut env = Env::new(config, click_conf, click_path);
-    if let Some(context) = matches.value_of("context") {
+    if let Some(context) = matches.get_one::<String>("context").map(|s| s.as_str()) {
         env.set_context(Some(context));
     }
-    if let Some(namespace) = matches.value_of("namespace") {
+    if let Some(namespace) = matches.get_one::<String>("namespace").map(|s| s.as_str()) {
         env.set_namespace(Some(namespace));
     }
 
     let mut processor = CommandProcessor::new(env, hist_path);
-    if let Some(command) = matches.value_of("exec") {
+    if let Some(command) = matches.get_one::<String>("exec").map(|s| s.as_str()) {
         let writer = ClickWriter::new();
         processor.process_line(command, writer);
     } else {

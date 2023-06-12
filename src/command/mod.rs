@@ -15,7 +15,6 @@
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use clap::ArgMatches;
-use humantime::parse_duration;
 use k8s_openapi::{
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
     http::{self, Request},
@@ -109,49 +108,47 @@ where
         env.clear_last_objs();
     }
     let list = list_res?;
-
-    let mut flags: Vec<&str> = if matches.is_valid_arg("show") {
-        match matches.values_of("show") {
-            Some(v) => v.collect(),
-            None => vec![],
-        }
-    } else {
-        vec![]
+    let mut flags: Vec<&str> = match matches.try_get_many::<String>("show") {
+        Ok(Some(v)) => v.map(|s| s.as_str()).collect(),
+        _ => vec![],
     };
 
-    let sort = matches.value_of("sort").map(|s| {
-        let colname = s.to_lowercase();
-        if let Some(col) = mapped_val(&colname, col_map) {
-            command_def::SortCol(col)
-        } else if let Some(ecm) = extra_col_map {
-            let mut func = None;
-            for (flag, col) in ecm.iter() {
-                if flag.eq(&colname) {
-                    flags.push(flag);
-                    func = Some(command_def::SortCol(col));
+    let sort = matches
+        .get_one::<String>("sort")
+        .map(|s| s.as_str())
+        .map(|s| {
+            let colname = s.to_lowercase();
+            if let Some(col) = mapped_val(&colname, col_map) {
+                command_def::SortCol(col)
+            } else if let Some(ecm) = extra_col_map {
+                let mut func = None;
+                for (flag, col) in ecm.iter() {
+                    if flag.eq(&colname) {
+                        flags.push(flag);
+                        func = Some(command_def::SortCol(col));
+                    }
                 }
+                match func {
+                    Some(f) => f,
+                    None => panic!("Shouldn't be allowed to ask to sort by: {colname}"),
+                }
+            } else {
+                panic!("Shouldn't be allowed to ask to sort by: {colname}");
             }
-            match func {
-                Some(f) => f,
-                None => panic!("Shouldn't be allowed to ask to sort by: {colname}"),
-            }
-        } else {
-            panic!("Shouldn't be allowed to ask to sort by: {colname}");
-        }
-    });
+        });
 
     if let Some(ecm) = extra_col_map {
         // if we're not in a namespace, we want to add a namespace col if it's in extra_col_map
         if env.namespace.is_none() && mapped_val("namespace", ecm).is_some() {
             flags.push("namespace");
         }
-
-        let labels_present = if matches.is_valid_arg("labels") {
-            matches.is_present("labels")
-        } else {
-            false
-        };
-        command_def::add_extra_cols(&mut cols, labels_present, flags, ecm);
+        let labels_present = matches.try_contains_id("labels").unwrap_or(false);
+        command_def::add_extra_cols(
+            &mut cols,
+            labels_present,
+            flags.iter().map(AsRef::as_ref).collect(),
+            ecm,
+        );
     }
 
     handle_list_result(
@@ -162,7 +159,7 @@ where
         extractors,
         regex,
         sort,
-        matches.is_present("reverse"),
+        matches.contains_id("reverse"),
         get_kobj,
     )
 }
@@ -174,23 +171,6 @@ pub fn uppercase_first(s: &str) -> String {
         None => String::new(),
         Some(f) => f.to_uppercase().collect::<String>() + cs.as_str(),
     }
-}
-
-/// a clap validator for duration
-fn valid_duration(s: &str) -> Result<(), String> {
-    parse_duration(s).map(|_| ()).map_err(|e| e.to_string())
-}
-
-/// a clap validator for rfc3339 dates
-fn valid_date(s: &str) -> Result<(), String> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-/// a clap validator for u32
-pub fn valid_u32(s: &str) -> Result<(), String> {
-    s.parse::<u32>().map(|_| ()).map_err(|e| e.to_string())
 }
 
 // table printing / building

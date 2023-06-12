@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use clap::builder::{PossibleValue, PossibleValuesParser};
 /// This module contains shared code that's useful for defining commands
 use clap::{Arg, ArgMatches, Command as ClapCommand};
 use rustyline::completion::Pair as RustlinePair;
@@ -43,8 +44,16 @@ pub fn try_complete_all(prefix: &str, cols: &[&str], extra_cols: &[&str]) -> Vec
     v
 }
 
-pub fn try_complete(prefix: &str, extra_cols: &[&str]) -> Vec<RustlinePair> {
+pub fn try_complete(prefix: &str, extra_cols: &[&str], include_all: bool) -> Vec<RustlinePair> {
     let mut v = vec![];
+    if include_all {
+        if let Some(rest) = "all".strip_prefix(prefix) {
+            v.push(RustlinePair {
+                display: "all".to_string(),
+                replacement: rest.to_string(),
+            });
+        }
+    }
     for val in extra_cols.iter() {
         if let Some(rest) = val.strip_prefix(prefix) {
             v.push(RustlinePair {
@@ -359,7 +368,7 @@ macro_rules! list_command {
             use rustyline::completion::Pair as RustlinePair;
             #[allow(non_snake_case)]
             pub fn $cmd_name(prefix: &str, _env: &Env) -> Vec<RustlinePair> {
-                try_complete(prefix, $extra_cols)
+                try_complete(prefix, $extra_cols, true)
             }
         }
 
@@ -421,13 +430,25 @@ pub fn add_extra_cols<'a>(
     }
 }
 
+// fn get_value_parser(set1: &[&str], set2: &[&str]) -> ValueParser {
+
+// }
+
 // sort based on column index given
 pub struct SortCol(pub &'static str);
 
 /// get a clap arg for sorting. this takes one or two lists of possible values to allow for passing
 /// normal and extra cols
-pub fn sort_arg<'a>(cols: &'a [&'a str], extra_cols: Option<&'a [&'a str]>) -> Arg<'a> {
-    let arg = Arg::new("sort")
+pub fn sort_arg<'a>(cols: &'a [&'static str], extra_cols: Option<&'a [&'static str]>) -> Arg<'a> {
+    let pvp = match extra_cols {
+        Some(extra) => PossibleValuesParser::new(
+            cols.iter()
+                .chain(extra.iter())
+                .map(|s| PossibleValue::new(s)),
+        ),
+        None => PossibleValuesParser::new(cols.iter().map(|s| PossibleValue::new(s))),
+    };
+    Arg::new("sort")
         .short('s')
         .long("sort")
         .help(
@@ -436,11 +457,7 @@ pub fn sort_arg<'a>(cols: &'a [&'a str], extra_cols: Option<&'a [&'a str]>) -> A
         )
         .takes_value(true)
         .ignore_case(true)
-        .possible_values(cols);
-    match extra_cols {
-        Some(extra) => arg.possible_values(extra),
-        None => arg,
-    }
+        .value_parser(pvp)
 }
 
 static SHOW_HELP: &str =
@@ -449,15 +466,20 @@ static SHOW_HELP: &str =
 static SHOW_HELP_WITH_LABELS: &str =
     "Comma separated list (case-insensitive) of extra columns to show in output. \
      Use '--show all,labels' to show all available columns. (Note that 'all' doesn't \
-     include labels due to thier size)";
+     include labels due to their size)";
 /// get a clap arg for showing extra cols.
-pub fn show_arg<'a>(extra_cols: &'a [&'a str], labels: bool) -> Arg<'a> {
+pub fn show_arg<'a>(extra_cols: &'a [&'static str], labels: bool) -> Arg<'a> {
+    let pvp = PossibleValuesParser::new(
+        extra_cols
+            .iter()
+            .chain(["all"].iter())
+            .map(|s| PossibleValue::new(s)),
+    );
     let arg = Arg::new("show")
         .short('S')
         .long("show")
         .takes_value(true)
-        .possible_value("all")
-        .possible_values(extra_cols)
+        .value_parser(pvp)
         .ignore_case(true)
         .use_value_delimiter(true);
     if labels {

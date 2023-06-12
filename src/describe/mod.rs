@@ -34,10 +34,10 @@ pub fn maybe_full_describe_output<T: ?Sized>(
 where
     T: Serialize,
 {
-    if matches.is_present("json") {
+    if matches.contains_id("json") {
         writer.pretty_color_json(value).unwrap_or(());
         true
-    } else if matches.is_present("yaml") {
+    } else if matches.contains_id("yaml") {
         writer.print_yaml(value).unwrap_or(());
         true
     } else {

@@ -281,11 +281,11 @@ list_command!(
     [].into_iter(),
     |matches, env, writer| {
         let mut opts: ListOptional = ListOptional::<'_> {
-            label_selector: matches.value_of("label"),
+            label_selector: matches.get_one::<String>("label").map(|s| s.as_str()),
             ..Default::default()
         };
         let mut field_sel = None;
-        match matches.value_of("node") {
+        match matches.get_one::<String>("node").map(|s| s.as_str()) {
             Some(nodeval) => {
                 field_sel = Some(format!("spec.nodeName={nodeval}"));
             }
@@ -343,7 +343,7 @@ command!(
             Some(&env.click_config.range_separator),
             |obj, writer| {
                 if obj.is_pod() {
-                    print_containers(obj, env, matches.is_present("volumes"), writer)
+                    print_containers(obj, env, matches.contains_id("volumes"), writer)
                 } else {
                     Err(ClickError::CommandError(
                         "containers only possible on a Pod".to_string(),

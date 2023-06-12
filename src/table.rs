@@ -434,7 +434,7 @@ pub fn raw_quantity(quantity: &Quantity) -> f64 {
 }
 
 pub fn get_regex(matches: &ArgMatches) -> Result<Option<Regex>, String> {
-    match matches.value_of("regex") {
+    match matches.get_one::<String>("regex").map(|s| s.as_str()) {
         Some(pattern) => {
             if let Ok(regex) = Regex::new(pattern) {
                 Ok(Some(regex))

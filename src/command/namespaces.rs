@@ -56,7 +56,7 @@ command!(
     vec![&completer::namespace_completer],
     no_named_complete!(),
     |matches, env, _| {
-        let ns = matches.value_of("namespace");
+        let ns = matches.get_one::<String>("namespace").map(|s| s.as_str());
         env.set_namespace(ns);
         Ok(())
     }

@@ -23,7 +23,6 @@ use strfmt::strfmt;
 
 use crate::{
     command::command_def::{exec_match, start_clap, Cmd},
-    command::{parse_duration, valid_date, valid_duration, valid_u32},
     completer,
     env::Env,
     error::ClickError,
@@ -222,7 +221,7 @@ command!(
                 Arg::new("tail")
                     .short('t')
                     .long("tail")
-                    .validator(valid_u32)
+                    .value_parser(clap::value_parser!(u32))
                     .help("Number of lines from the end of the logs to show")
                     .takes_value(true),
             )
@@ -237,7 +236,7 @@ command!(
                 Arg::new("since")
                     .long("since")
                     .conflicts_with("sinceTime")
-                    .validator(valid_duration)
+                    .value_parser(humantime::parse_duration)
                     .help(
                         "Only return logs newer than specified relative duration,
  e.g. 5s, 2m, 3m5s, 1h2min5sec",
@@ -248,7 +247,9 @@ command!(
                 Arg::new("sinceTime")
                     .long("since-time")
                     .conflicts_with("since")
-                    .validator(valid_date)
+                    .value_parser(clap::builder::ValueParser::from(
+                        chrono::DateTime::parse_from_rfc3339,
+                    ))
                     .help(
                         "Only return logs newer than specified RFC3339 date. Eg:
  1996-12-19T16:39:57-08:00",
@@ -311,24 +312,24 @@ command!(
     |matches, env, writer| {
         let mut opts: api::ReadNamespacedPodLogOptional = Default::default();
 
-        if matches.is_present("follow") {
+        if matches.contains_id("follow") {
             opts.follow = Some(true);
         }
         k8s_if_ge_1_17! {
-            if matches.is_present("insecure") {
+            if matches.contains_id("insecure") {
                 opts.insecure_skip_tls_verify_backend = Some(true);
             }
         }
-        if matches.is_present("previous") {
+        if matches.contains_id("previous") {
             opts.previous = Some(true);
         }
-        if matches.is_present("tail") {
-            let lines = matches.value_of("tail").unwrap().parse::<i64>().unwrap();
+        if matches.contains_id("tail") {
+            let lines = *matches.get_one::<u32>("tail").unwrap() as i64;
             opts.tail_lines = Some(lines);
         }
-        if matches.is_present("since") {
+        if matches.contains_id("since") {
             // all unwraps already validated
-            let dur = parse_duration(matches.value_of("since").unwrap()).unwrap();
+            let dur = matches.get_one::<Duration>("since").unwrap();
             let dur = match i64::try_from(dur.as_secs()) {
                 Ok(d) => d,
                 Err(e) => {
@@ -338,18 +339,23 @@ command!(
             };
             opts.since_seconds = Some(dur);
         }
-        if matches.is_present("sinceTime") {
-            let specified =
-                DateTime::parse_from_rfc3339(matches.value_of("sinceTime").unwrap()).unwrap();
+        if matches.contains_id("sinceTime") {
+            let specified = DateTime::parse_from_rfc3339(
+                matches
+                    .get_one::<String>("sinceTime")
+                    .map(|s| s.as_str())
+                    .unwrap(),
+            )
+            .unwrap();
             let dur = Utc::now().signed_duration_since(specified.with_timezone(&Utc));
             opts.since_seconds = Some(dur.num_seconds());
         }
-        let timeout = if matches.is_present("follow") {
+        let timeout = if matches.contains_id("follow") {
             None
         } else {
             Some(Duration::new(20, 0)) // TODO what's a reasonable timeout here?
         };
-        if matches.is_present("timestamps") {
+        if matches.contains_id("timestamps") {
             opts.timestamps = Some(true);
         }
 
@@ -362,10 +368,10 @@ command!(
                         obj,
                         env,
                         opts,
-                        matches.value_of("container"),
-                        matches.value_of("output"),
-                        matches.is_present("editor"),
-                        matches.value_of("editor"),
+                        matches.get_one::<String>("container").map(|s| s.as_str()),
+                        matches.get_one::<String>("output").map(|s| s.as_str()),
+                        matches.contains_id("editor"),
+                        matches.get_one::<String>("editor").map(|s| s.as_str()),
                         timeout,
                         writer,
                     )

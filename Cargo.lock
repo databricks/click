@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "click"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "atomicwrites",
  "base64 0.21.4",

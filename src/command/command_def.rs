@@ -234,6 +234,7 @@ macro_rules! command {
                         format!("{}:\n    {:?}", "ALIASES".yellow(), $aliases);
                 }
                 let clap = start_clap($name, $about, &ALIASES_STR, $trailing_var_arg);
+                #[allow(clippy::redundant_closure_call)]
                 let extra = $extra_args(clap);
                 $cmd_name {
                     aliases: $aliases,

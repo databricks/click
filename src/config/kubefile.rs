@@ -333,6 +333,7 @@ impl AuthProviderGcpConfig {
     fn parse_expiry(expiry_str: &str) -> Result<DateTime<Local>, ClickError> {
         // Somehow google sometimes puts a date like "2018-03-31 22:22:01" in the config
         // and other times like "2018-04-01T05:57:31Z", so we have to try both.  wtf google.
+        #[allow(deprecated)]
         if let Ok(expiry) = DateTime::parse_from_rfc3339(expiry_str) {
             Ok(expiry.with_timezone(&Local))
         } else if let Ok(expiry) = Local.datetime_from_str(expiry_str, "%Y-%m-%d %H:%M:%S") {

@@ -1,3 +1,14 @@
+0.6.3
+=====
+Features:
+* Experimental teleport support
+* Add a `cronjob` command to interact with k8s cronjobs
+* Add a `last` command to quickly show the last list of objects returned
+
+Updates:
+* Large clap version update
+
+
 0.6.2
 =====
 Features:

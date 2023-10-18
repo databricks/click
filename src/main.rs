@@ -75,8 +75,8 @@ mod values;
 #[cfg(test)]
 mod duct_mock;
 
-use std::io::ErrorKind::NotFound;
 use clap::{Arg, Command as ClapCommand};
+use std::io::ErrorKind::NotFound;
 
 use std::path::PathBuf;
 
@@ -146,10 +146,12 @@ fn main() {
         Ok(conf) => conf,
         Err(e) => {
             match e {
-                ClickError::Io(e) => if e.kind() == NotFound {
-                    // Silently ignore missing click config
+                ClickError::Io(e) => {
+                    if e.kind() == NotFound {
+                        // Silently ignore missing click config
+                    }
                 }
-                _ => println!("Could not load click config: {e}\nUsing default values.")
+                _ => println!("Could not load click config: {e}\nUsing default values."),
             };
             ClickConfig::default()
         }

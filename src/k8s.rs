@@ -311,7 +311,7 @@ impl Context {
     ) -> Result<http::Response<Bytes>, ClickError> {
         let (parts, body) = k8sreq.into_parts();
 
-        let url = self.endpoint.join(&parts.uri.to_string())?;
+        let url = Url::parse(&format!("{}{}", self.endpoint, parts.uri))?;
 
         let new_provider = {
             // TODO: Fix this mess

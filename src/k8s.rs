@@ -380,7 +380,7 @@ impl Context {
     ) -> Result<reqwest::blocking::Response, ClickError> {
         let (parts, body) = k8sreq.into_parts();
 
-        let url = self.endpoint.join(&parts.uri.to_string())?;
+        let url = Url::parse(&format!("{}{}", self.endpoint, parts.uri))?;
 
         if let Some(UserAuth::ExecProvider(ref exec_provider)) = *self.auth.borrow() {
             self.handle_exec_provider(exec_provider);

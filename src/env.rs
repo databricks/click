@@ -209,7 +209,6 @@ impl Env {
                     io::stderr(),
                     "Invalid namespace name. Namespaces must be valid RFC 1123 labels (less than 64 characters, lowercase alphanumeric or '-', and start and end with an alphanumeric character)"
                 );
-                io::stdout().flush().expect("Could not flush stdout");
                 return;
             }
         }

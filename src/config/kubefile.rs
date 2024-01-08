@@ -424,11 +424,11 @@ impl AuthProviderGcpConfig {
     fn update_token(&self, token: &mut Option<String>, expiry: &mut Option<DateTime<Local>>) {
         match self.cmd_path {
             Some(ref conf_cmd) => {
-                let args = self
+                let args: Vec<_> = self
                     .cmd_args
                     .as_ref()
                     .map(|argstr| argstr.split_whitespace().collect())
-                    .unwrap_or_else(Vec::new);
+                    .unwrap_or_default();
                 match ductcmd(conf_cmd, &args).read() {
                     Ok(output) => {
                         self.parse_output_and_update(output.as_str(), token, expiry);

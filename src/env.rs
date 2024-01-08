@@ -319,7 +319,7 @@ impl Env {
         let range_str = if range.is_empty() {
             "Empty range".to_string()
         } else {
-            let mut r = format!("{} {}", range.len(), range.get(0).unwrap().type_str());
+            let mut r = format!("{} {}", range.len(), range.first().unwrap().type_str());
             if range.len() > 1 {
                 r.push('s');
             }

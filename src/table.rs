@@ -306,6 +306,8 @@ impl<'a> PartialEq for CellSpec<'a> {
 }
 impl<'a> Eq for CellSpec<'a> {}
 
+// We ensure they are in sync (see impl for `Ord`), but clippy doesn't seem to recognize this.
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl<'a> PartialOrd for CellSpec<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (&self.txt, &other.txt) {

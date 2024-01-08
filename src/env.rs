@@ -189,8 +189,29 @@ impl Env {
         }
     }
 
+    // a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character. Max length is 63.
+    fn validate_rfc_1123_label(label: &str) -> bool {
+        if label.is_empty() || label.len() > 63 {
+            return false;
+        }
+        label
+            .chars()
+            .all(|c| (c.is_ascii_lowercase() && c.is_ascii_alphanumeric()) || c == '-')
+            && label.chars().next().unwrap().is_ascii_alphanumeric()
+            && label.chars().last().unwrap().is_ascii_alphanumeric()
+    }
+
     pub fn set_namespace(&mut self, namespace: Option<&str>) {
         let mut do_clear = false;
+        if let Some(ns) = namespace {
+            if !Env::validate_rfc_1123_label(ns) {
+                clickwriteln!(
+                    io::stderr(),
+                    "Invalid namespace name. Namespaces must be valid RFC 1123 labels (less than 64 characters, lowercase alphanumeric or '-', and start and end with an alphanumeric character)"
+                );
+                return;
+            }
+        }
         if let (Some(my_ns), Some(new_ns)) = (&self.namespace, namespace) {
             if my_ns.as_str() != new_ns {
                 do_clear = true; // need to use bool since self is borrowed here

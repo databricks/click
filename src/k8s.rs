@@ -18,6 +18,7 @@ use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;
 use reqwest::{Certificate, Identity, Url};
 use serde::Deserialize;
+use std::net::{IpAddr, SocketAddr};
 use url::Host;
 use yasna::models::ObjectIdentifier;
 
@@ -175,9 +176,11 @@ pub struct Context {
     impersonate_user: Option<String>,
     connect_timeout_secs: u32,
     read_timeout_secs: u32,
+    custom_dns_mapping: Option<(String, IpAddr)>,
 }
 
 impl Context {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<S: Into<String>>(
         name: S,
         endpoint: Url,
@@ -186,6 +189,7 @@ impl Context {
         impersonate_user: Option<String>,
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
+        custom_dns_mapping: Option<(String, IpAddr)>,
     ) -> Context {
         let (client, client_auth) = Context::get_client(
             &endpoint,
@@ -194,12 +198,20 @@ impl Context {
             None,
             connect_timeout_secs,
             read_timeout_secs,
+            custom_dns_mapping.clone(),
         );
         // have to create a special client for logs until
         // https://github.com/seanmonstar/reqwest/issues/1380
         // is resolved
-        let (log_client, _) =
-            Context::get_client(&endpoint, root_cas.clone(), auth, None, u32::MAX, u32::MAX);
+        let (log_client, _) = Context::get_client(
+            &endpoint,
+            root_cas.clone(),
+            auth,
+            None,
+            u32::MAX,
+            u32::MAX,
+            custom_dns_mapping.clone(),
+        );
         let client = RefCell::new(client);
         let log_client = RefCell::new(log_client);
         let client_auth = RefCell::new(client_auth);
@@ -213,6 +225,7 @@ impl Context {
             impersonate_user,
             connect_timeout_secs,
             read_timeout_secs,
+            custom_dns_mapping,
         }
     }
 
@@ -223,12 +236,19 @@ impl Context {
         id: Option<Identity>,
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
+        custom_dns_mapping: Option<(String, IpAddr)>,
     ) -> (Client, Option<UserAuth>) {
         let host = endpoint.host().unwrap();
-        let client = match host {
+        let mut client = match host {
             Host::Domain(_) => Client::builder().use_rustls_tls(),
             _ => Client::builder().use_native_tls(),
         };
+
+        // Use custom DNS mapping if we have one
+        if let Some((hostname, ip)) = custom_dns_mapping {
+            // reqwest's resolve method allows mapping specific hostnames to IP addresses
+            client = client.resolve(&hostname, SocketAddr::new(ip, 443));
+        }
         let client = match root_cas {
             Some(cas) => {
                 let mut client = client;
@@ -286,6 +306,7 @@ impl Context {
                         Some(id.clone()),
                         self.connect_timeout_secs,
                         self.read_timeout_secs,
+                        self.custom_dns_mapping.clone(),
                     );
                     let (new_log_client, _) = Context::get_client(
                         &self.endpoint,
@@ -294,6 +315,7 @@ impl Context {
                         Some(id),
                         u32::MAX,
                         u32::MAX,
+                        self.custom_dns_mapping.clone(),
                     );
                     *self.client.borrow_mut() = new_client;
                     *self.log_client.borrow_mut() = new_log_client;

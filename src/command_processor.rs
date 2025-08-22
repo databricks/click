@@ -607,8 +607,7 @@ mod tests {
     }
 
     fn get_processor() -> CommandProcessor {
-        let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
-        commands.push(Box::new(TestCmd));
+        let commands: Vec<Box<dyn Cmd>> = vec![Box::new(TestCmd)];
         CommandProcessor::new_with_commands(
             Env::new(
                 get_test_config(),

@@ -91,10 +91,8 @@ fn service_external_ip(service: &api::Service) -> Option<CellSpec<'_>> {
                         .map(|ingress| {
                             if let Some(hv) = ingress.hostname.as_deref() {
                                 hv
-                            } else if let Some(ipv) = ingress.ip.as_deref() {
-                                ipv
                             } else {
-                                ""
+                                ingress.ip.as_deref().unwrap_or_default()
                             }
                         })
                         .collect::<Vec<&str>>()

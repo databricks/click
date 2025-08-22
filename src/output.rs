@@ -64,7 +64,7 @@ impl PipeProc {
     fn finish(self) -> io::Result<String> {
         drop(self.pipe);
         let output = self.expr.into_output()?;
-        String::from_utf8(output.stdout).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+        String::from_utf8(output.stdout).map_err(io::Error::other)
     }
 
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -135,9 +135,9 @@ impl ClickWriter {
         }
     }
 
-    pub fn pretty_color_json<T: ?Sized>(&mut self, value: &T) -> Result<(), JsonError>
+    pub fn pretty_color_json<T>(&mut self, value: &T) -> Result<(), JsonError>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         if let WriterOutput::Stdout(_) = self.output {
             let mut ser = Serializer::with_formatter(self, PrettyColorFormatter::new());
@@ -148,9 +148,9 @@ impl ClickWriter {
         }
     }
 
-    pub fn print_yaml<T: ?Sized>(&mut self, value: &T) -> Result<(), serde_yaml::Error>
+    pub fn print_yaml<T>(&mut self, value: &T) -> Result<(), serde_yaml::Error>
     where
-        T: Serialize,
+        T: Serialize + ?Sized,
     {
         serde_yaml::to_writer(self, value)
     }
@@ -199,93 +199,93 @@ impl<'a> PrettyColorFormatter<'a> {
 }
 
 impl<'a> Formatter for PrettyColorFormatter<'a> {
-    fn write_null<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn write_null<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_null(writer)
     }
 
-    fn write_bool<W: ?Sized>(&mut self, writer: &mut W, value: bool) -> io::Result<()>
+    fn write_bool<W>(&mut self, writer: &mut W, value: bool) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_bool(writer, value)
     }
 
-    fn write_i8<W: ?Sized>(&mut self, writer: &mut W, value: i8) -> io::Result<()>
+    fn write_i8<W>(&mut self, writer: &mut W, value: i8) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_i8(writer, value)
     }
 
-    fn write_i16<W: ?Sized>(&mut self, writer: &mut W, value: i16) -> io::Result<()>
+    fn write_i16<W>(&mut self, writer: &mut W, value: i16) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_i16(writer, value)
     }
 
-    fn write_i32<W: ?Sized>(&mut self, writer: &mut W, value: i32) -> io::Result<()>
+    fn write_i32<W>(&mut self, writer: &mut W, value: i32) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_i32(writer, value)
     }
 
-    fn write_i64<W: ?Sized>(&mut self, writer: &mut W, value: i64) -> io::Result<()>
+    fn write_i64<W>(&mut self, writer: &mut W, value: i64) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_i64(writer, value)
     }
 
-    fn write_u8<W: ?Sized>(&mut self, writer: &mut W, value: u8) -> io::Result<()>
+    fn write_u8<W>(&mut self, writer: &mut W, value: u8) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_u8(writer, value)
     }
 
-    fn write_u16<W: ?Sized>(&mut self, writer: &mut W, value: u16) -> io::Result<()>
+    fn write_u16<W>(&mut self, writer: &mut W, value: u16) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_u16(writer, value)
     }
 
-    fn write_u32<W: ?Sized>(&mut self, writer: &mut W, value: u32) -> io::Result<()>
+    fn write_u32<W>(&mut self, writer: &mut W, value: u32) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_u32(writer, value)
     }
 
-    fn write_u64<W: ?Sized>(&mut self, writer: &mut W, value: u64) -> io::Result<()>
+    fn write_u64<W>(&mut self, writer: &mut W, value: u64) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_u64(writer, value)
     }
 
-    fn write_f32<W: ?Sized>(&mut self, writer: &mut W, value: f32) -> io::Result<()>
+    fn write_f32<W>(&mut self, writer: &mut W, value: f32) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_f32(writer, value)
     }
 
-    fn write_f64<W: ?Sized>(&mut self, writer: &mut W, value: f64) -> io::Result<()>
+    fn write_f64<W>(&mut self, writer: &mut W, value: f64) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_f64(writer, value)
     }
 
-    fn begin_string<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_string<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         if self.invalue && !self.iskey {
             write!(writer, "{}", SetForegroundColor(Color::Green)).unwrap_or(());
@@ -293,9 +293,9 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         self.pretty.begin_string(writer)
     }
 
-    fn end_string<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_string<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         let r = self.pretty.end_string(writer);
         if self.invalue && !self.iskey {
@@ -304,69 +304,65 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         r
     }
 
-    fn write_string_fragment<W: ?Sized>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
+    fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_string_fragment(writer, fragment)
     }
 
-    fn write_char_escape<W: ?Sized>(
-        &mut self,
-        writer: &mut W,
-        char_escape: CharEscape,
-    ) -> io::Result<()>
+    fn write_char_escape<W>(&mut self, writer: &mut W, char_escape: CharEscape) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.write_char_escape(writer, char_escape)
     }
 
-    fn begin_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.begin_array(writer)
     }
 
-    fn end_array<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_array<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.end_array(writer)
     }
 
-    fn begin_array_value<W: ?Sized>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.begin_array_value(writer, first)
     }
 
-    fn end_array_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_array_value<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.end_array_value(writer)
     }
 
-    fn begin_object<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.begin_object(writer)
     }
 
-    fn end_object<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.pretty.end_object(writer)
     }
 
-    fn begin_object_key<W: ?Sized>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
+    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.iskey = true;
         let r = self.pretty.begin_object_key(writer, first);
@@ -375,9 +371,9 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         r
     }
 
-    fn end_object_key<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_object_key<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         let r = self.pretty.end_object_key(writer);
         self.iskey = false;
@@ -385,18 +381,18 @@ impl<'a> Formatter for PrettyColorFormatter<'a> {
         r
     }
 
-    fn begin_object_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn begin_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         let r = self.pretty.begin_object_value(writer);
         self.invalue = true;
         r
     }
 
-    fn end_object_value<W: ?Sized>(&mut self, writer: &mut W) -> io::Result<()>
+    fn end_object_value<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
-        W: Write,
+        W: Write + ?Sized,
     {
         self.invalue = false;
         self.pretty.end_object_value(writer)

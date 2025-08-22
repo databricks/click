@@ -213,7 +213,7 @@ aliases:
         assert_eq!(config.completiontype, CompletionType::List);
         assert_eq!(config.aliases.len(), 1);
         assert_eq!(config.range_separator, default_range_sep());
-        let a = config.aliases.get(0).unwrap();
+        let a = config.aliases.first().unwrap();
         assert_eq!(a.alias, "pn");
         assert_eq!(a.expanded, "pods --sort node");
         assert_eq!(config.connect_timeout_secs, default_connect_timeout());

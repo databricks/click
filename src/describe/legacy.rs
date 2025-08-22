@@ -431,9 +431,8 @@ fn node_access_url(v: &'_ Value) -> Cow<'_, str> {
                         addr_vec
                             .iter()
                             .find(|&aval| {
-                                aval.as_object().map_or(false, |addr| {
-                                    addr["type"].as_str().map_or(false, |t| t == "ExternalIP")
-                                })
+                                aval.as_object()
+                                    .is_some_and(|addr| addr["type"].as_str() == Some("ExternalIP"))
                             })
                             .and_then(|v| v.pointer("/address").and_then(|a| a.as_str()))
                     })

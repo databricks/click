@@ -198,6 +198,7 @@ impl Resource for RolloutValue {
 #[derive(Debug)]
 pub enum ReadNamespacedRolloutValueResponse {
     Ok(Box<RolloutValue>),
+    #[allow(dead_code)]
     Other(Result<Option<Value>, Error>),
 }
 

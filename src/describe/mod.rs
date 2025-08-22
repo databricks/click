@@ -26,13 +26,13 @@ pub mod service;
 
 pub static NOTSUPPORTED: &str = "not supported without -j or -y yet\n";
 
-pub fn maybe_full_describe_output<T: ?Sized>(
+pub fn maybe_full_describe_output<T>(
     matches: &ArgMatches,
     value: &T,
     writer: &mut ClickWriter,
 ) -> bool
 where
-    T: Serialize,
+    T: Serialize + ?Sized,
 {
     if matches.contains_id("json") {
         writer.pretty_color_json(value).unwrap_or(());

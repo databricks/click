@@ -180,6 +180,7 @@ pub struct Context {
 }
 
 impl Context {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<S: Into<String>>(
         name: S,
         endpoint: Url,

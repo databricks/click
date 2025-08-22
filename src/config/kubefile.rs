@@ -627,8 +627,8 @@ clusters:
   name: data
 - cluster:
     insecure-skip-tls-verify: true
-    server: http://nos.foo:80
-    tls-server-name: tls.foo
+    server: https://proxy.example.com:443
+    tls-server-name: api.example.com
   name: tls-cluster
 contexts:
 - context:

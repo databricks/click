@@ -18,9 +18,9 @@ use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;
 use reqwest::{Certificate, Identity, Url};
 use serde::Deserialize;
+use std::net::{IpAddr, SocketAddr};
 use url::Host;
 use yasna::models::ObjectIdentifier;
-use std::net::{IpAddr, SocketAddr};
 
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -177,9 +177,7 @@ pub struct Context {
     connect_timeout_secs: u32,
     read_timeout_secs: u32,
     custom_dns_mapping: Option<(String, IpAddr)>,
-    tls_server_name: Option<String>,
 }
-
 
 impl Context {
     pub fn new<S: Into<String>>(
@@ -191,7 +189,6 @@ impl Context {
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
         custom_dns_mapping: Option<(String, IpAddr)>,
-        tls_server_name: Option<String>,
     ) -> Context {
         let (client, client_auth) = Context::get_client(
             &endpoint,
@@ -201,13 +198,19 @@ impl Context {
             connect_timeout_secs,
             read_timeout_secs,
             custom_dns_mapping.clone(),
-            tls_server_name.clone(),
         );
         // have to create a special client for logs until
         // https://github.com/seanmonstar/reqwest/issues/1380
         // is resolved
-        let (log_client, _) =
-            Context::get_client(&endpoint, root_cas.clone(), auth, None, u32::MAX, u32::MAX, custom_dns_mapping.clone(), tls_server_name.clone());
+        let (log_client, _) = Context::get_client(
+            &endpoint,
+            root_cas.clone(),
+            auth,
+            None,
+            u32::MAX,
+            u32::MAX,
+            custom_dns_mapping.clone(),
+        );
         let client = RefCell::new(client);
         let log_client = RefCell::new(log_client);
         let client_auth = RefCell::new(client_auth);
@@ -222,7 +225,6 @@ impl Context {
             connect_timeout_secs,
             read_timeout_secs,
             custom_dns_mapping,
-            tls_server_name,
         }
     }
 
@@ -234,7 +236,6 @@ impl Context {
         connect_timeout_secs: u32,
         read_timeout_secs: u32,
         custom_dns_mapping: Option<(String, IpAddr)>,
-        _tls_server_name: Option<String>,
     ) -> (Client, Option<UserAuth>) {
         let host = endpoint.host().unwrap();
         let mut client = match host {
@@ -305,7 +306,6 @@ impl Context {
                         self.connect_timeout_secs,
                         self.read_timeout_secs,
                         self.custom_dns_mapping.clone(),
-                        self.tls_server_name.clone(),
                     );
                     let (new_log_client, _) = Context::get_client(
                         &self.endpoint,
@@ -315,7 +315,6 @@ impl Context {
                         u32::MAX,
                         u32::MAX,
                         self.custom_dns_mapping.clone(),
-                        self.tls_server_name.clone(),
                     );
                     *self.client.borrow_mut() = new_client;
                     *self.log_client.borrow_mut() = new_log_client;

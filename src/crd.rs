@@ -56,6 +56,7 @@ pub fn get_api_group_resources(
 #[derive(Debug)]
 pub enum GetAPIGroupResourcesResponse {
     Ok(APIResourceList),
+    #[allow(dead_code)]
     Other(Result<Option<serde_json::Value>, serde_json::Error>),
 }
 

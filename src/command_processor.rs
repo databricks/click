@@ -107,7 +107,7 @@ pub fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr<'_>), ClickError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {

@@ -461,7 +461,7 @@ impl Env {
         self.port_forwards.push(pf);
     }
 
-    pub fn get_port_forwards(&mut self) -> std::slice::IterMut<PortForward> {
+    pub fn get_port_forwards(&mut self) -> std::slice::IterMut<'_, PortForward> {
         self.port_forwards.iter_mut()
     }
 

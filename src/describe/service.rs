@@ -167,7 +167,7 @@ fn describe_format_service(
 }
 
 /// Get ports info out of ports array
-fn get_ports_str(v: Option<&Value>, endpoint_val: Option<Value>) -> Cow<str> {
+fn get_ports_str(v: Option<&'_ Value>, endpoint_val: Option<Value>) -> Cow<'_, str> {
     if v.is_none() {
         return "<none>".into();
     }

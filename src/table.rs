@@ -176,17 +176,21 @@ impl<'a> CellSpec<'a> {
     }
 }
 
-impl<'a> ToString for CellSpec<'a> {
-    fn to_string(&self) -> String {
-        match &self.txt {
-            CellSpecTxt::DateTime(datetime) => format_duration(time_since(*datetime)),
-            CellSpecTxt::Duration(duration) => format_duration(*duration),
-            CellSpecTxt::Index => "[index]".to_string(),
-            CellSpecTxt::Int(num) => format!("{num}"),
-            CellSpecTxt::None => "Unknown/None".to_string(),
-            CellSpecTxt::Quantity(quant) => quant.0.clone(),
-            CellSpecTxt::Str(s) => s.to_string(),
-        }
+impl<'a> std::fmt::Display for CellSpec<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match &self.txt {
+                CellSpecTxt::DateTime(datetime) => format_duration(time_since(*datetime)),
+                CellSpecTxt::Duration(duration) => format_duration(*duration),
+                CellSpecTxt::Index => "[index]".to_string(),
+                CellSpecTxt::Int(num) => format!("{num}"),
+                CellSpecTxt::None => "Unknown/None".to_string(),
+                CellSpecTxt::Quantity(quant) => quant.0.clone(),
+                CellSpecTxt::Str(s) => s.to_string(),
+            }
+        )
     }
 }
 

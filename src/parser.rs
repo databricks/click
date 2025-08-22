@@ -45,7 +45,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(cmdline: &str) -> Parser {
+    pub fn new(cmdline: &'a str) -> Parser<'a> {
         Parser {
             state: ParsingState::Normal,
             cmdline: cmdline.char_indices().peekable(),

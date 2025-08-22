@@ -286,7 +286,7 @@ fn add_downward_items(items: &[Value], buf: &mut String) {
 }
 
 /// Get volume info out of volume array
-fn get_volume_str(v: &Value) -> Cow<str> {
+fn get_volume_str(v: &'_ Value) -> Cow<'_, str> {
     let mut buf = String::new();
     if let Some(vol_arry) = v.as_array() {
         for vol in vol_arry.iter() {
@@ -355,7 +355,7 @@ fn get_volume_str(v: &Value) -> Cow<str> {
     buf.into()
 }
 
-fn pod_phase(v: &Value) -> Cow<str> {
+fn pod_phase(v: &'_ Value) -> Cow<'_, str> {
     // TODO: How to get an env in here for the colors
     let phase_str = val_str("/status/phase", v, "<No Phase>");
     match &*phase_str {
@@ -422,7 +422,7 @@ pub fn describe_format_node(
     Ok(())
 }
 
-fn node_access_url(v: &Value) -> Cow<str> {
+fn node_access_url(v: &'_ Value) -> Cow<'_, str> {
     match val_str_opt("/spec/providerID", v) {
         Some(provider) => {
             if provider.starts_with("aws://") {
@@ -431,9 +431,8 @@ fn node_access_url(v: &Value) -> Cow<str> {
                         addr_vec
                             .iter()
                             .find(|&aval| {
-                                aval.as_object().map_or(false, |addr| {
-                                    addr["type"].as_str().map_or(false, |t| t == "ExternalIP")
-                                })
+                                aval.as_object()
+                                    .is_some_and(|addr| addr["type"].as_str() == Some("ExternalIP"))
                             })
                             .and_then(|v| v.pointer("/address").and_then(|a| a.as_str()))
                     })
@@ -513,7 +512,7 @@ pub fn describe_format_secret(
 }
 
 /// Get container info out of container array
-fn get_container_str(v: &Value) -> Cow<str> {
+fn get_container_str(v: &'_ Value) -> Cow<'_, str> {
     let mut buf = String::new();
     if let Some(container_array) = v.as_array() {
         for container in container_array.iter() {
@@ -533,7 +532,7 @@ fn get_container_str(v: &Value) -> Cow<str> {
 }
 
 /// Get status messages out of 'conditions' array
-fn get_message_str(v: &Value) -> Cow<str> {
+fn get_message_str(v: &'_ Value) -> Cow<'_, str> {
     let mut buf = String::new();
     if let Some(condition_array) = v.as_array() {
         for condition in condition_array.iter() {

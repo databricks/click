@@ -130,6 +130,7 @@ impl K8sTable {
 #[derive(Debug)]
 pub enum GetTableResponse {
     Ok(K8sTable),
+    #[allow(dead_code)]
     Other(Result<Option<serde_json::Value>, serde_json::Error>),
 }
 

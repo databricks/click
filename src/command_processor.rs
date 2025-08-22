@@ -107,7 +107,7 @@ pub fn alias_expand_line(env: &Env, line: &str) -> String {
     rests.concat()
 }
 
-fn parse_line(line: &str) -> Result<(&str, RightExpr), ClickError> {
+fn parse_line(line: &str) -> Result<(&str, RightExpr<'_>), ClickError> {
     let parser = Parser::new(line);
     for (range, sep, _) in parser {
         match sep {
@@ -607,8 +607,7 @@ mod tests {
     }
 
     fn get_processor() -> CommandProcessor {
-        let mut commands: Vec<Box<dyn Cmd>> = Vec::new();
-        commands.push(Box::new(TestCmd));
+        let commands: Vec<Box<dyn Cmd>> = vec![Box::new(TestCmd)];
         CommandProcessor::new_with_commands(
             Env::new(
                 get_test_config(),

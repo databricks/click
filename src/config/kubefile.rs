@@ -603,6 +603,8 @@ impl ExecProvider {
 
 #[cfg(test)]
 pub mod tests {
+    use chrono::{offset::LocalResult, NaiveDateTime};
+
     use super::*;
 
     static TEST_CONFIG: &str = r#"apiVersion: v1
@@ -1003,12 +1005,13 @@ users:
         );
 
         let e = AuthProviderGcpConfig::parse_expiry("2018-04-01 5:57:31");
-        assert_eq!(
-            e.unwrap(),
-            Local
-                .datetime_from_str("2018-04-01 5:57:31", "%Y-%m-%d %H:%M:%S")
-                .unwrap()
-        );
+        let expected = match Local.from_local_datetime(
+            &NaiveDateTime::parse_from_str("2018-04-01 5:57:31", "%Y-%m-%d %H:%M:%S").unwrap(),
+        ) {
+            LocalResult::Single(d) => d,
+            _ => panic!("Couldn't parse expected"),
+        };
+        assert_eq!(e.unwrap(), expected,);
 
         let fe = AuthProviderGcpConfig::parse_expiry("INVALID");
         assert!(fe.is_err());

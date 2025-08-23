@@ -20,6 +20,7 @@ extern crate duct;
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
+
 #[macro_use]
 mod output;
 
@@ -75,12 +76,14 @@ mod values;
 mod duct_mock;
 
 use clap::{Arg, Command as ClapCommand};
+use std::io::ErrorKind::NotFound;
 
 use std::path::PathBuf;
 
 use crate::command_processor::CommandProcessor;
 use crate::config::{ClickConfig, Config};
 use crate::env::Env;
+use crate::error::ClickError;
 
 use crate::output::ClickWriter;
 
@@ -142,7 +145,14 @@ fn main() {
     let click_conf = match ClickConfig::from_file(click_path.as_path().to_str().unwrap()) {
         Ok(conf) => conf,
         Err(e) => {
-            println!("Could not load click config: {e}\nUsing default values.");
+            match e {
+                ClickError::Io(e) => {
+                    if e.kind() == NotFound {
+                        // Silently ignore missing click config
+                    }
+                }
+                _ => println!("Could not load click config: {e}\nUsing default values."),
+            };
             ClickConfig::default()
         }
     };

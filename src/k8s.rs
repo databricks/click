@@ -39,8 +39,10 @@ fn create_custom_dns_mapping(server_url: &str, tls_server_name: &str) -> Option<
     let url = reqwest::Url::parse(server_url).ok()?;
     let proxy_host = url.host_str()?;
 
-    // Resolve the proxy host to its IP address
-    let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default()).ok()?;
+    // Resolve proxy host using system DNS, falling back to default (Google 8.8.8.8)
+    let (config, opts) = hickory_resolver::system_conf::read_system_conf()
+        .unwrap_or_else(|_| (ResolverConfig::default(), ResolverOpts::default()));
+    let resolver = Resolver::new(config, opts).ok()?;
     let response = resolver.lookup_ip(proxy_host).ok()?;
     let proxy_ip = response.iter().next()?;
 

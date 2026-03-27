@@ -14,12 +14,12 @@
 
 use base64::engine::{general_purpose::STANDARD, Engine};
 use bytes::Bytes;
-use hickory_resolver::{config::*, Resolver};
+
 use k8s_openapi::{http, List, ListableResource};
 use reqwest::blocking::Client;
 use reqwest::{Certificate, Identity, Url};
 use serde::Deserialize;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -39,10 +39,8 @@ fn create_custom_dns_mapping(server_url: &str, tls_server_name: &str) -> Option<
     let url = reqwest::Url::parse(server_url).ok()?;
     let proxy_host = url.host_str()?;
 
-    // Resolve the proxy host to its IP address
-    let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default()).ok()?;
-    let response = resolver.lookup_ip(proxy_host).ok()?;
-    let proxy_ip = response.iter().next()?;
+    // Resolve the proxy host to its IP address using the system resolver
+    let proxy_ip = (proxy_host, 0u16).to_socket_addrs().ok()?.next()?.ip();
 
     Some((tls_server_name.to_string(), proxy_ip))
 }

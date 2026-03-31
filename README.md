@@ -32,6 +32,10 @@ Alternatively, to build it yourself, clone the click repository and run `cargo b
 
 There is an [aur](https://aur.archlinux.org/packages/click/) available.
 
+## Docker build
+
+`docker build . -t click`
+
 # Running
 If you used `cargo install`, you can just run `click` (assuming `~/.cargo/bin` is in your PATH).
 
@@ -43,6 +47,10 @@ can change this with the --config option. If `KUBECONFIG` is set, it will use an
 as the kubernetes config files.
 
 Once you're in the REPL, type `help` to see what you can do.
+
+## Docker
+
+`docker run --rm -it -v $HOME/.kube/:/root/.kube/ click`
 
 # Prompt
 The order of the prompt is \[context\]\[namespace\]\[object\].

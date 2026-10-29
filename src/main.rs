@@ -37,7 +37,6 @@ extern crate duct_sh;
 extern crate humantime;
 extern crate os_pipe;
 extern crate regex;
-extern crate rustls;
 extern crate rustyline;
 extern crate serde;
 extern crate serde_json;

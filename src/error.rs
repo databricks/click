@@ -119,7 +119,17 @@ impl fmt::Display for ClickError {
             ClickError::Clap(ref err) => write!(f, "Error in clap: {err}"),
             ClickError::JoinPathsError(ref err) => write!(f, "Join paths error: {err}"),
             ClickError::Pem(ref err) => write!(f, "Pem error: {err}"),
-            ClickError::Reqwest(ref err, _) => write!(f, "Reqwest error: {err}"),
+            ClickError::Reqwest(ref err, _) => {
+                write!(f, "Reqwest error: {err}")?;
+                // Since reqwest 0.12 the underlying cause (e.g. a TLS verification failure) is no
+                // longer part of the Display output, so print the source chain ourselves.
+                let mut source = error::Error::source(err);
+                while let Some(cause) = source {
+                    write!(f, ": {cause}")?;
+                    source = cause.source();
+                }
+                Ok(())
+            }
             ClickError::UrlParse(ref err) => write!(f, "Error parsing url: {err}"),
         }
     }

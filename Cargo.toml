@@ -37,7 +37,6 @@ lazy_static = "^1.4"
 os_pipe = "^1.0"
 pem = "^2.0"
 regex = "^1.3"
-rustls = { version = "0.21", features = ["dangerous_configuration"] }
 rustyline = "^11.0"
 serde = "^1.0"
 serde_derive = "^1.0"
@@ -45,7 +44,7 @@ serde_json = "^1.0"
 serde_with = "^3.0"
 serde_yaml = "^0.9"
 strfmt = "^0.2"
-reqwest = { version = "0.11", features = ["blocking", "json", "default-tls", "rustls-tls", "native-tls"] }
+reqwest = { version = "0.12", features = ["blocking", "json", "default-tls", "rustls-tls", "native-tls"] }
 tempdir = "^0.3"
 tokio = { version = "1", features = ["full"] }
 url = "^2.2"

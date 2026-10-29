@@ -300,7 +300,10 @@ impl Context {
             req
         };
 
-        let req = req.headers(parts.headers).body(body);
+        let req = parts.headers.iter().fold(req, |req, (name, value)| {
+            req.header(name.as_str(), value.as_bytes())
+        });
+        let req = req.body(body);
         let req = match &*self.auth.borrow() {
             Some(auth) => match auth {
                 UserAuth::AuthProvider(provider) => {
@@ -325,7 +328,7 @@ impl Context {
         let bytes = resp.bytes()?;
 
         Ok(http::response::Builder::new()
-            .status(stat)
+            .status(stat.as_u16())
             .body(bytes)
             .unwrap())
     }
